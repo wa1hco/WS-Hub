@@ -76,7 +76,10 @@ from wims.state import last_log as last_log_pref  # noqa: E402
 from wims.integrations.logsource import N1mmLogSource  # noqa: E402
 from wims.integrations.cluster.client import ClusterService  # noqa: E402
 from wims.integrations.cluster.modes import canonical_mode as _spot_mode  # noqa: E402
-from wims.integrations.cluster.parse import valid_login_call as _login_call  # noqa: E402
+from wims.integrations.cluster.parse import (  # noqa: E402
+    valid_cluster_login as _cluster_login_ok,
+    valid_login_call as _login_call,
+)
 from wims.integrations.cluster.settings import effective_call as _cluster_effective_call  # noqa: E402
 from wims.integrations.cluster.view import OnAir as _OnAir  # noqa: E402
 from wims.config.seat_profile import (  # noqa: E402
@@ -2330,7 +2333,16 @@ class LiveFleet:
         if "station_call" in body:
             raw = str(body.get("station_call") or "").strip()
             if raw and not _login_call(raw):
-                return {"ok": False, "error": "invalid_call"}
+                # An SSID belongs in Cluster login, not Station call.
+                return {
+                    "ok": False,
+                    "error": "invalid_call",
+                    "message": (
+                        "That is not a valid station call. "
+                        "For two stations on one node, use Cluster login, "
+                        "such as WA1HCO-1."
+                    ),
+                }
             if not raw:
                 # An empty field keeps a saved call, or takes a live one.
                 # It does not clear a call the operator already set.
@@ -2346,6 +2358,19 @@ class LiveFleet:
             if live and not (self._cluster.settings().get("station_call") or "").strip():
                 body = dict(body)
                 body["station_call"] = live
+        if "cluster_login" in body:
+            raw_login = str(body.get("cluster_login") or "").strip()
+            if raw_login and not _cluster_login_ok(raw_login):
+                return {
+                    "ok": False,
+                    "error": "invalid_login",
+                    "message": (
+                        "That is not a valid cluster login. "
+                        "Use the station call, or a login such as WA1HCO-1."
+                    ),
+                }
+            body = dict(body)
+            body["cluster_login"] = raw_login
         saved = self._cluster.update(body)
         return {
             "ok": True,
@@ -2356,6 +2381,7 @@ class LiveFleet:
             "modes": saved["modes"],
             "qsy_cost": saved["qsy_cost"],
             "station_call": saved.get("station_call") or "",
+            "cluster_login": saved.get("cluster_login") or "",
         }
 
     def select_spot(self, body: dict) -> dict:

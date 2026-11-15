@@ -46,6 +46,10 @@ _DX = re.compile(
 _GRID = re.compile(r"\b([A-R]{2}[0-9]{2}(?:[A-X]{2})?)\b", re.IGNORECASE)
 _NOT_GRID = {"RR73"}
 _LOGIN_CALL = re.compile(r"^[A-Z0-9]{3,10}(?:/[A-Z0-9]{1,4})?$")
+# Same, plus an SSID such as WA1HCO-1, used only as a cluster telnet login.
+_CLUSTER_LOGIN = re.compile(
+    r"^[A-Z0-9]{3,10}(?:-[0-9]{1,2})?(?:/[A-Z0-9]{1,4})?$"
+)
 
 
 @dataclass
@@ -61,9 +65,17 @@ class ParsedSpot:
 
 
 def valid_login_call(call: str | None) -> bool:
-    """A callsign we are willing to send as the login."""
+    """A station callsign, without a cluster SSID."""
     text = (call or "").strip().upper()
     if not _LOGIN_CALL.match(text):
+        return False
+    return any(ch.isalpha() for ch in text) and any(ch.isdigit() for ch in text)
+
+
+def valid_cluster_login(call: str | None) -> bool:
+    """A telnet login, including a cluster SSID such as WA1HCO-1."""
+    text = (call or "").strip().upper()
+    if not _CLUSTER_LOGIN.match(text):
         return False
     return any(ch.isalpha() for ch in text) and any(ch.isdigit() for ch in text)
 

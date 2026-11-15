@@ -3405,7 +3405,7 @@ function clusterReadForm() {
   });
   const all = $("cluster-all");
   const node = $("cluster-node");
-  return {
+  const body = {
     enabled: !!($("cluster-enabled") && $("cluster-enabled").checked),
     node: node ? node.value : "custom",
     host: ($("cluster-host") && $("cluster-host").value || "").trim(),
@@ -3414,6 +3414,15 @@ function clusterReadForm() {
     bands: (all && all.checked) ? "all" : bands,
     station_call: ($("cluster-station-call") && $("cluster-station-call").value || "").trim(),
   };
+  const login = $("cluster-login");
+  // Do not post a blank login until the field has been filled from
+  // the saved settings, or the operator has typed in it. A Save from
+  // another control before the first status arrives must not wipe a
+  // saved SSID.
+  if (login && (_clusterReady || login.value.trim() || document.activeElement === login)) {
+    body.cluster_login = login.value.trim();
+  }
+  return body;
 }
 
 function clusterApplyPick() {
@@ -3438,22 +3447,38 @@ function clusterSave() {
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(clusterReadForm()),
   }).then(r => r.json()).then(j => {
-    if (!line) return;
+    const err = $("cluster-save-error");
     if (j && j.ok) {
-      delete line.dataset.err;
+      if (line) delete line.dataset.err;
+      if (err) { err.hidden = true; err.textContent = ""; }
+      // Never overwrite a value the operator is typing.
       const call = $("cluster-station-call");
-      if (call && j.station_call != null) call.value = j.station_call;
-    } else if (j && j.error === "invalid_call") {
-      line.dataset.err = "1";
-      line.textContent = "That is not a valid station call.";
+      if (call && j.station_call != null && document.activeElement !== call) {
+        call.value = j.station_call;
+      }
+      const login = $("cluster-login");
+      if (login && j.cluster_login != null && document.activeElement !== login) {
+        login.value = j.cluster_login;
+      }
     } else {
-      line.dataset.err = "1";
-      line.textContent = "Could not save. Try again.";
+      const msg = (j && j.message) || (
+        j && j.error === "invalid_login" ? "That is not a valid cluster login. Use the station call, or a login such as WA1HCO-1." :
+        j && j.error === "invalid_call" ? "That is not a valid station call. For two stations on one node, use Cluster login, such as WA1HCO-1." :
+        "Could not save. Try again."
+      );
+      if (err) { err.hidden = false; err.textContent = msg; }
+      if (line) {
+        line.dataset.err = "1";
+        line.textContent = msg;
+      }
     }
   }).catch(() => {
+    const err = $("cluster-save-error");
+    const msg = "Could not save. Try again.";
+    if (err) { err.hidden = false; err.textContent = msg; }
     if (!line) return;
     line.dataset.err = "1";
-    line.textContent = "Could not save. Try again.";
+    line.textContent = msg;
   });
 }
 
@@ -3484,6 +3509,8 @@ function clusterWire() {
   if (qsy) qsy.addEventListener("change", clusterSave);
   const station = $("cluster-station-call");
   if (station) station.addEventListener("change", clusterSave);
+  const login = $("cluster-login");
+  if (login) login.addEventListener("change", clusterSave);
   const node = $("cluster-node");
   if (node) node.addEventListener("change", () => {
     clusterApplyPick();
@@ -3518,14 +3545,24 @@ function renderCluster(c) {
   if (!host) return;
   clusterWire();
   c = c || {};
-  // Keep an empty Station call filled from the known login, but never
-  // overwrite a value the operator is typing or has already entered.
+  // Fill an empty, unfocused field from the saved value only. Never
+  // overwrite a value the operator typed, and never copy a cluster
+  // SSID into the Station call.
   const stationField = $("cluster-station-call");
   if (stationField && document.activeElement !== stationField) {
-    const known = (c.station_call || c.callsign || "").trim();
+    const known = (c.station_call || "").trim();
     if (!stationField.value.trim() && known) {
       stationField.value = known;
     }
+  }
+  const loginField = $("cluster-login");
+  if (loginField && document.activeElement !== loginField) {
+    const saved = (c.cluster_login || "").trim();
+    if (!loginField.value.trim() && saved) {
+      loginField.value = saved;
+    }
+    const hint = (c.station_call || "").trim();
+    if (hint) loginField.placeholder = hint;
   }
   if (_clusterReady) return;
   _clusterReady = true;
@@ -3548,8 +3585,13 @@ function renderCluster(c) {
   clusterApplyPick();
   const station = $("cluster-station-call");
   if (station && !station.value.trim()) {
-    station.value = c.station_call || c.callsign || "";
+    station.value = c.station_call || "";
   }
+  const login = $("cluster-login");
+  if (login && !login.value.trim()) {
+    login.value = c.cluster_login || "";
+  }
+  if (login && c.station_call) login.placeholder = c.station_call;
   const qsy = $("cluster-qsy");
   if (qsy && c.qsy_cost != null) qsy.value = String(c.qsy_cost);
   const all = $("cluster-all");
