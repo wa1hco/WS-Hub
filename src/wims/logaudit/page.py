@@ -20,6 +20,8 @@
 
 from __future__ import annotations
 
+import os
+
 import json
 import sys
 import threading
@@ -288,6 +290,41 @@ def _run_check(state: _State) -> None:
         state.phase = "done"
         state.progress = ""
         state.result = result
+
+
+def start_in_background() -> str:
+    """Start Check logs on this PC if needed and return its local URL.
+
+    The report window is opened by the Check logs process itself when it
+    starts. Callers may also open the returned URL.
+    """
+    existing = _existing_port()
+    if existing:
+        return f"http://127.0.0.1:{int(existing)}/"
+    import subprocess
+    import sys
+    import time
+    env = os.environ.copy()
+    env.pop("WIMS_CAPTURED_LOG", None)
+    kw: dict = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if sys.platform.startswith("win"):
+        kw["creationflags"] = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) or 0)
+        kw["creationflags"] |= int(getattr(subprocess, "CREATE_NO_WINDOW", 0) or 0)
+    else:
+        kw["start_new_session"] = True
+    subprocess.Popen([sys.executable, "-m", "wims.logaudit.page"], **kw)
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        port = _existing_port()
+        if port:
+            return f"http://127.0.0.1:{int(port)}/"
+        time.sleep(0.1)
+    raise RuntimeError("Check logs did not open.")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -233,6 +233,67 @@ def test_legacy_healthz_ok_only():
         httpd.shutdown()
 
 
+def test_plain_ipv4_strips_prefix():
+    assert P.plain_ipv4("192.168.2.113/24") == "192.168.2.113"
+    assert P.plain_ipv4("http://10.0.0.5:8787") == "10.0.0.5"
+    assert P.plain_ipv4("128.0.0.1") == "127.0.0.1"
+    assert P.plain_ipv4("http://128.0.0.1:8787") == "127.0.0.1"
+
+
+def test_live_conflict_peers_requires_http():
+    peers = [{
+        "hostname": "dell-7540",
+        "console_base": "http://192.168.2.113:8787",
+        "http_port": 8787,
+        "lan_ips": ["192.168.2.113"],
+    }]
+    with mock.patch.object(P, "beacon_http_reachable", return_value=False):
+        assert P.live_conflict_peers(peers) == []
+    with mock.patch.object(P, "beacon_http_reachable", return_value=True):
+        assert P.live_conflict_peers(peers) == peers
+
+
+def test_discover_ignores_udp_when_http_is_down():
+    beacon = P.build_beacon(
+        instance_id="deadbeef",
+        http_port=8787,
+        iface="192.168.2.113",
+        hostname="dell-7540",
+        lan_ip="192.168.2.113",
+        lan_ips=["192.168.2.113"],
+    )
+
+    with mock.patch.object(P, "listen_for_peers", return_value=[beacon]), \
+         mock.patch.object(P, "beacon_http_reachable", return_value=False), \
+         mock.patch.object(P, "http_discover_site_server", return_value=None):
+        result = P.discover_site_server_detailed(duration_s=0.1, http_fallback=True)
+        assert result.beacon is None
+        assert result.udp_heard is True
+        assert result.announced is not None
+        assert result.announced["hostname"] == "dell-7540"
+        assert any("cannot reach" in h for h in result.hints)
+        assert P.discover_site_server(duration_s=0.1, http_fallback=True) is None
+
+
+def test_discover_keeps_udp_when_http_answers():
+    beacon = P.build_beacon(
+        instance_id="okbeef",
+        http_port=8787,
+        iface="192.168.2.113",
+        hostname="dell-7540",
+        lan_ip="192.168.2.113",
+        lan_ips=["192.168.2.113"],
+    )
+    with mock.patch.object(P, "listen_for_peers", return_value=[beacon]), \
+         mock.patch.object(P, "beacon_http_reachable", return_value=True):
+        result = P.discover_site_server_detailed(duration_s=0.1, http_fallback=True)
+    assert result.beacon is beacon
+    assert result.via == "udp"
+    assert result.http_found is True
+
+
+
+
 if __name__ == "__main__":
     import traceback
     failed = 0

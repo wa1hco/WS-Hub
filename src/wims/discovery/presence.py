@@ -68,7 +68,119 @@ HTTP_PROBE_TIMEOUT_S = 0.2
 HTTP_PROBE_WORKERS = 64
 
 
+
+def plain_ipv4(value: str | None) -> str:
+    """IPv4 address with a CIDR prefix or port stripped. Empty if none."""
+    text = (value or "").strip()
+    if not text:
+        return ""
+    host = text.split()[0]
+    if "://" in host or host.lower().startswith("http"):
+        from urllib.parse import urlsplit
+        try:
+            parsed = urlsplit(host if "://" in host else f"http://{host}")
+            host = parsed.hostname or ""
+        except ValueError:
+            host = text.split()[0]
+    if host.count(":") == 1 and not host.startswith("["):
+        maybe, _, maybe_port = host.partition(":")
+        if maybe_port.isdigit():
+            host = maybe
+    if "%" in host:
+        host = host.split("%", 1)[0]
+    host = host.strip().strip("[]")
+    if "/" in host:
+        ip, _, rest = host.partition("/")
+        prefix = rest.split(":", 1)[0].split()[0]
+        if prefix.isdigit():
+            host = ip
+    # 128.0.0.1 is not a valid loopback; it is a typo of 127.0.0.1.
+    if host == "128.0.0.1":
+        host = "127.0.0.1"
+    return host
+
+
+def beacon_endpoints(beacon: dict | None, *, default_port: int = DEFAULT_HTTP_PORT) -> list[str]:
+    """Candidate console bases from a presence beacon, never with a CIDR."""
+    if not isinstance(beacon, dict):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def add(base: str) -> None:
+        b = (base or "").strip().rstrip("/")
+        if not b or b in seen:
+            return
+        seen.add(b)
+        out.append(b)
+
+    raw = (beacon.get("console_base") or "").strip()
+    if raw:
+        if "://" not in raw:
+            ip = plain_ipv4(raw) or raw
+            port = int(beacon.get("http_port") or default_port)
+            add(f"http://{ip}:{port}")
+        else:
+            # Rebuild from host/port so a mistaken /24 path is dropped.
+            from urllib.parse import urlsplit
+            try:
+                parts = urlsplit(raw)
+                host = plain_ipv4(parts.hostname or "") or (parts.hostname or "")
+                port = parts.port or int(beacon.get("http_port") or default_port)
+                if host:
+                    add(f"{parts.scheme or 'http'}://{host}:{int(port)}")
+            except ValueError:
+                add(raw)
+
+    port = int(beacon.get("http_port") or default_port)
+    for item in beacon.get("lan_ips") or []:
+        ip = plain_ipv4(str(item))
+        if ip:
+            add(f"http://{ip}:{port}")
+    return out
+
+
+def beacon_http_reachable(
+    beacon: dict | None,
+    *,
+    http_port: int = DEFAULT_HTTP_PORT,
+    timeout: float = 0.4,
+) -> bool:
+    """True when this PC can read /healthz for the announced site server."""
+    for base in beacon_endpoints(beacon, default_port=http_port):
+        from urllib.parse import urlsplit
+        try:
+            host = urlsplit(base).hostname or ""
+            port = urlsplit(base).port or http_port
+        except ValueError:
+            continue
+        if not host:
+            continue
+        hit = _http_probe_one(host, int(port), timeout)
+        if hit:
+            return True
+    return False
+
+
+def live_conflict_peers(
+    peers: list[dict] | None,
+    *,
+    timeout: float = 0.4,
+) -> list[dict]:
+    """Peers that should block starting a second site server.
+
+    An announcement that this PC cannot reach (firewall, stale process)
+    does not count as a live primary.
+    """
+    out: list[dict] = []
+    for peer in peers or []:
+        if beacon_http_reachable(peer, timeout=timeout):
+            out.append(peer)
+    return out
+
+
 def _hostname() -> str:
+
     try:
         return socket.gethostname()
     except OSError:
@@ -170,9 +282,14 @@ def build_beacon(
     lan_ips: list[str] | None = None,
 ) -> dict:
     """Build the JSON object sent as UTF-8 UDP (not the wire bytes)."""
-    host = lan_ip or _primary_lan_ip(iface)
-    ips = list(lan_ips or list_lan_ipv4s() or [host])
-    if host not in ips:
+    host = plain_ipv4(lan_ip) or _primary_lan_ip(iface)
+    raw_ips = list(lan_ips or list_lan_ipv4s() or [host])
+    ips: list[str] = []
+    for item in raw_ips:
+        ip = plain_ipv4(item) or str(item).strip()
+        if ip and ip not in ips:
+            ips.append(ip)
+    if host and host not in ips:
         ips = [host] + ips
     base = f"http://{host}:{int(http_port)}"
     return {
@@ -572,7 +689,8 @@ def http_discover_site_server(
 class DiscoverResult:
     """Structured discovery outcome for agents (beacon + UDP/HTTP diagnostics)."""
 
-    beacon: dict | None = None
+    beacon: dict | None = None      # live (HTTP-reachable) site server, if any
+    announced: dict | None = None   # last UDP announcement, even if unreachable
     via: str | None = None          # "udp" | "http" | None
     udp_heard: bool = False
     udp_error: str | None = None
@@ -590,6 +708,7 @@ class DiscoverResult:
             "http_error": self.http_error,
             "console_base": (self.beacon or {}).get("console_base"),
             "hostname": (self.beacon or {}).get("hostname"),
+            "announced": self.announced,
             "hints": list(self.hints),
         }
 
@@ -609,13 +728,15 @@ class DiscoverResult:
             lines.append(f"  HTTP probe:    OK  (found :{DEFAULT_HTTP_PORT}/healthz)")
         elif self.http_error:
             lines.append(f"  HTTP probe:    FAIL  ({self.http_error})")
-        elif self.via == "udp":
-            lines.append("  HTTP probe:    skipped (UDP already found server)")
+        elif self.via == "udp" and self.http_found:
+            lines.append("  HTTP probe:    OK  (site console answered)")
+        elif self.udp_heard and not self.http_found:
+            lines.append("  HTTP probe:    the announced site console did not answer")
         else:
-            lines.append(f"  HTTP probe:    no WIMS on local /24s :{DEFAULT_HTTP_PORT}")
+            lines.append(f"  HTTP probe:    no WIMS on local /24s on port {DEFAULT_HTTP_PORT}")
 
         if self.via == "udp":
-            lines.append("  Result: FOUND via UDP — zero-memory path OK")
+            lines.append("  Result: FOUND via UDP and the site console answered")
         elif self.via == "http":
             lines.append("  Result: FOUND via HTTP only — UDP is blocked or not reaching this seat")
             lines.append("  *** UDP PATH BROKEN (fix so seats do not depend on subnet scan) ***")
@@ -687,14 +808,37 @@ def discover_site_server_detailed(
         peers = []
     if peers:
         peers.sort(key=lambda p: p.get("_heard_at") or 0.0, reverse=True)
-        result.beacon = peers[0]
-        result.via = "udp"
         result.udp_heard = True
-        return result
+        result.announced = peers[0]
+        live = [p for p in peers if beacon_http_reachable(p)]
+        if live:
+            result.beacon = live[0]
+            result.announced = live[0]
+            result.via = "udp"
+            result.http_found = True
+            return result
+        host = (peers[0].get("hostname") or "another PC").strip() or "another PC"
+        bases = beacon_endpoints(peers[0])
+        where = bases[0].replace("http://", "").replace("https://", "") if bases else ""
+        if where:
+            result.hints = [
+                f"{host} is announcing a site server at {where}, but this PC "
+                "cannot reach it. The firewall on that PC may be blocking the "
+                "site console."
+            ]
+        else:
+            result.hints = [
+                f"{host} is announcing a site server, but this PC cannot reach it."
+            ]
+        if not http_fallback:
+            return result
+        # Fall through to a short HTTP scan in case a different live server exists.
+    else:
+        result.udp_heard = False
 
-    result.udp_heard = False
     if not http_fallback:
-        result.hints = _udp_block_hints(found_via_http=False)
+        if not result.hints:
+            result.hints = _udp_block_hints(found_via_http=False)
         return result
 
     try:
@@ -704,12 +848,17 @@ def discover_site_server_detailed(
         hit = None
     if hit:
         result.beacon = hit
+        result.announced = hit
         result.via = "http"
         result.http_found = True
+        # If UDP already announced an unreachable peer, keep that hint too.
+        extra = list(result.hints)
         result.hints = _udp_block_hints(found_via_http=True)
+        result.hints.extend(extra)
         return result
 
-    result.hints = _udp_block_hints(found_via_http=False)
+    if not result.hints:
+        result.hints = _udp_block_hints(found_via_http=False)
     return result
 
 

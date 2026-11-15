@@ -79,7 +79,6 @@ class AgentHomePanel:
         on_open_local: Callable[[], None],
         on_restart_server: Callable[[], None] | None = None,
         on_start_server: Callable[[], None] | None = None,
-        on_check_logs: Callable[[], None] | None = None,
         key_device_var: Any | None = None,
         on_key_device_change: Callable[[], None] | None = None,
         on_refresh_key_ports: Callable[[], None] | None = None,
@@ -133,6 +132,14 @@ class AgentHomePanel:
             self._run_labels[key] = var
         run_grid.columnconfigure(0, weight=1)
         run_grid.columnconfigure(1, weight=1)
+
+        self._site_status = tk.StringVar(value="Site server: …")
+        self._site_status_lbl = tk.Label(
+            parent, textvariable=self._site_status,
+            font=_ui_font(11), bg="#f4f4f4", fg="#333333",
+            wraplength=520, justify="left", anchor="w",
+        )
+        self._site_status_lbl.pack(fill="x", pady=(0, 4))
 
         # N1MM agent live rows (Broadcast / Log / KEY) — this launcher window,
         # not a second Tk process.
@@ -293,16 +300,6 @@ class AgentHomePanel:
             open_btn,
             "Opens the site console on this PC. If that window is already "
             "open, it reloads and stays where you put it.",
-        )
-        self.check_logs_btn = tk.Button(
-            btns, text="Check logs", font=_ui_font(12),
-            command=(on_check_logs or (lambda: None)), padx=10, pady=4,
-        )
-        self.check_logs_btn.pack(side="left", padx=(8, 0))
-        ToolTip(
-            self.check_logs_btn,
-            "Compare the logs on this PC and list what does not match. "
-            "Nothing in the logs is changed. The report opens in the browser.",
         )
         self.local_btn = tk.Button(
             btns, text="Open local status", font=_ui_font(12),
@@ -482,6 +479,13 @@ class AgentHomePanel:
             self.restart_needed_lbl.configure(text="")
             if self.restart_needed_lbl.winfo_manager():
                 self.restart_needed_lbl.pack_forget()
+
+    def set_site_server_status(self, text: str) -> None:
+        """Replace the site server line. Never raise."""
+        try:
+            self._site_status.set(text or "")
+        except Exception:
+            pass
 
     def set_server_intent_visible(self, visible: bool) -> None:
         """Show or hide the Site server checkbox (hidden when a remote server is up)."""

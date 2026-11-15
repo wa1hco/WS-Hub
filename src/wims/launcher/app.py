@@ -112,6 +112,13 @@ from wims.launcher.update_check import (
     update_script_path,
 )
 from wims.launcher.updates_panel import UpdatesPanel
+from wims.launcher.site_status import (
+    canonical_site_base,
+    choose_site_urls,
+    firewall_block_hint,
+    format_site_server_status,
+    is_loopback_host,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC = _REPO_ROOT / "src"
@@ -293,10 +300,17 @@ def _health_result(data: dict | None, base: str) -> tuple[bool, str]:
     if not isinstance(data, dict):
         return False, base
     if data.get("ok") and data.get("role") == "wims-site-server":
-        advertised = (data.get("console_base") or "").rstrip("/")
-        return True, advertised or base
+        advertised = canonical_site_base(data.get("console_base") or "") or (data.get("console_base") or "").rstrip("/")
+        # Keep the address we actually reached when the body advertises loopback
+        # but we probed a LAN URL (or the reverse typo 128.0.0.1).
+        used = canonical_site_base(base) or base
+        adv_host = advertised.replace("http://", "").split(":")[0] if advertised else ""
+        used_host = used.replace("http://", "").split(":")[0] if used else ""
+        if advertised and is_loopback_host(adv_host) and used_host and not is_loopback_host(used_host):
+            return True, used
+        return True, advertised or used
     if data.get("ok"):
-        return True, base
+        return True, canonical_site_base(base) or base
     return False, base
 
 
@@ -350,6 +364,78 @@ def probe_site_urls(
         if ok:
             return True, used
     return False, (preferred or site_base_url()).rstrip("/")
+
+
+def _lan_url_from_health(health: dict | None, fallback: str = "") -> str:
+    """LAN console URL from a health body, never loopback, never a CIDR."""
+    if not isinstance(health, dict):
+        return canonical_site_base(fallback) if fallback and not is_loopback_host(
+            canonical_site_base(fallback).replace("http://", "").split(":")[0]
+        ) else ""
+    port = int(health.get("http_port") or 8787)
+    for ip in health.get("lan_ips") or []:
+        base = canonical_site_base(f"http://{ip}:{port}")
+        host = base.replace("http://", "").split(":")[0]
+        if base and not is_loopback_host(host):
+            return base
+    adv = canonical_site_base(health.get("console_base") or "")
+    host = adv.replace("http://", "").split(":")[0] if adv else ""
+    if adv and not is_loopback_host(host):
+        return adv
+    fb = canonical_site_base(fallback)
+    host = fb.replace("http://", "").split(":")[0] if fb else ""
+    if fb and not is_loopback_host(host):
+        return fb
+    return ""
+
+
+def probe_resolved_site(
+    preferred: str | None = None,
+    *,
+    timeout: float = 0.5,
+) -> dict:
+    """One probe used by the status line, Open site console, and messages.
+
+    Returns ok, open_url (what this PC should open), show_url (what the
+    operator should see), hostname, this_pc, and the health body.
+    """
+    loopback = canonical_site_base(LOCAL_SITE)
+    preferred = canonical_site_base(preferred or "") or canonical_site_base(site_base_url())
+    loopback_health = fetch_site_health(loopback, timeout=timeout)
+    loopback_ok, _ = _health_result(loopback_health, loopback)
+    lan_pref = preferred
+    if lan_pref and is_loopback_host(lan_pref.replace("http://", "").split(":")[0]):
+        lan_pref = _lan_url_from_health(loopback_health, "")
+    lan_health = None
+    lan_ok = False
+    if lan_pref and lan_pref != loopback:
+        lan_health = fetch_site_health(lan_pref, timeout=timeout)
+        lan_ok, lan_used = _health_result(lan_health, lan_pref)
+        if lan_ok:
+            lan_pref = _lan_url_from_health(lan_health, lan_used) or lan_used
+    elif loopback_ok:
+        lan_pref = _lan_url_from_health(loopback_health, "") or lan_pref
+    this_pc = bool(loopback_ok)
+    open_url, show_url = choose_site_urls(
+        this_pc=this_pc,
+        loopback=loopback,
+        lan=lan_pref,
+        loopback_ok=loopback_ok,
+        lan_ok=lan_ok,
+    )
+    health = loopback_health if this_pc else (lan_health if lan_ok else None)
+    hostname = ""
+    if isinstance(health, dict):
+        hostname = str(health.get("hostname") or "")
+    ok = bool(loopback_ok or lan_ok)
+    return {
+        "ok": ok,
+        "open_url": open_url,
+        "show_url": show_url,
+        "hostname": hostname,
+        "this_pc": this_pc,
+        "health": health,
+    }
 
 
 def find_icon_path() -> Path | None:
@@ -1101,6 +1187,10 @@ class LauncherApp:
         self._banner_text = tk.StringVar(value="Checking…")
         self._fix_text = tk.StringVar(value="")
         self._site_var = tk.StringVar(value=site_base_url())
+        self._site_open_url = ""
+        self._site_show_url = ""
+        self._site_hostname = ""
+        self._announced_site = None
         self._card_widgets: dict[str, dict] = {}
         self._discovering = False
         self._site_choice_ready = False
@@ -1323,7 +1413,6 @@ class LauncherApp:
             on_open_local=self._open_local_status,
             on_restart_server=self._restart_local_site_server,
             on_start_server=self._start_site_server_offer,
-            on_check_logs=self._check_logs,
             key_device_var=self._key_device_var,
             on_key_device_change=self._on_key_device_change,
             on_refresh_key_ports=self._refresh_key_ports,
@@ -2235,21 +2324,28 @@ class LauncherApp:
         def work() -> None:
             snap = detect_assets()
             try:
-                if known_ok and preferred:
-                    ok, base = site_reachable(preferred, timeout=0.4)
-                    if not ok:
-                        ok, base = probe_site_urls(preferred, timeout=0.5)
-                else:
-                    ok, base = probe_site_urls(preferred, timeout=0.5)
+                resolved = probe_resolved_site(preferred, timeout=0.5)
+                ok = bool(resolved.get("ok"))
+                base = resolved.get("show_url") or preferred or site_base_url()
             except Exception:
+                resolved = {
+                    "ok": False,
+                    "this_pc": False,
+                    "open_url": preferred or site_base_url(),
+                    "show_url": preferred or site_base_url(),
+                    "health": None,
+                    "hostname": "",
+                }
                 ok, base = False, (preferred or site_base_url())
-            self.root.after(0, self._on_detect_done, snap, ok, base)
+            self.root.after(0, self._on_detect_done, snap, ok, base, resolved)
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _on_detect_done(self, snap, ok_site: bool, base: str) -> None:
+    def _on_detect_done(self, snap, ok_site: bool, base: str, resolved: dict | None = None) -> None:
         self._detect_busy = False
         self._last_snap = snap
+        if resolved:
+            self._remember_resolved_site(resolved)
         self._sync_detect_and_agents(snap=snap, site=(ok_site, base))
 
     def _current_intent(self) -> dict[str, bool]:
@@ -2371,18 +2467,19 @@ class LauncherApp:
         self._last_snap = snap
 
         if site is None:
-            pref = self._site_var.get().strip() or None
-            if self._site_ok and pref:
-                ok_site, base = site_reachable(pref, timeout=0.4)
-            else:
-                ok_site, base = probe_site_urls(pref, timeout=0.5)
+            # Use the last resolved address. Do not probe again on the UI thread.
+            ok_site = bool(self._site_ok)
+            base = self._site_show_url or self._site_var.get().strip() or site_base_url()
         else:
             ok_site, base = site
         self._site_ok = ok_site
         if ok_site:
-            self._site_var.set(base)
-            os.environ["WIMS_SERVER"] = base
-            save_last_site_url(base)
+            show = canonical_site_base(base) or base
+            self._site_var.set(show)
+            os.environ["WIMS_SERVER"] = show
+            save_last_site_url(show)
+            if not self._site_show_url:
+                self._site_show_url = show
 
         self._apply_site_server_policy(ok_site=ok_site, base=base)
 
@@ -2685,36 +2782,77 @@ class LauncherApp:
         self._append_log("Looking for site server on the LAN…")
 
         def work() -> None:
-            beacon = None
+            url = None
+            announced = None
+            hints: list[str] = []
             try:
                 from wims.discovery import presence as P
-                beacon = P.discover_site_server(duration_s=2.0, http_fallback=True)
+                result = P.discover_site_server_detailed(
+                    duration_s=2.0, http_fallback=True,
+                )
+                announced = result.announced
+                hints = list(result.hints or [])
+                if result.beacon:
+                    url = (result.beacon.get("console_base") or "").rstrip("/") or None
             except Exception as e:
                 self.root.after(0, self._append_log, f"(site discover: {e})")
-            url = None
-            if beacon:
-                url = (beacon.get("console_base") or "").rstrip("/") or None
             if not url:
-                ok3, base3 = probe_site_urls(None)
-                if ok3:
-                    url = base3
-            self.root.after(0, self._apply_discovered_site, url)
+                resolved = probe_resolved_site(None, timeout=0.5)
+                if resolved.get("ok"):
+                    url = resolved.get("show_url") or resolved.get("open_url")
+            self.root.after(0, self._apply_discovered_site, url, announced, hints)
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _apply_discovered_site(self, url: str | None) -> None:
+    def _apply_discovered_site(
+        self,
+        url: str | None,
+        announced: dict | None = None,
+        hints: list | None = None,
+    ) -> None:
         self._discovering = False
         self._site_choice_ready = True
+        self._announced_site = announced
+        if hints:
+            for line in hints:
+                # Keep the operator log free of CLI flags and env names.
+                if "--" in line or "WIMS_SERVER" in line or "PYTHONPATH" in line:
+                    continue
+                self._append_log(line)
         if url:
+            url = canonical_site_base(url) or url
             previous = (self._site_var.get() or "").strip()
-            self._site_var.set(url)
-            os.environ["WIMS_SERVER"] = url
-            save_last_site_url(url)
-            self._site_ok = True
+            host = ""
+            if isinstance(announced, dict):
+                host = str(announced.get("hostname") or "")
+            this_pc = self._site_url_is_local(url)
+            open_url, show_url = choose_site_urls(
+                this_pc=this_pc,
+                loopback=LOCAL_SITE,
+                lan=url,
+                loopback_ok=this_pc,
+                lan_ok=True,
+            )
+            self._remember_resolved_site({
+                "ok": True,
+                "this_pc": this_pc,
+                "open_url": open_url,
+                "show_url": show_url,
+                "health": None,
+                "hostname": host,
+            })
             if not self._proc_running("server"):
                 self._site_external = True
-            self._append_log(f"Site server: {url}")
-            self._repoint_agents_if_needed(previous, url)
+            self._append_log(
+                format_site_server_status(
+                    this_pc=this_pc,
+                    running=this_pc,
+                    reachable=not this_pc,
+                    hostname=host,
+                    address=show_url,
+                )
+            )
+            self._repoint_agents_if_needed(previous, show_url)
         elif should_host_local_site_server(
             discovery_done=True,
             site_reachable=False,
@@ -2724,9 +2862,25 @@ class LauncherApp:
             self._auto_host_local_site_server()
         else:
             self._site_ok = False
-            self._append_log(
-                f"No site server heard — using {self._site_var.get() or site_base_url()}"
-            )
+            host = ""
+            addr = ""
+            if isinstance(announced, dict):
+                host = str(announced.get("hostname") or "")
+                addr = canonical_site_base(announced.get("console_base") or "") or ""
+            self._site_hostname = host
+            if addr:
+                self._site_show_url = addr
+            self._update_site_status_line()
+            if addr:
+                self._append_log(
+                    format_site_server_status(
+                        announced=True, hostname=host, address=addr,
+                    )
+                )
+            else:
+                self._append_log(
+                    format_site_server_status()
+                )
         self._refresh_status()
         if self._replace_done:
             self._sync_detect_and_agents()
@@ -2768,18 +2922,14 @@ class LauncherApp:
             self._append_log(f"Browser error: {e}")
 
     def _refresh_status(self) -> None:
-        base = self._site_var.get().strip() or site_base_url()
-        health: dict | None = None
-        if self._site_ok:
-            health = fetch_site_health(base, timeout=0.4)
-            ok_site, base = _health_result(health, base)
-        else:
-            ok_site, base, health = probe_site_with_health(base, timeout=0.5)
+        preferred = (self._site_show_url or self._site_var.get() or "").strip()
+        resolved = probe_resolved_site(preferred, timeout=0.4)
+        self._remember_resolved_site(resolved)
+        ok_site = bool(resolved.get("ok"))
+        base = resolved.get("show_url") or preferred or site_base_url()
+        health = resolved.get("health") if isinstance(resolved.get("health"), dict) else None
         self._site_ok = ok_site
         if ok_site:
-            self._site_var.set(base)
-            save_last_site_url(base)
-            os.environ["WIMS_SERVER"] = base
             if not self._proc_running("server"):
                 self._site_external = True
 
@@ -2892,17 +3042,31 @@ class LauncherApp:
                 "Start N1MM when ready (Log agent waits for RadioInfo / QSOs).",
             )
         elif not ok_site and not intent.get(INTENT_SERVER):
+            line = format_site_server_status(
+                announced=True,
+                hostname=self._site_hostname,
+                address=base,
+            )
             self._set_banner(
                 "warn",
                 "Agents up — site console not reachable",
-                f"Cannot reach {base}. Check Site server intent, or Find on LAN under Other tools…",
+                line + ". Check Site server on this PC, or allow the port on the other PC.",
             )
         else:
-            note = base if ok_site else "Use Open site console for the fleet."
+            if ok_site:
+                note = format_site_server_status(
+                    this_pc=bool(resolved.get("this_pc")),
+                    running=bool(resolved.get("this_pc")),
+                    reachable=not bool(resolved.get("this_pc")),
+                    hostname=self._site_hostname,
+                    address=base,
+                )
+            else:
+                note = "Use Open site console for the fleet."
             self._set_banner(
                 "ok",
                 "Ready — seat intent agents are up",
-                note if ok_site else "Use Open site console for the fleet.",
+                note,
             )
         self._schedule_status(4000)
 
@@ -2965,27 +3129,88 @@ class LauncherApp:
         else:
             self._starting.discard(AGENT_WSJT)
 
+
+    def _remember_resolved_site(self, resolved: dict | None) -> None:
+        resolved = resolved or {}
+        show = canonical_site_base(resolved.get("show_url") or "")
+        open_url = canonical_site_base(resolved.get("open_url") or show)
+        if show:
+            self._site_show_url = show
+            self._site_open_url = open_url or show
+            self._site_var.set(show)
+            self._site_ok = bool(resolved.get("ok"))
+            self._site_hostname = str(resolved.get("hostname") or self._site_hostname or "")
+            if resolved.get("ok"):
+                os.environ["WIMS_SERVER"] = show
+                save_last_site_url(show)
+        self._update_site_status_line()
+
+    def _update_site_status_line(self) -> None:
+        hp = getattr(self, "_home_panel", None)
+        if hp is None or not hasattr(hp, "set_site_server_status"):
+            return
+        show = self._site_show_url or canonical_site_base(self._site_var.get())
+        announced = self._announced_site if isinstance(self._announced_site, dict) else None
+        hostname = self._site_hostname
+        if announced and not hostname:
+            hostname = str(announced.get("hostname") or "")
+        if not show and announced:
+            from wims.discovery.presence import beacon_endpoints
+            ends = beacon_endpoints(announced)
+            show = ends[0] if ends else ""
+        local_proc = bool(self._local_server_procs())
+        this_pc = bool(local_proc or (show and self._site_url_is_local(show)))
+        line = format_site_server_status(
+            this_pc=this_pc,
+            running=bool(this_pc and (local_proc or self._site_ok)),
+            reachable=bool(self._site_ok and not this_pc),
+            announced=bool(announced or show) and not self._site_ok,
+            hostname=hostname,
+            address=show,
+        )
+        if this_pc and self._site_ok:
+            hint = firewall_block_hint()
+            if hint:
+                line = line + " " + hint
+        hp.set_site_server_status(line)
+
     def _open_local_status(self) -> None:
         url = "http://127.0.0.1:8790/"
         if not self._proc_running("wsjt_agent"):
             self._set_banner(
                 "warn",
-                "Seat agent is not running",
-                "Check WSJT-X or Antennas to start the seat agent, then Open local status.",
+                "Local status did not open",
+                "The seat agent is not running. Check WSJT-X or Antennas, then try again.",
             )
             return
 
         def _open() -> None:
-            if _wait_tcp("127.0.0.1", 8790, 15.0):
-                # Explicit button — always open.
-                self.root.after(0, lambda: self._open_url_force(url))
+            if _wait_tcp("127.0.0.1", 8790, 3.0):
+                self.root.after(0, self._open_local_status_browser, url)
             else:
-                self.root.after(
-                    0, self._append_log,
-                    "ERROR: local status :8790 did not open. See Details.",
-                )
+                self.root.after(0, self._local_status_failed)
 
         threading.Thread(target=_open, daemon=True).start()
+
+    def _open_local_status_browser(self, url: str) -> None:
+        try:
+            _open_url_in_default_browser(url)
+            self._append_log(f"Opened local status at {url}")
+        except Exception as e:
+            self._set_banner(
+                "err",
+                "Local status did not open",
+                "The seat agent page could not be opened.",
+            )
+            self._append_log(f"Local status failed: {e}")
+
+    def _local_status_failed(self) -> None:
+        self._set_banner(
+            "err",
+            "Local status did not open",
+            "The seat agent is not answering. Check WSJT-X, then try again.",
+        )
+        self._append_log("Local status at 127.0.0.1:8790 did not answer.")
 
     def _open_site_in_browser(self, url: str) -> None:
         """Open this PC's site console, or reload the window already open."""
@@ -3466,18 +3691,35 @@ class LauncherApp:
         self._screenshot_panel.open()
 
     def _open_site_console(self) -> None:
-        ok, base = probe_site_urls(self._site_var.get().strip() or None)
-        if ok:
-            self._site_var.set(base)
-        url = (base if ok else (self._site_var.get().strip() or site_base_url())).rstrip("/") + "/"
-        if not ok:
-            self._set_banner(
-                "err",
-                "Site console not reachable",
-                f"Tried {url} — start the site server, or correct the address.",
-            )
-        # Explicit button — always open (may still help the operator).
-        self._open_url_force(url)
+        """Open the site console at the same address the status line uses."""
+        self._set_banner("busy", "Looking for the site console…", "")
+
+        def work() -> None:
+            preferred = (self._site_show_url or self._site_var.get() or "").strip()
+            resolved = probe_resolved_site(preferred, timeout=0.6)
+            self.root.after(0, self._open_site_console_done, resolved)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _open_site_console_done(self, resolved: dict) -> None:
+        self._remember_resolved_site(resolved)
+        if resolved.get("ok") and resolved.get("open_url"):
+            url = resolved["open_url"].rstrip("/") + "/"
+            self._open_url_force(url)
+            return
+        show = resolved.get("show_url") or (self._site_var.get() or "").strip()
+        line = format_site_server_status(
+            announced=bool(show or self._announced_site),
+            hostname=resolved.get("hostname") or self._site_hostname,
+            address=show,
+        )
+        self._set_banner(
+            "err",
+            "Site console not reachable",
+            line + ". Start a site server on this PC, or allow the port on the other PC.",
+        )
+        self._update_site_status_line()
+        # Do not open a browser to an address that will hang.
 
     def _add_role_card(self, parent, role) -> None:
         if role is None:
