@@ -238,6 +238,7 @@ def roster_to_dict(scored_rows, not_needed: int, now: float,
                    *, condition: str, strategy: str,
                    nodes: dict | None = None,
                    rotators=None,
+                   cty=None,
                    entity_latlon=None) -> dict:
     """Snapshot the GridTracker-style call roster (plan §3.5 / §2.2) for the console.
 
@@ -317,7 +318,7 @@ def roster_to_dict(scored_rows, not_needed: int, now: float,
         tail = raw_tail.strip() if isinstance(raw_tail, str) else ""
         raw_msg = getattr(d, "message", None)
         full = raw_msg.strip() if isinstance(raw_msg, str) else ""
-        place = _country_fields(c.call)
+        place = _country_fields(c.call, cty=cty, grid=c.grid)
         cands.append({
             "id": f"{c.instance_id}|{c.call}|{c.grid or ''}",  # stable row id → click-to-work
             "call": c.call,
@@ -501,7 +502,7 @@ def activity_to_dict(amap, now: float | None = None) -> dict:
 
 
 def decodes_to_dict(buffer, now: float, limit: int = 120,
-                    *, per_instance: int | None = None) -> list:
+                    *, per_instance: int | None = None, cty=None) -> list:
     """Recent decodes across the whole fleet, newest first (plan §2.2 decode log).
 
     `buffer` is an iterable of stored decode dicts
@@ -523,9 +524,10 @@ def decodes_to_dict(buffer, now: float, limit: int = 120,
             continue
         counts[inst] = counts.get(inst, 0) + 1
         dx = e.get("dx_call") or ""
+        _cq, parsed_dx, _to, grid, _tail = _interpret_decode(e.get("message"))
         if not dx:
-            _cq, dx, _to, _grid, _tail = _interpret_decode(e.get("message"))
-        place = _country_fields(dx)
+            dx = parsed_dx
+        place = _country_fields(dx, cty=cty, grid=grid)
         out.append({
             "ts": e["ts"],
             "instance": e["instance"],
