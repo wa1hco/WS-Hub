@@ -45,7 +45,7 @@ from wims.integrations.cluster.parse import parse_spot, valid_login_call
 from wims.integrations.cluster.settings import (
     DEFAULT_TTL_S, MODE_FILTERS, allowed_bands, allowed_modes, known_nodes,
     load, save, sanitize,
-    call_mismatch_warning, effective_call,
+    call_mismatch_warning, effective_call, clean_station_call,
 )
 from wims.integrations.cluster.telnet import plaintext, strip_telnet
 from wims.integrations.cluster.view import (
@@ -290,6 +290,25 @@ class ClusterService:
         with self._lock:
             return dict(self._settings)
 
+    def remember_call_if_unset(self, call: str) -> str:
+        """Fill a blank Setup station call once, without dropping the connection.
+
+        Does not overwrite a call the operator already saved. Returns the
+        call now stored, which may still be blank.
+        """
+        call = clean_station_call(call)
+        with self._lock:
+            current = clean_station_call(self._settings.get("station_call"))
+            if current:
+                return current
+            if not call:
+                return ""
+            settings = dict(self._settings)
+            settings["station_call"] = call
+            self._settings = settings
+        save(settings, self.path)
+        return call
+
     def set_selected(self, selected: dict | None) -> None:
         with self._lock:
             self._selected = dict(selected) if selected else None
@@ -324,6 +343,12 @@ class ClusterService:
             node_spoke = self.node_spoke
             login_sent = self.login_sent
             last_spot_at = self.last_spot_at
+        if not clean_station_call(settings.get("station_call")) and wanted:
+            remembered = self.remember_call_if_unset(wanted)
+            if remembered:
+                settings["station_call"] = remembered
+                wanted = remembered
+                login = login or remembered
         allowed = allowed_bands(settings)
         modes = allowed_modes(settings)
         bands_empty = allowed is not None and not allowed
@@ -449,6 +474,8 @@ class ClusterService:
                 except Exception:
                     call = ""
             call = effective_call(settings, call)
+            if valid_login_call(call) and not settings.get("station_call"):
+                self.remember_call_if_unset(call)
             if not valid_login_call(call):
                 with self._lock:
                     self.phase = "need_call"

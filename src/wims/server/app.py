@@ -2236,6 +2236,13 @@ class LiveFleet:
         return call, grid
 
     def _operator_call_locked(self) -> str:
+        """Live call for the cluster login and similar uses.
+
+        Setup Station call is applied later by effective_call. Here the
+        order is: live WSJT-X Status (de_call), then a logger mycall.
+        A call from a WSJT-X ini file is never used — the agent scan of
+        MyCall stays out of this path.
+        """
         call = self._best_station_field_locked("de_call")
         if _login_call(call):
             return call
@@ -2243,8 +2250,7 @@ class LiveFleet:
             call = (getattr(logger, "mycall", None) or "").strip().upper()
             if _login_call(call):
                 return call
-        call, _grid = self._agent_station_locked()
-        return call if _login_call(call) else ""
+        return ""
 
     def _operator_grid_locked(self) -> str:
         grid = self._grid_text(self._best_station_field_locked("de_grid"))
@@ -2325,6 +2331,21 @@ class LiveFleet:
             raw = str(body.get("station_call") or "").strip()
             if raw and not _login_call(raw):
                 return {"ok": False, "error": "invalid_call"}
+            if not raw:
+                # An empty field keeps a saved call, or takes a live one.
+                # It does not clear a call the operator already set.
+                with self._lock:
+                    live = self._operator_call_locked()
+                existing = (self._cluster.settings().get("station_call") or "").strip()
+                body = dict(body)
+                body["station_call"] = existing or live
+        else:
+            # Form omitted the field: still fill a blank Setup from live.
+            with self._lock:
+                live = self._operator_call_locked()
+            if live and not (self._cluster.settings().get("station_call") or "").strip():
+                body = dict(body)
+                body["station_call"] = live
         saved = self._cluster.update(body)
         return {
             "ok": True,

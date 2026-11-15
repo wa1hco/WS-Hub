@@ -43,7 +43,7 @@ from wims.integrations.cluster.parse import parse_spot  # noqa: E402
 from wims.integrations.cluster.ranges import in_range  # noqa: E402
 from wims.integrations.cluster.settings import (  # noqa: E402
     DEFAULT_HOST, DEFAULT_PORT, MODE_FILTERS, all_bands,
-    call_mismatch_warning, effective_call, load, save, sanitize,
+    call_mismatch_warning, effective_call, first_live_call, load, save, sanitize,
 )
 from wims.integrations.cluster.telnet import strip_telnet  # noqa: E402
 from wims.integrations.cluster.view import (  # noqa: E402
@@ -1135,6 +1135,8 @@ def test_station_call_settings_validate_and_prefer_setup():
     assert effective_call({"station_call": ""}, "") == ""
     assert sanitize({"station_call": "not a call"})["station_call"] == ""
     assert sanitize({"station_call": "  k1abc/p "})["station_call"] == "K1ABC/P"
+    assert first_live_call("", "k1abc", "N1XYZ") == "K1ABC"
+    assert first_live_call("", "not a call", "") == ""
     assert call_mismatch_warning("", ["K1ABC"]) == ""
     assert call_mismatch_warning("WA1HCO", ["WA1HCO"]) == ""
     assert call_mismatch_warning("WA1HCO", []) == ""
@@ -1163,15 +1165,34 @@ def test_blank_setup_call_uses_live_call_and_warns_on_mismatch():
         live = _public(svc, callsign="K1ABC", live_calls=["K1ABC"])
         assert live["phase"] == "connecting"
         assert live["callsign"] == "K1ABC"
+        assert live["station_call"] == "K1ABC"
         assert live["call_warning"] == ""
-        neither = _public(svc, callsign="")
+        # A later snapshot with no live call still has the remembered Setup call.
+        remembered = _public(svc, callsign="")
+        assert remembered["phase"] == "connecting"
+        assert remembered["callsign"] == "K1ABC"
+        assert remembered["station_call"] == "K1ABC"
+        empty = ClusterService(path=Path(tmp) / "empty.json")
+        empty.update({"enabled": True, "station_call": ""})
+        neither = _public(empty, callsign="")
         assert neither["phase"] == "need_call"
         assert "Set the station call in Setup" in neither["status_line"]
         svc.update({"enabled": True, "station_call": "WA1HCO"})
         mismatch = _public(svc, callsign="K1ABC", live_calls=["K1ABC"])
         assert mismatch["callsign"] == "WA1HCO"
+        assert mismatch["station_call"] == "WA1HCO"
         assert "K1ABC" in mismatch["call_warning"]
         assert "WA1HCO" in mismatch["call_warning"]
+
+
+def test_remember_call_does_not_overwrite_a_saved_setup_call():
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({"enabled": True, "station_call": "WA1HCO"})
+        assert svc.remember_call_if_unset("K1ABC") == "WA1HCO"
+        view = _public(svc, callsign="K1ABC", live_calls=["K1ABC"])
+        assert view["station_call"] == "WA1HCO"
+        assert view["callsign"] == "WA1HCO"
 
 
 def test_setup_station_call_connects_without_a_live_wsjtx_call():
@@ -1208,8 +1229,11 @@ def test_setup_page_has_station_call_and_warning():
     assert "invalid_call" in js
     assert "call_warning" in js
     assert "That is not a valid station call." in js
+    assert "c.station_call || c.callsign" in js
+    assert "document.activeElement !== stationField" in js
     assert "python -m" not in html.lower()
     assert "PYTHONPATH" not in html
+    assert "settings file" in html
 
 
 
