@@ -39,11 +39,13 @@ from wims.integrations.cluster.client import (  # noqa: E402
     next_backoff, sent_text,
 )
 from wims.integrations.cluster.modes import infer_mode  # noqa: E402
-from wims.integrations.cluster.parse import parse_spot  # noqa: E402
+from wims.integrations.cluster.parse import (  # noqa: E402
+    parse_spot, valid_cluster_login, valid_login_call,
+)
 from wims.integrations.cluster.ranges import in_range  # noqa: E402
 from wims.integrations.cluster.settings import (  # noqa: E402
     DEFAULT_HOST, DEFAULT_PORT, MODE_FILTERS, all_bands,
-    call_mismatch_warning, effective_call, first_live_call, load, save, sanitize,
+    call_mismatch_warning, clean_cluster_login, effective_call, first_live_call, load, save, sanitize,
 )
 from wims.integrations.cluster.telnet import strip_telnet  # noqa: E402
 from wims.integrations.cluster.view import (  # noqa: E402
@@ -1153,7 +1155,7 @@ def test_station_call_settings_validate_and_prefer_setup():
     warning = call_mismatch_warning("WA1HCO", ["K1ABC", "N1XYZ"])
     assert "WA1HCO" in warning and "K1ABC" in warning and "N1XYZ" in warning
     assert "different" in warning
-    assert "will use WA1HCO" in warning
+    assert "left as WA1HCO" in warning
 
 
 def test_setup_station_call_is_used_when_wsjtx_is_not_running():
@@ -1239,13 +1241,146 @@ def test_setup_page_has_station_call_and_warning():
     assert "invalid_call" in js
     assert "call_warning" in js
     assert "That is not a valid station call." in js
-    assert "c.station_call || c.callsign" in js
+    assert "c.station_call || c.callsign" not in js
     assert "document.activeElement !== stationField" in js
+    assert 'id="cluster-login"' in html
+    assert "Cluster login" in html
+    assert "Use WA1HCO-1, -2" in html
+    assert 'id="cluster-save-error"' in html
+    assert "cluster_login" in js
+    assert "invalid_login" in js
+    assert "document.activeElement !== loginField" in js
+    assert "_clusterReady || login.value.trim()" in js
     assert "python -m" not in html.lower()
     assert "PYTHONPATH" not in html
     assert "settings file" in html
 
 
+
+
+def test_cluster_login_ssid_is_accepted_and_does_not_change_station_call():
+    assert valid_login_call("WA1HCO") is True
+    assert valid_login_call("WA1HCO-1") is False
+    assert valid_cluster_login("WA1HCO") is True
+    assert valid_cluster_login("WA1HCO-1") is True
+    assert valid_cluster_login("WA1HCO-2") is True
+    assert valid_cluster_login("K1ABC/P") is True
+    assert valid_cluster_login("not a call") is False
+    assert valid_cluster_login("WA1HCO-ABC") is False
+    assert clean_cluster_login("wa1hco-1") == "WA1HCO-1"
+    saved = sanitize({"station_call": "WA1HCO", "cluster_login": "wa1hco-1"})
+    assert saved["station_call"] == "WA1HCO"
+    assert saved["cluster_login"] == "WA1HCO-1"
+    # An SSID in the station field is dropped, not moved silently.
+    dropped = sanitize({"station_call": "WA1HCO-1", "cluster_login": ""})
+    assert dropped["station_call"] == ""
+    assert dropped["cluster_login"] == ""
+    assert effective_call(
+        {"station_call": "WA1HCO", "cluster_login": "WA1HCO-1"}, "K1ABC",
+    ) == "WA1HCO-1"
+    assert effective_call(
+        {"station_call": "WA1HCO", "cluster_login": ""}, "K1ABC",
+    ) == "WA1HCO"
+    assert effective_call({"station_call": "", "cluster_login": ""}, "K1ABC") == "K1ABC"
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "cluster.json"
+        svc = ClusterService(path=path)
+        svc.update({
+            "enabled": True,
+            "station_call": "WA1HCO",
+            "cluster_login": "WA1HCO-1",
+        })
+        view = _public(svc, callsign="WA1HCO", live_calls=["WA1HCO"])
+        assert view["station_call"] == "WA1HCO"
+        assert view["cluster_login"] == "WA1HCO-1"
+        assert view["callsign"] == "WA1HCO-1"
+        assert view["call_warning"] == ""
+        again = load(path)
+        assert again["station_call"] == "WA1HCO"
+        assert again["cluster_login"] == "WA1HCO-1"
+        sent = bytearray()
+        ClusterLink("WA1HCO-1", sent.extend).feed(b"Please enter your call:\r\n")
+        assert sent_text(bytes(sent)).strip() == "WA1HCO-1"
+
+
+def test_remember_call_does_not_store_an_ssid_as_station_call():
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({
+            "enabled": True,
+            "station_call": "",
+            "cluster_login": "WA1HCO-1",
+        })
+        assert svc.remember_call_if_unset("WA1HCO-1") == ""
+        view = _public(svc, callsign="")
+        assert view["station_call"] == ""
+        assert view["cluster_login"] == "WA1HCO-1"
+        assert view["callsign"] == "WA1HCO-1"
+        assert view["phase"] == "connecting"
+
+
+def test_cluster_login_ssid_connects_without_changing_station_call():
+    with tempfile.TemporaryDirectory() as tmp:
+        opened = []
+
+        def boom(*_a, **_k):
+            opened.append(1)
+            raise ConnectionRefusedError("no")
+
+        svc = ClusterService(path=Path(tmp) / "cluster.json", connect=boom)
+
+        def pause(_seconds):
+            if opened or svc.phase == "need_call":
+                svc._stop.set()
+
+        svc._sleep = pause
+        svc.update({
+            "enabled": True,
+            "station_call": "WA1HCO",
+            "cluster_login": "WA1HCO-1",
+        })
+        svc.start(lambda: "WA1HCO")
+        svc._thread.join(timeout=2)
+        assert opened == [1]
+        assert svc.phase != "need_call"
+        assert svc.login_call == "WA1HCO-1"
+        assert svc.settings()["station_call"] == "WA1HCO"
+
+
+def test_set_cluster_rejects_bad_values_without_writing():
+    from wims.server.app import LiveFleet
+
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({"enabled": True, "station_call": "WA1HCO"})
+        stub = type("Fleet", (), {})()
+        stub._lock = threading.Lock()
+        stub._cluster = svc
+        stub._operator_call_locked = lambda: "WA1HCO"
+        rejected = LiveFleet.set_cluster(
+            stub, {"station_call": "WA1HCO-1", "cluster_login": "WA1HCO-1"},
+        )
+        assert rejected["ok"] is False
+        assert rejected["error"] == "invalid_call"
+        assert "Cluster login" in rejected["message"]
+        assert svc.settings()["station_call"] == "WA1HCO"
+        assert not svc.settings().get("cluster_login")
+        bad_login = LiveFleet.set_cluster(
+            stub, {"station_call": "WA1HCO", "cluster_login": "nope!!"},
+        )
+        assert bad_login["ok"] is False
+        assert bad_login["error"] == "invalid_login"
+        assert "valid cluster login" in bad_login["message"]
+        assert svc.settings()["station_call"] == "WA1HCO"
+        assert not svc.settings().get("cluster_login")
+        saved = LiveFleet.set_cluster(
+            stub, {"station_call": "WA1HCO", "cluster_login": "WA1HCO-1"},
+        )
+        assert saved["ok"] is True
+        assert saved["station_call"] == "WA1HCO"
+        assert saved["cluster_login"] == "WA1HCO-1"
+        assert svc.settings()["station_call"] == "WA1HCO"
+        assert svc.settings()["cluster_login"] == "WA1HCO-1"
 
 
 def test_dropped_session_closes_socket_before_the_wait_and_is_not_logged_in():

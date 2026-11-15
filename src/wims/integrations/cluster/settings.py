@@ -42,7 +42,7 @@ import re
 from pathlib import Path
 
 from wims.core.bands import BAND_ORDER
-from wims.integrations.cluster.parse import valid_login_call
+from wims.integrations.cluster.parse import valid_cluster_login, valid_login_call
 
 SCHEMA = 2
 DEFAULT_HOST = "k1ttt.net"
@@ -90,6 +90,7 @@ def default_settings() -> dict:
         "modes": "all",
         "qsy_cost": DEFAULT_QSY_COST,
         "station_call": "",
+        "cluster_login": "",
     }
 
 
@@ -181,22 +182,32 @@ def _clean_qsy(value) -> int:
 
 
 def clean_station_call(value) -> str:
-    """A callsign we will send as the cluster login, or blank."""
+    """A station callsign, or blank. An SSID such as -1 is not accepted here."""
     return str(value or "").strip().upper() if valid_login_call(value) else ""
 
 
-def effective_call(settings: dict | None, live_call: str | None = "") -> str:
-    """Setup station call first; otherwise a live call already resolved.
+def clean_cluster_login(value) -> str:
+    """A telnet login, including a cluster SSID such as WA1HCO-1, or blank."""
+    return str(value or "").strip().upper() if valid_cluster_login(value) else ""
 
-    Callers pass the first available live source, in this order: a running
-    WSJT-X Status call (de_call), then a logger mycall. Do not pass a call
-    read from a WSJT-X ini file — a loaner PC may still have another
-    station's call on disk.
+
+def effective_call(settings: dict | None, live_call: str | None = "") -> str:
+    """Cluster login, else Setup station call, else a live call already resolved.
+
+    The cluster login is only the telnet user, and may have an SSID. The
+    station call is never taken from that SSID. Callers pass the first
+    available live source, in this order: a running WSJT-X Status call
+    (de_call), then a logger mycall. Do not pass a call read from a
+    WSJT-X ini file — a loaner PC may still have another station's call
+    on disk.
     """
+    login = clean_cluster_login((settings or {}).get("cluster_login"))
+    if login:
+        return login
     setup = clean_station_call((settings or {}).get("station_call"))
     if setup:
         return setup
-    return clean_station_call(live_call)
+    return clean_cluster_login(live_call) or clean_station_call(live_call)
 
 
 def first_live_call(*candidates) -> str:
@@ -233,7 +244,7 @@ def call_mismatch_warning(setup_call: str, live_calls) -> str:
         reported = ", ".join(others[:-1]) + f", and {others[-1]}"
     return (
         f"Station call {setup} is different from the call WSJT-X reports "
-        f"({reported}). The cluster will use {setup}."
+        f"({reported}). The station call is left as {setup}."
     )
 
 
@@ -276,6 +287,7 @@ def sanitize(data: dict | None) -> dict:
     if "qsy_cost" in raw:
         out["qsy_cost"] = _clean_qsy(raw.get("qsy_cost"))
     out["station_call"] = clean_station_call(raw.get("station_call"))
+    out["cluster_login"] = clean_cluster_login(raw.get("cluster_login"))
     return out
 
 

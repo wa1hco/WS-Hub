@@ -43,7 +43,7 @@ import time
 from collections.abc import Callable
 
 from wims.engine import scoring as S
-from wims.integrations.cluster.parse import parse_spot, valid_login_call
+from wims.integrations.cluster.parse import parse_spot, valid_cluster_login
 from wims.integrations.cluster.settings import (
     DEFAULT_TTL_S, MODE_FILTERS, allowed_bands, allowed_modes, known_nodes,
     load, save, sanitize,
@@ -181,7 +181,7 @@ class ClusterLink:
     def _send_login(self) -> None:
         if self._sent_login:
             return
-        if not valid_login_call(self.callsign):
+        if not valid_cluster_login(self.callsign):
             return
         self._send((self.callsign.strip().upper() + "\r\n").encode("ascii"))
         self._sent_login = True
@@ -270,7 +270,7 @@ class ClusterService:
         current = self.settings()
         merged = dict(current)
         if isinstance(body, dict):
-            for key in ("enabled", "node", "host", "port", "bands", "modes", "qsy_cost", "station_call"):
+            for key in ("enabled", "node", "host", "port", "bands", "modes", "qsy_cost", "station_call", "cluster_login"):
                 if key in body:
                     merged[key] = body[key]
         cleaned = sanitize(merged)
@@ -360,7 +360,7 @@ class ClusterService:
         if not settings.get("enabled"):
             phase = "off"
         elif phase == "off":
-            phase = "need_call" if not valid_login_call(wanted) else "connecting"
+            phase = "need_call" if not valid_cluster_login(wanted) else "connecting"
         rows, drops = ([], {"spot_count": 0})
         can_list = (
             settings.get("enabled") and not bands_empty and not modes_empty
@@ -428,6 +428,7 @@ class ClusterService:
             "mode_choices": mode_choices(settings.get("modes")),
             "qsy_cost": int(settings.get("qsy_cost") or 0),
             "station_call": settings.get("station_call") or "",
+            "cluster_login": settings.get("cluster_login") or "",
             "callsign": login,
             "call_warning": call_mismatch_warning(
                 settings.get("station_call") or "", live_calls,
@@ -490,9 +491,10 @@ class ClusterService:
                 except Exception:
                     call = ""
             call = effective_call(settings, call)
-            if valid_login_call(call) and not settings.get("station_call"):
+            if not settings.get("station_call"):
+                # Remember a plain station call, never an SSID.
                 self.remember_call_if_unset(call)
-            if not valid_login_call(call):
+            if not valid_cluster_login(call):
                 with self._lock:
                     self.phase = "need_call"
                     self.login_call = ""
