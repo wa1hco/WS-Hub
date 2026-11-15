@@ -18,4 +18,4 @@
 
 """WIMS — WSJT-X Instance Management System."""
 
-__version__ = "1.0.27"
+__version__ = "1.0.28"
