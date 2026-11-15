@@ -21,7 +21,7 @@
 #
 # WIMS smoke validation — proves the project runs end-to-end on this machine.
 #
-# Honors CLAUDE.md "verify live, not by assertion": it runs the self-contained
+# Honors docs/project_rules.md "verify live, not by assertion": it runs the self-contained
 # unit suites AND a live no-RF run (server ingests the emulator's multicast →
 # state → SSE → JSON). No network hardware, no N1MM, no pytest required.
 #
@@ -98,7 +98,7 @@ fi
 
 # ---------------------------------------------------------------------------
 hdr "3. Interlock bench (zero TX overlap)"
-if timeout 40 "$PY" testbed/interlock_bench.py > "$LOGDIR/interlock.log" 2>&1 \
+if timeout 40 "$PY" tools/testbed/interlock_bench.py > "$LOGDIR/interlock.log" 2>&1 \
         && grep -q "RESULT: PASS" "$LOGDIR/interlock.log"; then
     ok "$(grep -m1 'overlap violations' "$LOGDIR/interlock.log" | sed 's/^ *//')"
 else
@@ -115,7 +115,7 @@ hdr "4. Live end-to-end (server + emulator → SSE → JSON)"
 WIMS_SKIP_UPDATE_CHECK=1 "$PY" src/wims/server/app.py --iface "$IFACE" --http-port "$HTTP_PORT" \
     --no-seed --no-presence --refresh 1 > "$LOGDIR/server.log" 2>&1 &
 SRV_PID=$!
-"$PY" testbed/simulators/emulator.py --iface "$IFACE" \
+"$PY" tools/testbed/simulators/emulator.py --iface "$IFACE" \
     --instances "$INSTANCES" > "$LOGDIR/emulator.log" 2>&1 &
 EMU_PID=$!
 

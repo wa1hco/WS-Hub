@@ -326,6 +326,10 @@ class HeardGrids:
     def note_decode(self, msg, band: str, when: float) -> bool:
         if getattr(msg, "off_air", False):
             return False
+        # A '?' / UDP low-confidence decode is kept as a decode, but is not
+        # a confirmed grid source.
+        if getattr(msg, "low_confidence", False):
+            return False
         pair = standard_station_grid(getattr(msg, "message", None))
         if pair is None:
             return False

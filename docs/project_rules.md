@@ -1,0 +1,73 @@
+# WS Hub — Project rules
+
+The rules for working on this repo, for people and coding agents alike. Cursor
+applies them through [`.cursor/rules/project-rules.mdc`](../.cursor/rules/project-rules.mdc).
+This file was `CLAUDE.md` at the repo root until 2026-11-12.
+
+General collaboration style, the **development-vs-debugging contract**, coding
+preferences, and safety rails can also live in a personal global file (for Claude
+Code, `~/.claude/CLAUDE.md`, synced across machines) and apply here unless
+overridden below. This file does **not** duplicate them. Same pattern as the
+parallel `map144` project.
+
+**To use Claude Code again:** restore `CLAUDE.md` and `.claude/` from commit
+`545f731` (`git checkout 545f731 -- CLAUDE.md .claude`), then bring `CLAUDE.md` up
+to date from this file. `.claude/settings.local.json` stays ignored by git.
+
+WS Hub (formerly WIMS, WSJT-X Instance Management System; repo `wa1hco/WS-Hub`; the package, folders, and files keep the `wims` name) — a supervised, **human-in-the-loop**
+operating console for multi-instance VHF contesting (the "WSJT-X wrangler"
+position). Target deployment: a fixed multi-multi VHF effort across several
+vehicles on one LAN; WIMS provides cross-vehicle visibility and lets one console
+operator cover several digital bands.
+
+**The authoritative requirements/design is
+[`docs/plan/wims_design.md`](plan/wims_design.md)** — read it before proposing
+work; record design decisions there as we go (it is the single source of truth), and
+keep it updated when the *design* changes. **Build status, milestones, the
+module-implementation table, and the build log live separately in
+[`docs/plan/wims_status.md`](plan/wims_status.md)** — update that as *code* lands.
+Keep the two separated: design vs progress.
+
+**Fleet networking (planes A–E, band ports, seat-local CAT, preferred Icom + wfview seat):**
+[`docs/plan/wims_networking.md`](plan/wims_networking.md) — especially **§3 / §3.2 / §3.3 /
+§4**. CAT/PTT is seat-local middleware, not a WIMS server plane; do not conflate with plane A
+UDP.
+
+## WIMS-specific conventions
+
+- **Python, stdlib-first.** Keep runtime dependencies minimal (currently zero);
+  prefer a stdlib solution over pulling in a framework. Python 3.14.
+- **Modular, pluggable, explainable, low lock-in.** Favor designs that are easy to
+  swap and understand over clever ones — e.g. scoring is pluggable weighted factors
+  with a visible breakdown; the UI is plain HTML/SSE behind a stable JSON API.
+- **Verify live, not by assertion.** Prove each piece with the lightweight
+  self-running tests in `tests/unit/` (no pytest dep) **and** a live run against
+  real captures (`captures/`) or the emulator (`tools/testbed/simulators/`). Keep the
+  suite green.
+- **Safety by construction:** zero TX overlap per resource group; fail-safe to RX;
+  **no automated/unattended transmit** — a human always initiates TX.
+- **Don't over-assume; fold in corrections** (e.g. the dev FlexRadio station is
+  *not* the contest fleet) and adjust the plan.
+- **Zero-knowledge / zero-memory.** A person who only vaguely remembers the name
+  WIMS must be able to get going: recognition over recall, zero-config,
+  auto-detect, progressive disclosure, and errors that say what to do next in
+  plain words. Operator instructions do not ask for environment variables,
+  `python -m`, or command-line flags. Those belong in a section titled
+  **Developer**. Full statement and checklist:
+  [`docs/design-principles.md`](design-principles.md).
+- **Clean builds.** The GitHub check on Python 3.10, 3.12, and 3.14 is green
+  before a change is merged. A green run's log does not contain `FAIL` or
+  `ERROR` lines from a path that was supposed to succeed, or from a refusal
+  the test expected. A failure email is fixed at the cause — the bug, the
+  test, or the wording — so the mail stops. Full statement:
+  [`docs/design-principles.md`](design-principles.md).
+
+## GUI
+
+- **Light mode**, 12 pt (project default).
+- **Stack = browser, served by the WIMS server** (stdlib HTTP + Server-Sent Events
+  → static HTML). The **JSON state contract (`src/wims/server/state.py`) is the
+  durable boundary**; the frontend is the only replaceable part.
+- **Two-phase UI:** Phase 1 developer-oriented (information-dense, expose internals,
+  discover what we actually need — rendering is disposable); Phase 2
+  operator-oriented (cull, lay out, polish, lock conventions).

@@ -74,6 +74,11 @@ from wims.state.heard_grids import (  # noqa: E402
 )
 from wims.state import last_log as last_log_pref  # noqa: E402
 from wims.integrations.logsource import N1mmLogSource  # noqa: E402
+from wims.integrations.cluster.client import ClusterService  # noqa: E402
+from wims.integrations.cluster.modes import canonical_mode as _spot_mode  # noqa: E402
+from wims.integrations.cluster.parse import valid_login_call as _login_call  # noqa: E402
+from wims.integrations.cluster.settings import effective_call as _cluster_effective_call  # noqa: E402
+from wims.integrations.cluster.view import OnAir as _OnAir  # noqa: E402
 from wims.config.seat_profile import (  # noqa: E402
     default_seat_profile_path, load_seat_profile, save_seat_profile_marks,
 )
@@ -238,6 +243,8 @@ class LiveFleet:
         # In-memory until main() attaches the JSON file. Tests stay off the
         # operator's heard-grid file.
         self._heard = HeardGrids()
+        # DX cluster spots. The thread starts from main(), not from tests.
+        self._cluster = ClusterService()
         self._maps: dict[str, ActivityMap] = {}    # per-instance decode-activity map
         self._decodes: deque = deque(maxlen=300)   # rolling fleet-wide decode log
         self._condition = condition
@@ -271,6 +278,8 @@ class LiveFleet:
         self._agent_prune_after = 300.0            # drop silent agents after 5 min
         # Rotators (plan §2.10 / §3.8) — sim and/or agent-reported status.
         self._rotators = RotatorRegistry()
+        from wims.integrations.antenna.board import AntennaBoard
+        self._antennas = AntennaBoard()
         self._last_rot_action: dict | None = None
         # Rate-limit id-collision warnings (two VMs same --rig-name / UDP id).
         self._id_collision_warn_ts: dict[str, float] = {}
@@ -560,6 +569,16 @@ class LiveFleet:
             self._contest_names = names
         return {"ok": True, "seeded": summary["total"],
                 "files": [str(p) for p in files]}
+
+    def _entity_latlon(self, call: str | None):
+        """DXCC entity centroid (lat, lon east), or None when unknown."""
+        index = self._country_index()
+        if index is None:
+            return None
+        try:
+            return index.centroid(call)
+        except Exception:
+            return None
 
     def _country_index(self):
         """The WSJT-X country file, or None when this computer does not have one."""
@@ -1251,6 +1270,13 @@ class LiveFleet:
             # Optional rotators[] on the agent report → live Az ant on roster.
             n_rot = self._rotators.ingest_report(
                 stored.get("rotators"), agent_id=agent_id, now=ts)
+            # antennas[] is the product path. Host and port are stripped.
+            if "antennas" in stored:
+                from wims.integrations.antenna.model import public_antennas
+                stored["antennas"] = public_antennas(stored.get("antennas"))
+                self._agents[agent_id] = stored
+            n_ant = self._antennas.ingest(
+                stored.get("antennas"), agent_id=agent_id, now=ts)
         summary = (stored.get("summary") or {})
         return {
             "ok": True,
@@ -1258,6 +1284,7 @@ class LiveFleet:
             "severity": summary.get("severity"),
             "message": summary.get("message"),
             "rotators_ingested": n_rot,
+            "antennas_ingested": n_ant,
         }
 
     def accept_n1mm_broadcast(self, body: dict, *, now: float | None = None) -> dict:
@@ -2095,7 +2122,8 @@ class LiveFleet:
                                          condition=self._condition,
                                          strategy=self._roster.strategy.name,
                                          nodes=self._tracker.nodes,
-                                         rotators=self._rotators)
+                                         rotators=self._rotators,
+                                         entity_latlon=self._entity_latlon)
             # One activity tile per live instance (including empty / no decodes).
             live_ids = set(self._tracker.nodes)
             d["activity"] = [activity_to_dict(self._maps[mid], now=now)
@@ -2128,6 +2156,7 @@ class LiveFleet:
                     for mid, c in sorted(self._tx_claims.items())
                 ])
             d["rotators"] = rotators_to_dict(self._rotators, now)
+            d["antennas"] = self._antennas.snapshot(now)
             d["rotator_last_action"] = self._last_rot_action
             d["gt_bridge"] = (
                 self._gt_bridge.status_dict() if self._gt_bridge is not None else None)
@@ -2156,7 +2185,182 @@ class LiveFleet:
             d["lotw"] = status_public()
             d["log_access"] = list(self._log_access_rows)
             d["log_in_use"] = dict(self._log_in_use)
+            d["cluster"] = self._cluster_public_locked(now)
             return d
+
+    def _grid_text(self, grid: str | None) -> str:
+        g = (grid or "").strip().upper()
+        if len(g) not in (4, 6):
+            return ""
+        if not (g[0].isalpha() and g[1].isalpha() and g[2].isdigit() and g[3].isdigit()):
+            return ""
+        if len(g) == 6 and not (g[4].isalpha() and g[5].isalpha()):
+            return ""
+        return g
+
+    def _best_station_field_locked(self, field: str) -> str:
+        best = ""
+        best_t = -1.0
+        now = time.time()
+        for node in self._tracker.nodes.values():
+            if node.health(now) == "DEAD":
+                continue
+            value = (getattr(node, field, None) or "").strip().upper()
+            if not value:
+                continue
+            seen = node.last_seen() or 0
+            if seen >= best_t:
+                best = value
+                best_t = seen
+        return best
+
+    def _agent_station_locked(self) -> tuple[str, str]:
+        call, grid = "", ""
+        best = -1.0
+        for report in self._agents.values():
+            try:
+                ts = float(report.get("received_at") or 0)
+            except (TypeError, ValueError):
+                ts = 0.0
+            configs = ((report.get("wsjtx") or {}).get("configs") or [])
+            for cfg in configs:
+                if not isinstance(cfg, dict):
+                    continue
+                c = str(cfg.get("my_call") or "").strip().upper()
+                g = str(cfg.get("my_grid") or "").strip().upper()
+                if ts >= best and (c or g):
+                    best = ts
+                    call, grid = c, g
+        return call, grid
+
+    def _operator_call_locked(self) -> str:
+        call = self._best_station_field_locked("de_call")
+        if _login_call(call):
+            return call
+        for logger in self._tracker.loggers.values():
+            call = (getattr(logger, "mycall", None) or "").strip().upper()
+            if _login_call(call):
+                return call
+        call, _grid = self._agent_station_locked()
+        return call if _login_call(call) else ""
+
+    def _operator_grid_locked(self) -> str:
+        grid = self._grid_text(self._best_station_field_locked("de_grid"))
+        if grid:
+            return grid
+        _call, grid = self._agent_station_locked()
+        return self._grid_text(grid)
+
+    def _live_wsjtx_calls_locked(self) -> list[str]:
+        """Callsigns reported by live WSJT-X Status, newest last."""
+        now = time.time()
+        ranked: list[tuple[float, str]] = []
+        seen: set[str] = set()
+        for node in self._tracker.nodes.values():
+            if node.health(now) == "DEAD":
+                continue
+            call = (getattr(node, "de_call", None) or "").strip().upper()
+            if not _login_call(call) or call in seen:
+                continue
+            seen.add(call)
+            ranked.append((node.last_seen() or 0, call))
+        ranked.sort()
+        return [call for _seen, call in ranked]
+
+    def _operations_locked(self, now: float) -> list:
+        out = []
+        for node in self._tracker.nodes.values():
+            if node.health(now) == "DEAD":
+                continue
+            band = node.band or ""
+            if not band or band == "?" or not node.dial_hz:
+                continue
+            out.append(_OnAir(band, _spot_mode(node.mode)))
+        return out
+
+    def _cluster_public_locked(self, now: float) -> dict:
+        def classify(call, band, grid, mode):
+            return self._log.classify(call, band, grid, mode)
+
+        def grid_for(call):
+            # The heard-grid lookup, not only the square, so a remembered
+            # spot grid uses the same hover as the roster.
+            return self._heard.lookup(call, now)
+
+        def rover_for(call):
+            return self._heard.is_rover(call, now)
+
+        return self._cluster.public(
+            now=now,
+            callsign=self._operator_call_locked(),
+            our_grid=self._operator_grid_locked() or None,
+            operations=self._operations_locked(now),
+            live_calls=self._live_wsjtx_calls_locked(),
+            classify=classify,
+            grid_for=grid_for,
+            rover_for=rover_for,
+            spotter_grid=grid_for,
+            entity_latlon=self._entity_latlon,
+        )
+
+    def start_cluster(self) -> None:
+        self._cluster.start(self._cluster_callsign)
+
+    def stop_cluster(self) -> None:
+        self._cluster.stop()
+
+    def _cluster_callsign(self) -> str:
+        with self._lock:
+            return _cluster_effective_call(
+                self._cluster.settings(), self._operator_call_locked(),
+            )
+
+    def set_cluster(self, body: dict) -> dict:
+        """POST /api/cluster. Saved beside the Goal. No flag and no env var."""
+        if not isinstance(body, dict):
+            return {"ok": False, "error": "invalid_body"}
+        if "station_call" in body:
+            raw = str(body.get("station_call") or "").strip()
+            if raw and not _login_call(raw):
+                return {"ok": False, "error": "invalid_call"}
+        saved = self._cluster.update(body)
+        return {
+            "ok": True,
+            "enabled": saved["enabled"],
+            "host": saved["host"],
+            "port": saved["port"],
+            "bands": saved["bands"],
+            "modes": saved["modes"],
+            "qsy_cost": saved["qsy_cost"],
+            "station_call": saved.get("station_call") or "",
+        }
+
+    def select_spot(self, body: dict) -> dict:
+        """Remember a spotted station. Does not transmit and does not retune."""
+        if not isinstance(body, dict):
+            return {"ok": False, "error": "invalid_body",
+                    "line": "That spot could not be read."}
+        call = str(body.get("call") or "").strip().upper()
+        if not call:
+            return {"ok": False, "error": "no_call",
+                    "line": "That spot has no callsign."}
+        grid = self._grid_text(body.get("grid"))
+        band = str(body.get("band") or "").strip()
+        mode = str(body.get("mode") or "").strip()
+        where = " ".join(part for part in (band, mode) if part)
+        place = f" {grid}" if grid else ""
+        on = f" on {where}" if where else ""
+        line = (
+            f"Selected {call}{place}{on}. "
+            "Work needs a live decode. The radio is not retuned."
+        )
+        with self._lock:
+            self._cluster.set_selected({
+                "call": call, "grid": grid, "band": band, "mode": mode, "line": line,
+            })
+            if grid:
+                self._heard.note(call, grid, band or "?", time.time())
+        return {"ok": True, "line": line, "transmitted": False, "retuned": False}
 
     def _n1mm_db_path(self) -> str:
         active = self._active_contest or {}
@@ -2506,9 +2710,11 @@ class LiveFleet:
                       az: float | None = None,
                       row_id: str | None = None) -> dict:
         """Human click-to-point: set rotator to az, or to roster row Az DX."""
-        from wims.engine.geo import bearing
+        from wims.engine.geo import aim
         with self._lock:
             rid = (rotator_id or "").strip() or None
+            approximate = False
+            bearing_source = None
             if row_id:
                 entry = self._roster.entry_for(row_id)
                 if entry is None:
@@ -2516,11 +2722,22 @@ class LiveFleet:
                             "detail": "Roster row gone — pick a fresh line."}
                 inst = getattr(entry.decode, "id", None) or "?"
                 grid = getattr(entry, "grid", None) or getattr(entry.decode, "grid", None)
-                az_dx = bearing(entry.de_grid, grid)
+                remembered = bool(getattr(entry, "grid_remembered", False))
+                call = getattr(entry.decode, "dx_call", None) or ""
+                latlon = None
+                if not grid:
+                    latlon = self._entity_latlon(call)
+                az_dx, _km, bearing_source = aim(
+                    entry.de_grid, None if remembered else grid,
+                    heard_grid=grid if remembered else None,
+                    entity_latlon=latlon,
+                )
                 if az_dx is None:
                     return {"ok": False, "error": "no_bearing",
                             "detail": "Need de_grid + DX grid for Az DX."}
-                az = az_dx
+                # Match the integer degrees shown in Az DX.
+                az = round(az_dx)
+                approximate = bearing_source == "dxcc"
                 if not rid:
                     rst = self._rotators.for_instance(inst)
                     rid = rst.id if rst else None
@@ -2541,6 +2758,22 @@ class LiveFleet:
                         "detail": "Provide az degrees or a row_id with Az DX."}
             result = self._rotators.point(rid, float(az))
             if result.get("ok"):
+                if row_id:
+                    result["approximate"] = bool(approximate)
+                    if bearing_source:
+                        result["bearing_source"] = bearing_source
+                    if approximate and not result.get("detail"):
+                        index = self._country_index()
+                        name = ""
+                        if index is not None:
+                            try:
+                                name = index.entity_name(call) or ""
+                            except Exception:
+                                name = ""
+                        who = name or "the DXCC entity"
+                        result["detail"] = (
+                            f"Approximate heading from {who} (country file)"
+                        )
                 self._last_rot_action = {
                     "action": "point", "rotator": rid, "az": result.get("az"),
                     "ts": time.time(),
@@ -3022,6 +3255,21 @@ def make_handler(live: LiveFleet, refresh: float):
             elif path == "/api/rules":
                 try:
                     result = live.set_rules(body)
+                    code = 200 if result.get("ok") else 400
+                    self._send_json(code, result)
+                except Exception as e:
+                    self._send_json(500, {"ok": False, "error": str(e)})
+            elif path == "/api/cluster":
+                try:
+                    result = live.set_cluster(body)
+                    code = 200 if result.get("ok") else 400
+                    self._send_json(code, result)
+                except Exception as e:
+                    self._send_json(500, {"ok": False, "error": str(e)})
+            elif path == "/api/cluster/select":
+                # Selects a spotted station. Never a transmit and never a retune.
+                try:
+                    result = live.select_spot(body)
                     code = 200 if result.get("ok") else 400
                     self._send_json(code, result)
                 except Exception as e:
@@ -3580,9 +3828,9 @@ def main() -> None:
             if info.available:
                 tag = info.release_tag or info.remote_short
                 print(
-                    f"WIMS update available: {info.local_label} → {info.remote_label}"
+                    f"WS Hub update available: {info.local_label} → {info.remote_label}"
                     f"{f' ({tag})' if tag else ''}. "
-                    "Desktop Update WIMS, or GitHub Releases.",
+                    "Use the update button in the WS Hub window, or GitHub Releases.",
                     flush=True,
                 )
         except Exception:
@@ -3599,12 +3847,21 @@ def main() -> None:
             flush=True,
         )
 
+    try:
+        live.start_cluster()
+    except Exception as exc:
+        print(f"  DX cluster did not start ({exc}).", flush=True)
+
     print("Ctrl-C to stop.")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
     finally:
+        try:
+            live.stop_cluster()
+        except Exception:
+            pass
         if announcer is not None:
             announcer.stop()
         try:

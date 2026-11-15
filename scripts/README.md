@@ -3,22 +3,19 @@
 These are the files you double-click or run. Nothing else belongs in this folder.
 
 <!-- scripts-allowlist -->
-- `Add WIMS to Desktop.bat` — Windows: put a WIMS icon on the Desktop and in the Start menu. Also adds Check logs.
-- `Add WIMS to Desktop.desktop` — Linux: double-click to put a WIMS icon on the desktop and in the app menu. Also adds Check logs.
-- `add-wims-to-desktop.sh` — What the Linux desktop file runs. Also adds Check logs.
-- `Check logs.bat` — Windows: see whether the logs on this PC agree.
-- `Check logs.sh` — See whether the logs on this PC agree. Opens the result in the browser.
+- `Add WIMS to Desktop.bat` — Windows: put a WIMS icon on the Desktop and in the Start menu.
+- `Install WS Hub.desktop` — Linux: double-click to install WS Hub. A download is copied to `~/.local/share/ws-hub` (a git clone stays put), then the WS Hub icon goes on the desktop and in the app menu.
+- `add-wims-to-desktop.sh` — What the Linux desktop file runs.
 - `assets/wims-128.png` — Icon, 128 px.
 - `assets/wims-48.png` — Icon, 48 px.
 - `assets/wims-64.png` — Icon, 64 px.
 - `assets/wims.png` — Icon used on the Linux desktop entry.
 - `_resolve-python.sh` — Finds Python for the other Linux start files.
 - `_say.sh` — Shows a plain message in a window when this PC has one.
-- `install-linux.sh` — Shell entry for a Linux install. Double-click Add WIMS to Desktop.desktop instead.
+- `install-linux.sh` — Shell entry for a Linux install (was `install.sh` at the top of the folder before 1.0.20). Double-click Install WS Hub.desktop instead.
 - `start-wims-inhibit-home.sh` — Linux/Mac: home inhibit (key line holds transmit).
-- `start-wims.sh` — Open the WIMS window. The desktop icon runs this. If that window is already open, this brings it forward.
-- `start-wims-solo.sh` — Linux/Mac: start Operate on this PC and open the browser. Same start the WIMS window uses.
-- `windows/Check-Logs.cmd` — See whether the logs on this PC agree.
+- `start-wims.sh` — Open the WS Hub window. The desktop icon runs this. If that window is already open, this brings it forward.
+- `start-wims-solo.sh` — Linux/Mac: start Operate on this PC and open the browser. Same start the WS Hub window uses.
 - `windows/Check-WimsSetup.cmd` — Read-only setup check. Starts nothing.
 - `windows/Find-And-Set-WsjtxRigName.cmd` — Point WSJT-X shortcuts at the right rig name.
 - `windows/Find-And-Set-WsjtxRigName.ps1` — Helper used by Find-And-Set-WsjtxRigName.cmd.
@@ -28,6 +25,7 @@ These are the files you double-click or run. Nothing else belongs in this folder
 - `windows/Install-WSJTX-RigNameShortcuts.ps1` — Helper used by Install-WSJTX-RigNameShortcuts.cmd.
 - `windows/Install-Wims.cmd` — First Windows install: Python, Git, firewall, desktop icon.
 - `windows/Install-Wims.ps1` — Helper used by Install-Wims.cmd.
+- `windows/install.ps1` — PowerShell install entry for scripted installs (was `install.ps1` at the top of the folder before 1.0.20). Double-click Install-Wims.cmd instead.
 - `windows/Install-WimsAgent-Desktop-Shortcut.cmd` — Lab-only agent icon. Not part of the normal install.
 - `windows/Install-WimsConsoleKiosk.ps1` — Desktop shortcut that opens Operate in a compact window.
 - `windows/Install-WimsDesktopShortcut.ps1` — Helper that writes the WIMS shortcut.

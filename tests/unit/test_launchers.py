@@ -88,7 +88,9 @@ class ScriptsAllowlistTests(unittest.TestCase):
         self.assertIn("wims.launcher", cmd.read_text(encoding="utf-8"))
         self.assertIn("Install-WIMS-Desktop-Shortcut.cmd", bat.read_text(encoding="utf-8"))
         shortcut = ps1.read_text(encoding="utf-8")
-        self.assertIn("WIMS.lnk", shortcut)
+        self.assertIn("WS Hub.lnk", shortcut)
+        # An older "WIMS" launcher icon is replaced, not left beside it.
+        self.assertIn('"WIMS.lnk"', shortcut)
         self.assertIn("Start Menu", shortcut)
 
 
@@ -112,7 +114,7 @@ class ZeroKnowledgeWordingTests(unittest.TestCase):
         proc = subprocess.run(
             [sys.executable, "-m", "wims.launcher", "--help"],
             cwd=ROOT,
-            env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
             capture_output=True,
             text=True,
             timeout=30,
@@ -126,31 +128,127 @@ class ZeroKnowledgeWordingTests(unittest.TestCase):
             problems.extend(_hits(label, text))
         self.assertEqual(problems, [])
 
-    def test_desktop_entry_is_named_wims(self):
+    def test_desktop_entry_is_named_ws_hub(self):
         from wims.launcher.app import linux_desktop_entry_text
 
         text = linux_desktop_entry_text()
-        self.assertIn("Name=WIMS\n", text)
+        self.assertIn("Name=WS Hub\n", text)
         self.assertIn("Icon=", text)
         self.assertIn("scripts/start-wims.sh", text.replace("\\", "/"))
         self.assertIn("/bin/bash", text)
+        self.assertIn("StartupWMClass=ws-hub\n", text)
         self.assertNotIn("PYTHONPATH", text)
         self.assertNotIn("-m ", text)
 
-    def test_check_logs_launcher_is_obvious(self):
-        script = ROOT / "scripts" / "Check logs.sh"
-        self.assertTrue(script.is_file())
-        self.assertTrue(os.access(script, os.X_OK), "Check logs.sh is not executable")
-        self.assertIn("wims.logaudit.page", script.read_text(encoding="utf-8"))
-        from wims.launcher.app import linux_check_logs_desktop_entry_text
+    def test_check_logs_is_in_the_app_not_a_desktop_icon(self):
+        self.assertFalse((ROOT / "scripts" / "Check logs.sh").exists())
+        self.assertFalse((ROOT / "scripts" / "Check logs.bat").exists())
+        self.assertFalse((ROOT / "scripts" / "windows" / "Check-Logs.cmd").exists())
+        from wims.launcher import app as launcher_app
+        from wims.launcher.home_panel import AgentHomePanel
 
-        text = linux_check_logs_desktop_entry_text()
-        self.assertIn("Name=Check logs\n", text)
-        self.assertNotIn("python", text.lower())
+        self.assertFalse(hasattr(launcher_app, "linux_check_logs_desktop_entry_text"))
+        src = (ROOT / "src" / "wims" / "launcher" / "home_panel.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('text="Check logs"', src)
+        self.assertIn("on_check_logs", src)
         shortcut = (ROOT / "scripts" / "windows" / "Install-WimsDesktopShortcut.ps1").read_text(
             encoding="utf-8"
         )
         self.assertIn("Check logs.lnk", shortcut)
+        self.assertIn("Test-OurCheckLogs", shortcut)
+        self.assertNotIn(
+            'CreateShortcut($checkLnk)',
+            shortcut,
+        )
+        self.assertIn("Removed the Check logs icon", shortcut)
+        # The constructor still accepts the existing callers; the new
+        # callback is optional.
+        self.assertIn("on_check_logs", AgentHomePanel.__init__.__code__.co_varnames)
+
+    def test_start_local_log_check_runs_the_existing_page(self):
+        from wims.launcher.app import start_local_log_check
+
+        with mock.patch("subprocess.Popen") as popen:
+            popen.return_value = mock.Mock()
+            start_local_log_check()
+        args, kwargs = popen.call_args
+        cmd = args[0]
+        self.assertEqual(cmd[-2:], ["-m", "wims.logaudit.page"])
+        self.assertTrue(kwargs.get("start_new_session") or "creationflags" in kwargs)
+        self.assertNotIn("WIMS_CAPTURED_LOG", kwargs["env"])
+
+    def test_remove_check_logs_shortcuts_deletes_ours_only(self):
+        from wims.launcher import app as launcher_app
+
+        if sys.platform.startswith("win"):
+            self.skipTest("Linux desktop entries")
+        ours = (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Check logs\n"
+            "Exec=/bin/bash /home/me/.local/share/ws-hub/scripts/Check logs.sh\n"
+            "Path=/home/me/.local/share/ws-hub\n"
+        )
+        foreign = (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Check logs\n"
+            "Exec=/usr/bin/some-other-log-tool\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            desk = home / "Desktop"
+            menu = home / ".local" / "share" / "applications"
+            desk.mkdir(parents=True)
+            menu.mkdir(parents=True)
+            ours_desk = desk / "Check logs.desktop"
+            ours_menu = menu / "Check logs.desktop"
+            other = desk / "Other logs.desktop"
+            ours_desk.write_text(ours, encoding="utf-8")
+            ours_menu.write_text(ours, encoding="utf-8")
+            # A differently named file is left even when the Exec looks like ours.
+            other.write_text(ours, encoding="utf-8")
+            with mock.patch.object(Path, "home", return_value=home), mock.patch(
+                "wims.launcher.app._refresh_applications_menu"
+            ):
+                removed = launcher_app.remove_check_logs_shortcuts()
+            self.assertFalse(ours_desk.exists())
+            self.assertFalse(ours_menu.exists())
+            self.assertTrue(other.exists())
+            self.assertEqual(sorted(p.name for p in removed), [
+                "Check logs.desktop",
+                "Check logs.desktop",
+            ])
+            # Foreign Check logs.desktop is left alone.
+            ours_desk.write_text(foreign, encoding="utf-8")
+            with mock.patch.object(Path, "home", return_value=home), mock.patch(
+                "wims.launcher.app._refresh_applications_menu"
+            ):
+                removed = launcher_app.remove_check_logs_shortcuts()
+            self.assertEqual(removed, [])
+            self.assertEqual(ours_desk.read_text(encoding="utf-8"), foreign)
+
+    def test_windows_check_logs_lnk_bytes_are_recognized(self):
+        from wims.launcher.app import (
+            check_logs_desktop_entry_is_ours,
+            windows_check_logs_shortcut_is_ours,
+        )
+
+        self.assertTrue(
+            check_logs_desktop_entry_is_ours(
+                "Exec=/bin/bash /opt/ws-hub/scripts/Check logs.sh\n"
+            )
+        )
+        self.assertFalse(
+            check_logs_desktop_entry_is_ours("Exec=/usr/bin/other-tool\n")
+        )
+        ours = "C:\\WIMS\\scripts\\windows\\Check-Logs.cmd".encode("utf-16-le")
+        self.assertTrue(windows_check_logs_shortcut_is_ours(ours))
+        self.assertFalse(
+            windows_check_logs_shortcut_is_ours("C:\\Tools\\other.cmd".encode("utf-16-le"))
+        )
 
     def test_second_click_raises_the_window_and_stays_quiet(self):
         from wims.launcher.app import announce_already_running
@@ -223,17 +321,19 @@ class ZeroKnowledgeWordingTests(unittest.TestCase):
 
 
 class SoloLauncherPathTests(unittest.TestCase):
-    def test_solo_starts_without_pythonpath(self):
-        """The checkout shim serves /healthz and the Goal menu."""
+    def test_solo_starts_from_checkout(self):
+        """scripts/start-wims-solo.sh, with no PYTHONPATH, serves /healthz and the Goal menu."""
         port = 18787
         env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        # The script runs the first python3 on PATH; make that this interpreter.
+        env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
         env.pop("WIMS_CONTEST_RULES", None)
         env.pop("WIMS_LOGS", None)
         with tempfile.TemporaryDirectory() as td:
             env["XDG_CONFIG_HOME"] = td
             proc = subprocess.Popen(
                 [
-                    sys.executable, "-m", "wims.solo",
+                    "bash", str(ROOT / "scripts" / "start-wims-solo.sh"),
                     "--no-open", "--no-check", "--no-seed",
                     "--http-port", str(port),
                     "--iface", "127.0.0.1",

@@ -192,6 +192,48 @@ class RoleCatalogTests(unittest.TestCase):
         self.assertTrue(path.is_file())
         self.assertEqual(path.name, "wims.png")
 
+    def test_linux_shortcut_named_ws_hub_replaces_old_wims_icon(self):
+        from wims.launcher import app
+        if sys.platform.startswith("win"):
+            self.skipTest("Linux desktop entries")
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            desk = home / "Desktop"
+            menu = home / ".local" / "share" / "applications"
+            desk.mkdir(parents=True)
+            menu.mkdir(parents=True)
+            for folder in (desk, menu):
+                (folder / "WIMS.desktop").write_text(
+                    "[Desktop Entry]\nName=WIMS\nExec=/bin/bash /x/scripts/start-wims.sh\n",
+                    encoding="utf-8",
+                )
+            other = desk / "Other.desktop"
+            other.write_text("[Desktop Entry]\nName=Other\n", encoding="utf-8")
+            with mock.patch.object(Path, "home", return_value=home), mock.patch(
+                "wims.launcher.app.mark_linux_launcher_trusted"
+            ), mock.patch("wims.launcher.app._refresh_applications_menu"):
+                path = app.migrate_legacy_shortcut()
+                self.assertEqual(path, desk / "WS Hub.desktop")
+                # A second launch with the new icon present changes nothing.
+                self.assertIsNone(app.migrate_legacy_shortcut())
+            for folder in (desk, menu):
+                self.assertFalse((folder / "WIMS.desktop").exists())
+                text = (folder / "WS Hub.desktop").read_text(encoding="utf-8")
+                self.assertIn("Name=WS Hub\n", text)
+                self.assertIn("StartupWMClass=ws-hub\n", text)
+            self.assertTrue(other.is_file())
+
+    def test_no_desktop_icon_means_no_migration(self):
+        from wims.launcher import app
+        if sys.platform.startswith("win"):
+            self.skipTest("Linux desktop entries")
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            (home / "Desktop").mkdir()
+            with mock.patch.object(Path, "home", return_value=home):
+                self.assertIsNone(app.migrate_legacy_shortcut())
+            self.assertEqual(list((home / "Desktop").iterdir()), [])
+
     def test_probe_site_urls_falls_back_to_localhost(self):
         from wims.launcher.app import probe_site_urls
         with mock.patch("wims.launcher.app.site_reachable") as sr:
@@ -280,14 +322,29 @@ class BrowserOpenTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             profile = Path(td) / "kiosk-profile"
-            with mock.patch.dict(os.environ, {"WIMS_BROWSER": ff}, clear=False):
+            lock = Path(td) / "console.lock"
+            proc = mock.Mock()
+            proc.poll.return_value = None
+            proc.pid = 4242
+            with mock.patch.dict(
+                os.environ,
+                {"WIMS_BROWSER": ff, "WIMS_CONSOLE_LOCK": str(lock)},
+                clear=False,
+            ):
                 with mock.patch(
                     "wims.console.place.local_console_is_open", return_value=False,
                 ):
-                    with mock.patch("wims.launcher.app._kiosk_profile_dir", return_value=profile):
-                        with mock.patch("wims.launcher.app._which_browser", side_effect=fake_which):
-                            with mock.patch("wims.launcher.app.subprocess.Popen") as popen:
-                                mode = open_wims_url("http://127.0.0.1:8787/")
+                    with mock.patch(
+                        "wims.console.kiosk.firefox_kiosk_profile_dir",
+                        return_value=profile,
+                    ):
+                        with mock.patch(
+                            "wims.console.kiosk.console_process_stayed_up",
+                            return_value=True,
+                        ):
+                            with mock.patch("wims.launcher.app._which_browser", side_effect=fake_which):
+                                with mock.patch("wims.launcher.app.subprocess.Popen", return_value=proc) as popen:
+                                    mode = open_wims_url("http://127.0.0.1:8787/")
             self.assertEqual(mode, "kiosk")
             args = popen.call_args[0][0]
             self.assertEqual(args[0], ff)
@@ -324,7 +381,12 @@ class BrowserOpenTests(unittest.TestCase):
         geom = {"x": 12, "y": 34, "width": 800, "height": 600}
         with tempfile.TemporaryDirectory() as td:
             profile = Path(td) / "console-browser"
-            with mock.patch.dict(os.environ, {"WIMS_BROWSER": ""}, clear=False):
+            lock = Path(td) / "console.lock"
+            with mock.patch.dict(
+                os.environ,
+                {"WIMS_BROWSER": "", "WIMS_CONSOLE_LOCK": str(lock)},
+                clear=False,
+            ):
                 with mock.patch(
                     "wims.console.place.local_console_is_open", return_value=False,
                 ), mock.patch(
@@ -338,8 +400,13 @@ class BrowserOpenTests(unittest.TestCase):
                 ), mock.patch(
                     "wims.console.place.console_profile_dir", return_value=profile,
                 ), mock.patch(
+                    "wims.console.kiosk.console_process_stayed_up",
+                    return_value=True,
+                ), mock.patch(
                     "wims.launcher.app.subprocess.Popen",
                 ) as popen:
+                    popen.return_value.poll.return_value = None
+                    popen.return_value.pid = 4242
                     mode = open_wims_url("http://127.0.0.1:8787/")
         self.assertEqual(mode, "app")
         args = popen.call_args[0][0]
@@ -350,6 +417,72 @@ class BrowserOpenTests(unittest.TestCase):
         self.assertIn("--window-position=12,34", args)
         popen.assert_called_once()
         self.assertEqual(popen.call_args.kwargs.get("stdout"), subprocess.DEVNULL)
+
+    def test_resolve_site_url_defaults_to_localhost(self):
+        from wims.launcher.app import resolve_site_url
+        with tempfile.TemporaryDirectory() as td:
+            pref = Path(td) / "last_site.json"
+            with mock.patch.dict(os.environ, {"WIMS_LAST_SITE": str(pref)}, clear=False):
+                os.environ.pop("WIMS_SERVER", None)
+                self.assertEqual(resolve_site_url(), "http://127.0.0.1:8787")
+
+    def test_quick_firefox_exit_falls_back_to_default_browser(self):
+        from wims.launcher.app import open_wims_url
+
+        ff = "/snap/bin/firefox"
+        with tempfile.TemporaryDirectory() as td:
+            profile = Path(td) / "ws-hub-console-profile"
+            lock = Path(td) / "console.lock"
+            dead = mock.Mock()
+            dead.poll.return_value = 1
+            dead.pid = 99
+            with mock.patch.dict(
+                os.environ,
+                {"WIMS_BROWSER": ff, "WIMS_CONSOLE_LOCK": str(lock)},
+                clear=False,
+            ), mock.patch(
+                "wims.console.place.local_console_is_open", return_value=False,
+            ), mock.patch(
+                "wims.console.kiosk.firefox_kiosk_profile_dir", return_value=profile,
+            ), mock.patch(
+                "wims.console.kiosk.console_process_stayed_up", return_value=False,
+            ), mock.patch(
+                "wims.launcher.app._which_browser", return_value=ff,
+            ), mock.patch(
+                "wims.launcher.app._chromium_executable", return_value=None,
+            ), mock.patch(
+                "wims.launcher.app.shutil.which", return_value="/usr/bin/xdg-open",
+            ), mock.patch(
+                "wims.launcher.app.subprocess.Popen",
+            ) as popen:
+                popen.return_value = dead
+                mode = open_wims_url("http://127.0.0.1:8787/")
+        self.assertEqual(mode, "browser-fallback")
+        commands = [call[0][0] for call in popen.call_args_list]
+        self.assertTrue(any(cmd and cmd[0] == ff for cmd in commands))
+        self.assertTrue(
+            any(cmd and cmd[0] == "/usr/bin/xdg-open" for cmd in commands),
+        )
+
+    def test_second_launch_reuses_a_live_console_pid(self):
+        from wims.console.kiosk import live_console_pid, remember_console_pid
+        from wims.launcher.app import open_wims_url
+
+        with tempfile.TemporaryDirectory() as td:
+            lock = Path(td) / "console.lock"
+            with mock.patch.dict(
+                os.environ, {"WIMS_CONSOLE_LOCK": str(lock)}, clear=False,
+            ):
+                remember_console_pid(os.getpid())
+                self.assertEqual(live_console_pid(), os.getpid())
+                with mock.patch(
+                    "wims.console.place.local_console_is_open", return_value=False,
+                ), mock.patch(
+                    "wims.launcher.app.subprocess.Popen",
+                ) as popen:
+                    mode = open_wims_url("http://127.0.0.1:8787/")
+                self.assertEqual(mode, "reuse")
+                popen.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -51,8 +51,7 @@
     <span class="meta" id="tx-meta"></span>
   </div>
 
-  <h2>Call roster</h2>
-  <p id="ros-rules" class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0"></p>
+  <h2 id="ros-heading">Call roster</h2>
   <div id="ros-controls" class="controls">
     <span class="band-label">show</span>
     <span class="ros-need" id="ros-needed-wrap">
@@ -89,6 +88,18 @@
   </table>
   <div id="ros-empty" class="empty">no decodes yet…</div>
 
+  <h2>Spotted</h2>
+  <p id="spot-status" class="hint" title="DX cluster spots. A click selects the station. It does not transmit and it does not retune a radio. Work still needs a live decode.">Cluster: off. Turn it on in Setup.</p>
+  <div id="spot-controls" class="controls">
+    <span class="band-label">modes</span>
+    <span id="spot-modes" class="band-checks" title="Show spots by inferred mode. Other is MSK144, Q65, FM, data, and unknown modes."></span>
+  </div>
+  <table id="spot" hidden>
+    <thead><tr id="spot-head"></tr></thead>
+    <tbody id="spot-body"></tbody>
+  </table>
+  <p id="spot-note" class="hint"></p>
+
   <!--
     TX groups is display-only. Hidden while every group has one instance and
     nothing is blocked, overlapping, or refused. The summary title is the
@@ -110,17 +121,16 @@
     </details>
   </section>
 
-  <div id="rot-section" style="display:none">
-    <h2>Rotators</h2>
-    <p class="hint">Live headings reported to WIMS. Stop cancels a slew.</p>
-    <table id="rot" class="tight">
+  <div id="ant-section" style="display:none">
+    <h2>Antennas</h2>
+    <p class="hint">Rotator heading from this seat. Stale means the heading is unknown.</p>
+    <table id="ant" class="tight">
       <thead><tr>
-        <th>Rotator</th><th class="num">Az</th><th class="num">Target</th>
-        <th>Motion</th><th>Health</th><th>Instances</th><th></th>
+        <th>Antenna</th><th>Device</th><th class="num">Heading</th><th>State</th>
       </tr></thead>
-      <tbody id="rot-body"></tbody>
+      <tbody id="ant-body"></tbody>
     </table>
-    <div id="rot-empty" class="empty" style="display:none"></div>
+    <div id="ant-empty" class="empty" style="display:none"></div>
   </div>
 </main>
 <script src="/wims.js"></script>

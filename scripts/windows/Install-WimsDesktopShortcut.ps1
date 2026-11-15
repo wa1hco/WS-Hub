@@ -1,4 +1,5 @@
-# WIMS — create/refresh Desktop "WIMS" shortcut with a sticky custom icon.
+# WS Hub — create/refresh Desktop "WS Hub" shortcut with a sticky custom icon.
+# Older installs named it "WIMS"; this replaces that one.
 # Targets wscript.exe + Start-WimsLauncher.vbs so Explorer does not replace
 # our icon with the default .cmd glyph after clone / Update / VM restore.
 param(
@@ -35,7 +36,7 @@ if (-not $desk -or -not (Test-Path -LiteralPath $desk)) {
 if (-not (Test-Path -LiteralPath $desk)) {
     $desk = Join-Path $env:USERPROFILE "OneDrive\Desktop"
 }
-$lnkPath = Join-Path $desk "WIMS.lnk"
+$lnkPath = Join-Path $desk "WS Hub.lnk"
 $icoAbs = (Resolve-Path -LiteralPath $ico).Path
 $vbsAbs = (Resolve-Path -LiteralPath $vbs).Path
 
@@ -45,7 +46,7 @@ $s.TargetPath = $wscript
 $s.Arguments = "//nologo `"$vbsAbs`""
 $s.WorkingDirectory = $here
 $s.WindowStyle = 1
-$s.Description = "WIMS launcher - agents + site console"
+$s.Description = "WS Hub launcher - agents + site console"
 $s.IconLocation = "$icoAbs,0"
 $s.Save()
 
@@ -56,52 +57,46 @@ $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
 if (-not (Test-Path -LiteralPath $startMenu)) {
     New-Item -ItemType Directory -Path $startMenu -Force | Out-Null
 }
-$startLnk = Join-Path $startMenu "WIMS.lnk"
+$startLnk = Join-Path $startMenu "WS Hub.lnk"
 $wsh2 = New-Object -ComObject WScript.Shell
 $sm = $wsh2.CreateShortcut($startLnk)
 $sm.TargetPath = $wscript
 $sm.Arguments = "//nologo `"$vbsAbs`""
 $sm.WorkingDirectory = $here
 $sm.WindowStyle = 1
-$sm.Description = "WIMS launcher - agents + site console"
+$sm.Description = "WS Hub launcher - agents + site console"
 $sm.IconLocation = "$icoAbs,0"
 $sm.Save()
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh2) | Out-Null
 
 Write-Host ""
-Write-Host " Desktop shortcut ready: WIMS"
+Write-Host " Desktop shortcut ready: WS Hub"
 Write-Host "  $lnkPath"
 Write-Host " Start menu: $startLnk"
 Write-Host "  Icon: $icoAbs"
-Write-Host " Double-click WIMS. The console opens in your browser when you start it."
+Write-Host " Double-click WS Hub. The console opens in your browser when you start it."
 Write-Host ""
 
-$checkCmd = Join-Path $here "Check-Logs.cmd"
-if (Test-Path -LiteralPath $checkCmd) {
-    $checkAbs = (Resolve-Path -LiteralPath $checkCmd).Path
-    $checkLnk = Join-Path $desk "Check logs.lnk"
-    $wsh3 = New-Object -ComObject WScript.Shell
-    $ck = $wsh3.CreateShortcut($checkLnk)
-    $ck.TargetPath = $checkAbs
-    $ck.WorkingDirectory = $here
-    $ck.WindowStyle = 1
-    $ck.Description = "See whether your logs agree"
-    $ck.IconLocation = "$icoAbs,0"
-    $ck.Save()
-    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh3) | Out-Null
-    $checkStart = Join-Path $startMenu "Check logs.lnk"
-    $wsh4 = New-Object -ComObject WScript.Shell
-    $csm = $wsh4.CreateShortcut($checkStart)
-    $csm.TargetPath = $checkAbs
-    $csm.WorkingDirectory = $here
-    $csm.WindowStyle = 1
-    $csm.Description = "See whether your logs agree"
-    $csm.IconLocation = "$icoAbs,0"
-    $csm.Save()
-    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh4) | Out-Null
-    Write-Host " Desktop shortcut ready: Check logs"
-    Write-Host "  $checkLnk"
-    Write-Host ""
+# Check logs now lives only in the WS Hub window. Remove leftover icons
+# that start this program's checker, and leave any other Check logs.lnk alone.
+function Test-OurCheckLogs([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    try {
+        $w = New-Object -ComObject WScript.Shell
+        $old = $w.CreateShortcut($Path)
+        $text = "$($old.TargetPath) $($old.Arguments)"
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($w) | Out-Null
+        return ($text -match 'Check-Logs\.cmd|Check logs\.bat|wims\.logaudit')
+    } catch {
+        return $false
+    }
+}
+foreach ($folder in @($desk, $startMenu)) {
+    $staleCheck = Join-Path $folder "Check logs.lnk"
+    if (Test-OurCheckLogs $staleCheck) {
+        Remove-Item -LiteralPath $staleCheck -Force
+        Write-Host " Removed the Check logs icon (now in WS Hub): $staleCheck"
+    }
 }
 
 # Install / refresh never creates WIMS Server or WIMS Agent icons.
@@ -110,6 +105,27 @@ foreach ($staleName in @("WIMS Server.lnk", "WIMS Agent.lnk")) {
     if (Test-Path -LiteralPath $stale) {
         Remove-Item -LiteralPath $stale -Force
         Write-Host " Removed leftover $staleName (launcher only)."
+    }
+}
+
+# The old "WIMS" launcher icon is now "WS Hub". Remove it only when it starts
+# this program, so a WIMS.lnk for anything else is left alone.
+function Test-OurOldLauncher([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    try {
+        $w = New-Object -ComObject WScript.Shell
+        $old = $w.CreateShortcut($Path)
+        $text = "$($old.TargetPath) $($old.Arguments)"
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($w) | Out-Null
+        return ($text -match 'Start-WimsLauncher|wims\.launcher|WIMS\.cmd')
+    } catch {
+        return $false
+    }
+}
+foreach ($stale in @((Join-Path $desk "WIMS.lnk"), (Join-Path $startMenu "WIMS.lnk"))) {
+    if (Test-OurOldLauncher $stale) {
+        Remove-Item -LiteralPath $stale -Force
+        Write-Host " Removed the old WIMS icon (now WS Hub): $stale"
     }
 }
 

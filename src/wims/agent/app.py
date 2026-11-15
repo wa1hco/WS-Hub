@@ -27,8 +27,8 @@ links — zero-memory operator path) when ``--server`` / WIMS_SERVER is unset.
 
 Run:
   python -m wims.agent
-  python -m wims.agent --server http://192.168.1.119:8787
-  python -m wims.agent --daemon --server http://192.168.1.119:8787
+  python -m wims.agent --server http://192.168.x.y:8787
+  python -m wims.agent --daemon --server http://192.168.x.y:8787
   python -m wims.agent --lab
 """
 
@@ -50,6 +50,7 @@ if __package__ in (None, ""):
 
 from wims.agent.export import export_report  # noqa: E402
 from wims.agent.report import build_report, format_report_text, format_wsjtx_html_table  # noqa: E402
+from wims.launcher.site_choice import adopt_discovered_server_url, same_site_host  # noqa: E402
 
 # Presence is optional at import time so a half-updated tree still runs the scan.
 try:
@@ -74,6 +75,9 @@ class AgentState:
         self.seat_id: str | None = None
         self.presence_iface: str = "0.0.0.0"
         self.update_info: dict | None = None  # gentle mid-contest update nudge
+        self.auto_export = False
+        self.rotator_poller = None
+        self._rot_intent_was_on = False
 
     def set_update_info(self, info: dict | None) -> None:
         with self._lock:
@@ -90,9 +94,41 @@ class AgentState:
             fleet=self.fleet,
             solo=self.solo,
         )
+        poller = self.rotator_poller
         with self._lock:
+            if poller is not None:
+                rows = poller.snapshot_for_report()
+                if rows is not None:
+                    r["antennas"] = rows
+                    self._rot_intent_was_on = True
             self.report = r
         return r
+
+    def publish_antenna_cycle(self, rows: list, intent_on: bool) -> None:
+        """Fold an antenna poll into the last report and POST it.
+
+        The config scan stays on its own interval. Rotator headings go out
+        with that same report about once a second while Antennas is checked,
+        so a dropped rotctld shows as heading unknown within a few seconds.
+        """
+        with self._lock:
+            rep = self.report
+            if rep is None:
+                return
+            if not intent_on and not self._rot_intent_was_on:
+                return
+            rep = dict(rep)
+            rep["antennas"] = list(rows) if intent_on else []
+            rep["ts"] = time.time()
+            self.report = rep
+            self._rot_intent_was_on = bool(intent_on)
+            server = self.server_url
+            do_export = bool(self.auto_export)
+        if do_export and server:
+            try:
+                self.set_export(export_report(rep, server))
+            except Exception as e:
+                self.set_export({"ok": False, "error": f"rotator export: {e}"})
 
     def get_report(self) -> dict | None:
         with self._lock:
@@ -111,9 +147,18 @@ class AgentState:
             self.presence = beacon
             if beacon:
                 base = (beacon.get("console_base") or "").rstrip("/")
-                # Prefer discovered URL when operator did not pin --server.
-                if base and not self.configured_server:
-                    self.server_url = base
+                export = self.export_result or {}
+                current_reachable = not (
+                    bool(self.server_url) and export.get("ok") is False
+                )
+                new = adopt_discovered_server_url(
+                    self.server_url,
+                    base,
+                    configured=self.configured_server,
+                    current_reachable=current_reachable,
+                )
+                if new:
+                    self.server_url = new
 
     def get_presence(self) -> dict | None:
         with self._lock:
@@ -139,47 +184,13 @@ class AgentState:
         return b
 
 
-def _url_host(url: str) -> str:
-    """Hostname/IP from a console base URL (lowercased, no brackets)."""
-    try:
-        from urllib.parse import urlparse
-        host = (urlparse(url).hostname or "").strip().lower()
-        return host[1:-1] if host.startswith("[") and host.endswith("]") else host
-    except Exception:
-        return ""
-
-
 def _same_site_host(configured: str, discovered: str) -> bool:
     """True when configured and discovered URLs are the same site.
 
-    ``http://127.0.0.1:8787`` vs ``http://192.168.1.181:8787`` on this PC is
-    normal (launcher often pins localhost; presence advertises the LAN IP) —
-    not an operator fault and not worth a yellow banner.
+    http://127.0.0.1:8787 vs this PC's LAN address is normal (the launcher
+    often pins localhost; presence advertises the LAN IP).
     """
-    a = (configured or "").rstrip("/")
-    b = (discovered or "").rstrip("/")
-    if not a or not b:
-        return True
-    if a == b:
-        return True
-    ha, hb = _url_host(a), _url_host(b)
-    if not ha or not hb:
-        return False
-    if ha == hb:
-        return True
-    loopback = {"127.0.0.1", "localhost", "::1"}
-    local_ips = set()
-    try:
-        from wims.agent.report import _lan_ips
-        local_ips = {ip.strip().lower() for ip in (_lan_ips() or []) if ip}
-    except Exception:
-        pass
-    # Either side is loopback and the other is this machine's LAN address.
-    if ha in loopback and (hb in loopback or hb in local_ips):
-        return True
-    if hb in loopback and (ha in loopback or ha in local_ips):
-        return True
-    return False
+    return same_site_host(configured, discovered)
 
 
 def _presence_block_html(state: AgentState) -> str:
@@ -337,14 +348,13 @@ def _page_html(state: AgentState) -> bytes:
     if upd and upd.get("available"):
         update_html = (
             '<div class="panel" style="border-color:#d4a72c;background:#fff8c5">'
-            "<b>WIMS update available</b> "
+            "<b>WS Hub update available</b> "
             f"{html.escape(str(upd.get('local_short') or ''))} → "
             f"{html.escape(str(upd.get('remote_short') or ''))}"
             f"{(' — ' + html.escape(str(upd.get('subject') or ''))) if upd.get('subject') else ''}"
-            "<div class=\"meta\">When convenient: Desktop <b>Update WIMS</b> "
-            "(Windows) or launcher <b>Update WIMS</b> / "
-            "<code>git pull --ff-only origin main</code> (Linux). "
-            "Does not auto-install.</div></div>"
+            "<div class=\"meta\">When convenient, use the update button "
+            "in the WS Hub window. Nothing is installed until you choose it."
+            "</div></div>"
         )
     elif upd and upd.get("checked"):
         detail = html.escape(str(upd.get("detail") or "up to date"))
@@ -602,16 +612,16 @@ def _maybe_nudge_update(state: AgentState, *, force: bool = False) -> None:
         })
         print(
             f"update available: {info.local_label} -> {info.remote_label} "
-            f"(run Update WIMS when convenient)",
+            f"(use the update button in the WS Hub window when convenient)",
             flush=True,
         )
         # Toast once per SHA (force click still refreshes the page banner).
         if not already_nagged(info.remote_sha):
             subj = info.remote_subject or "bugfix on main"
             if notify_no_focus(
-                "WIMS update available",
+                "WS Hub update available",
                 f"{info.local_label} -> {info.remote_label}: {subj}. "
-                "Run Update WIMS when convenient.",
+                "When convenient, use the update button in the WS Hub window.",
             ):
                 mark_nagged(info.remote_sha)
     else:
@@ -647,7 +657,7 @@ def main(argv: list[str] | None = None) -> int:
         help="stay running: local UI on --local-port + periodic rescan/export (startup script)",
     )
     ap.add_argument("--server", default=os_env_server(),
-                    help="site server base URL (e.g. http://192.168.1.119:8787); "
+                    help="site server base URL (e.g. http://192.168.x.y:8787); "
                          "also WIMS_SERVER env. If omitted, discover via presence multicast.")
     ap.add_argument("--export", action="store_true",
                     help="one-shot: POST report when --server is set (also implied if --server given); "
@@ -735,40 +745,52 @@ def main(argv: list[str] | None = None) -> int:
 
     if not run_daemon:
         # One-shot: full discover + report, then exit.
-        _discover_and_print(http_fallback=True)
-        rep = state.refresh()
-        print(format_report_text(rep), flush=True)
-        print(flush=True)
-        export_rc = 0
-        if state.server_url and not args.no_export:
-            result = export_report(rep, state.server_url)
-            state.set_export(result)
-            if result.get("ok"):
-                print(f"Exported OK -> {result.get('url')}")
-            else:
-                print(f"Export failed: {result}", file=sys.stderr)
-                export_rc = 2
-        elif not state.server_url:
-            print("(no site server URL — local check only, not sent to dashboard)")
-        errors = int((rep.get("wsjtx") or {}).get("error_count", 0) or 0)
-        if errors:
-            print(
-                f"\nRESULT: {errors} WSJT-X config ERROR(s) — fix the !! lines above.\n"
-                f"(exit code 1 is intentional for scripts; the agent itself ran fine.)",
-                file=sys.stderr,
-            )
+        # One position read when this seat's Rotators box is checked.
+        from wims.integrations.rotator.rotctld import AntennaPoller
+        poller = AntennaPoller()
+        try:
+            if poller.intent_enabled():
+                try:
+                    poller.poll_once()
+                except Exception as e:
+                    print(f"(rotator poll: {e})", file=sys.stderr)
+                state.rotator_poller = poller
+            _discover_and_print(http_fallback=True)
+            rep = state.refresh()
+            print(format_report_text(rep), flush=True)
+            print(flush=True)
+            export_rc = 0
+            if state.server_url and not args.no_export:
+                result = export_report(rep, state.server_url)
+                state.set_export(result)
+                if result.get("ok"):
+                    print(f"Exported OK -> {result.get('url')}")
+                else:
+                    print(f"Export failed: {result}", file=sys.stderr)
+                    export_rc = 2
+            elif not state.server_url:
+                print("(no site server URL — local check only, not sent to dashboard)")
+            errors = int((rep.get("wsjtx") or {}).get("error_count", 0) or 0)
+            if errors:
+                print(
+                    f"\nRESULT: {errors} WSJT-X config ERROR(s) — fix the !! lines above.\n"
+                    f"(exit code 1 is intentional for scripts; the agent itself ran fine.)",
+                    file=sys.stderr,
+                )
+                _print_next_steps(state)
+                return 1
+            if export_rc:
+                print(
+                    "\nRESULT: export to site server failed (agent scan OK).",
+                    file=sys.stderr,
+                )
+                _print_next_steps(state)
+                return export_rc
+            print("\nRESULT: OK (no WSJT-X config errors)")
             _print_next_steps(state)
-            return 1
-        if export_rc:
-            print(
-                "\nRESULT: export to site server failed (agent scan OK).",
-                file=sys.stderr,
-            )
-            _print_next_steps(state)
-            return export_rc
-        print("\nRESULT: OK (no WSJT-X config errors)")
-        _print_next_steps(state)
-        return 0
+            return 0
+        finally:
+            poller.close()
 
     # Singleton: refuse a second seat agent even if started outside the launcher
     # (Desktop Start-WimsAgent-Continuous.cmd, second window, etc.).
@@ -808,6 +830,11 @@ def main(argv: list[str] | None = None) -> int:
     auto_export = bool(state.server_url) and not args.no_export
     if args.export:
         auto_export = bool(state.server_url) or not args.no_export
+    from wims.integrations.rotator.rotctld import AntennaPoller
+    poller = AntennaPoller()
+    state.rotator_poller = poller
+    state.auto_export = bool(auto_export)
+    poller.start(on_cycle=state.publish_antenna_cycle)
 
     def _bootstrap() -> None:
         try:
@@ -832,6 +859,8 @@ def main(argv: list[str] | None = None) -> int:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped", flush=True)
+    finally:
+        poller.close()
     return 0
 
 def os_env_server() -> str | None:

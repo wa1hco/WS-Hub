@@ -64,14 +64,14 @@ copy_tree() {
     mkdir -p "$dest_root"
 
     # Top-level identity files
-    for f in LICENSE pyproject.toml README.md INSTALL.md install.sh install.ps1; do
+    for f in LICENSE pyproject.toml README.md INSTALL.md; do
         if [ -e "$ROOT/$f" ]; then
             cp -a "$ROOT/$f" "$dest_root/"
         fi
     done
 
     # Directories (allow-list)
-    for d in src scripts docs config; do
+    for d in src scripts docs; do
         if [ -d "$ROOT/$d" ]; then
             rsync -a \
                 --exclude '__pycache__/' \
@@ -97,11 +97,11 @@ Windows (contest seat):
   1. Extract this folder to C:\\WIMS
   2. If Windows blocks scripts (unsigned / downloaded zip):
        - Prefer Install-Wims.cmd (not bare .ps1)
-       - SmartScreen: More info -> Run anyway (if you trust wa1hco/WIMS)
+       - SmartScreen: More info -> Run anyway (if you trust wa1hco/WS-Hub)
        - Properties -> Unblock on the zip or .cmd/.ps1 files
-       - Or: powershell -NoProfile -ExecutionPolicy Bypass -File .\\install.ps1
+       - Or: powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\windows\\install.ps1
   3. Double-click scripts\\windows\\Install-Wims.cmd (allow UAC)
-  4. Start Desktop "WIMS"
+  4. Start Desktop "WS Hub"
 
   Bundled private Python runtime (offline) ships in a later release
   build. Until then Install uses/finds system Python >= 3.10.
@@ -109,15 +109,18 @@ Windows (contest seat):
   Full unblock notes: README.md (Windows section) and INSTALL.md.
 
 Linux (personal laptop):
-  1. Unpack this tar.gz (it keeps the permission to run the installer)
-  2. Open the WIMS folder, open scripts, and double-click
-     "Add WIMS to Desktop"
+  1. Unpack this tar.gz anywhere, Downloads is fine (it keeps the
+     permission to run the installer)
+  2. Open the unpacked folder, open scripts, and double-click
+     "Install WS Hub". It copies WS Hub to ~/.local/share/ws-hub and
+     puts the icon on the desktop and in the app menu.
      GNOME: if a message says the file is not trusted, right-click it
        and click Allow Launching, then double-click it again
      KDE, XFCE, or Cinnamon: if a window asks, click Execute or Run
      If it opens as a page of text, right-click it, choose Properties,
        allow it to run as a program, and double-click it again
-  3. Double-click the WIMS icon
+  3. Delete the downloaded folder and the tar.gz; they are not needed
+  4. Double-click the WS Hub icon
 
 Docs: INSTALL.md · docs/tester_quickstart.md
 Design: docs/plan/wims_release_packages.md
@@ -127,6 +130,27 @@ This package omits hardware/ (Keyline flash/KiCad). KEY *software*
 EOF
 
     cp "$STAGE/manifest.json" "$dest_root/manifest.json"
+
+    # Release trees have no .git. A BUILD_STAMP lets the launcher and
+    # site server compare the running copy with the installed one.
+    PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 - "$ROOT" "$DISPLAY" "$dest_root" <<'STAMPY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+version = sys.argv[2]
+dest = Path(sys.argv[3])
+sys.path.insert(0, str(root / "src"))
+from wims.gitinfo import collect_build_identity, write_build_stamp
+
+ident = collect_build_identity(root, version)
+write_build_stamp(
+    dest,
+    version=ident["version"],
+    commit=ident["commit"],
+    stamp=ident["stamp"],
+)
+STAMPY
 }
 
 deny_check() {
@@ -156,12 +180,13 @@ deny_check() {
         "src/wims/server/app.py" \
         "src/wims/server/static/ops.html" \
         "scripts/windows/Install-Wims.cmd" \
-        "scripts/Add WIMS to Desktop.desktop" \
+        "scripts/Install WS Hub.desktop" \
         "scripts/add-wims-to-desktop.sh" \
         "scripts/start-wims.sh" \
-        "install.sh" \
+        "scripts/install-linux.sh" \
         "INSTALL.md" \
         "manifest.json" \
+        "BUILD_STAMP" \
         "README-INSTALL.txt"
     do
         if [ ! -e "$root/$need" ]; then
@@ -193,14 +218,12 @@ linux_exec_bits() {
     local root="$1"
     local f
     for f in \
-        "install.sh" \
-        "scripts/Add WIMS to Desktop.desktop" \
+        "scripts/Install WS Hub.desktop" \
         "scripts/add-wims-to-desktop.sh" \
         "scripts/install-linux.sh" \
         "scripts/start-wims.sh" \
         "scripts/start-wims-solo.sh" \
         "scripts/start-wims-inhibit-home.sh" \
-        "scripts/Check logs.sh" \
         "scripts/_resolve-python.sh" \
         "scripts/_say.sh"
     do
@@ -218,10 +241,9 @@ import tarfile
 
 archive = sys.argv[1]
 need = (
-    "scripts/Add WIMS to Desktop.desktop",
+    "scripts/Install WS Hub.desktop",
     "scripts/add-wims-to-desktop.sh",
     "scripts/start-wims.sh",
-    "scripts/Check logs.sh",
     "scripts/_say.sh",
 )
 with tarfile.open(archive) as tf:

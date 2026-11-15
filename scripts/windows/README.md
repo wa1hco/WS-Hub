@@ -34,7 +34,6 @@ Setup check anytime: **`Check-WimsSetup.cmd`**.
 
 | File | What it does |
 |------|----------------|
-| **`Check-Logs.cmd`** | See whether the logs on this PC agree. Opens the result in the browser. Reads logs only. |
 | **`Check-WimsSetup.cmd`** | Single-PC setup check (`wims.agent --solo`). Starts nothing. |
 | **`Start-Wims-Solo.cmd`** | **H0 Operate** on this PC. Opens the console in the browser. |
 | **`Start-Wims-Inhibit-Home.cmd`** | **H1 Inhibit:** `wims.seat --key --targets 127.0.0.1:22372`. |
@@ -65,7 +64,7 @@ After that, operators only need the Desktop **WIMS** icon (same idea as N1MM / W
 That icon opens the same window as the other WIMS start files.
 When a release is newer, the window shows a small **update** mark and lists the
 release with its date. Hover a row for what changed. **Check now** looks again.
-**Update**, **Install this update**, and **Go back** are buttons. Nothing installs
+**Update WS Hub** (a git copy), **Download update** (a zip copy), **Install this update**, and **Go back** are buttons. Nothing installs
 by itself. The site server is left running. A look also happens every few hours
 while the window is open. No network just leaves the list as it was.
 
@@ -73,7 +72,7 @@ while the window is open. No network just leaves the list as it was.
 
 1. **Once:** `Install-Wims.cmd` (admin preferred on golden images).  
 2. **Daily:** Desktop **WIMS**.  
-3. **When offered:** **Update WIMS** (one click). Mid-contest you can ignore the banner.
+3. **When offered:** **Update WS Hub** or **Download update** in the window (one click). Mid-contest you can ignore the banner. The Desktop **Update WIMS** shortcut still runs the git updater.
 
 ### Other scripts (menu calls these; rarely opened by hand)
 
@@ -179,12 +178,12 @@ The `.cmd` files run PowerShell with **`-ExecutionPolicy Bypass` for that run on
 Release ZIPs from a browser often set Mark of the Web. Symptoms: SmartScreen (“Windows protected your PC”), or PowerShell “cannot be loaded because running scripts is disabled” / “not digitally signed”.
 
 1. Use **`Install-Wims.cmd`**, not a bare double-click of `.ps1`.
-2. SmartScreen → **More info** → **Run anyway** (only if you trust [wa1hco/WIMS](https://github.com/wa1hco/WIMS)).
+2. SmartScreen → **More info** → **Run anyway** (only if you trust [wa1hco/WS-Hub](https://github.com/wa1hco/WS-Hub)).
 3. Unblock downloaded files:
    - Explorer → right-click file → **Properties** → **Unblock** → **OK**
-   - Or: `Unblock-File -Path .\scripts\windows\*.cmd, .\scripts\windows\*.ps1, .\install.ps1`
+   - Or: `Unblock-File -Path .\scripts\windows\*.cmd, .\scripts\windows\*.ps1`
 4. Forced one-shot run:  
-   `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`
+   `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install.ps1`
 
 Do not set permanent `Set-ExecutionPolicy Unrestricted` just for WIMS. See also the main [README.md](../../README.md) Windows section.
 

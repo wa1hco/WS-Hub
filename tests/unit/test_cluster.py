@@ -1,0 +1,1230 @@
+# WIMS — WSJT-X Instance Management System
+# Copyright (C) 2026 Jeff Millar, WA1HCO
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+"""DX cluster spots: parse, read-only login, filter, score, QSY flag."""
+
+import re
+import socket
+import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+from wims.engine import scoring as S  # noqa: E402
+from wims.engine.contest_rules import load_builtin  # noqa: E402
+from wims.engine.geo import bearing, distance_km  # noqa: E402
+from wims.engine.goal_rules import ChecklistRules  # noqa: E402
+from wims.lotw import use_paths  # noqa: E402
+from wims.rules.cty import CtyIndex  # noqa: E402
+from wims.integrations.cluster.client import (  # noqa: E402
+    BACKOFF_START, LOGIN_WAIT_S, ClusterLink, ClusterService, is_login_prompt,
+    next_backoff, sent_text,
+)
+from wims.integrations.cluster.modes import infer_mode  # noqa: E402
+from wims.integrations.cluster.parse import parse_spot  # noqa: E402
+from wims.integrations.cluster.ranges import in_range  # noqa: E402
+from wims.integrations.cluster.settings import (  # noqa: E402
+    DEFAULT_HOST, DEFAULT_PORT, MODE_FILTERS, all_bands,
+    call_mismatch_warning, effective_call, load, save, sanitize,
+)
+from wims.integrations.cluster.telnet import strip_telnet  # noqa: E402
+from wims.integrations.cluster.view import (  # noqa: E402
+    OnAir, SpotBook, build_list, mode_bucket, mode_choices, status_line,
+)
+from wims.integrations.n1mm.qso import LoggedQso  # noqa: E402
+from wims.state.heard_grids import HeardGrids  # noqa: E402
+from wims.state.logstore import LogStore  # noqa: E402
+
+FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "dx_cluster_spots.txt"
+AR_CLUSTER = Path(__file__).resolve().parents[1] / "fixtures" / "cluster_ar_cluster.txt"
+DX_SPIDER = Path(__file__).resolve().parents[1] / "fixtures" / "cluster_dx_spider.txt"
+SILENT_NODE = Path(__file__).resolve().parents[1] / "fixtures" / "cluster_silent.txt"
+HOME = "FN42ev"
+NOW = 1_700_000_000.0
+
+
+def _log():
+    log = LogStore(":memory:")
+    log.rules = load_builtin("arrl-vhf")
+    return log
+
+
+def _book(lines, now=NOW):
+    book = SpotBook()
+    for line in lines:
+        spot = parse_spot(line)
+        assert spot is not None, line
+        book.add(spot, now)
+    return book
+
+
+def _rows(lines, *, operations=None, allowed=None, allowed_modes=None,
+          grid=HOME, heard=None, qsy_cost=8, now=NOW, received=None, log=None):
+    store = log if log is not None else _log()
+    memory = heard
+
+    def classify(call, band, square, mode):
+        return store.classify(call, band, square, mode)
+
+    def grid_for(call):
+        if memory is None:
+            return ""
+        return memory.lookup(call, now).grid or ""
+
+    rows, drops = build_list(
+        _book(lines, now if received is None else received).rows(),
+        now=now, ttl_s=15 * 60, our_grid=grid,
+        allowed=allowed, operations=operations or [], classify=classify,
+        grid_for=grid_for, qsy_cost=qsy_cost, allowed_modes=allowed_modes,
+    )
+    return rows, drops
+
+
+def test_fixture_lines_parse():
+    text = FIXTURE.read_text(encoding="utf-8")
+    spots = []
+    skipped = 0
+    for line in text.splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        spot = parse_spot(line)
+        if spot is None:
+            skipped += 1
+            continue
+        spots.append(spot)
+    calls = [s.call for s in spots]
+    assert calls == ["K1ABC", "K1ABC", "N0ROV/R", "W2XYZ", "K4CW", "EA8/DK9TN", "JA1ABC", "VE3ABC"]
+    assert skipped == 3
+    k1 = spots[0]
+    assert k1.spotter == "K1TTT"
+    assert k1.band == "10m"
+    assert k1.grid == "FN42"
+    assert k1.freq_hz == 28_074_000
+    assert spots[2].spotter == "W3LPL-#"
+    assert spots[2].grid == "FN31"
+    assert spots[5].call == "EA8/DK9TN"
+    assert spots[5].band == "6m"
+
+
+def test_mhz_frequency_and_grid_not_rr73():
+    mhz = parse_spot("DX de K1TTT: 14.074 JA1ABC PM95 1200Z")
+    assert mhz is not None and mhz.freq_hz == 14_074_000 and mhz.band == "20m"
+    rr = parse_spot("DX de K1TTT: 28074.0 K1ABC RR73 FN42 1201Z")
+    assert rr is not None and rr.grid == "FN42"
+    junk = parse_spot("DX de K1TTT: 123.0 NOTACALL nothing 1202Z")
+    assert junk is None
+
+
+def test_login_sends_only_the_callsign():
+    sent = bytearray()
+    link = ClusterLink("wa1hco", sent.extend)
+    banner = bytes([255, 251, 1]) + b"Please enter your call:\r\n"
+    line = b"DX de K1TTT:      28074.0  K1ABC        FN42 FT8                      1734Z\r\n"
+    spots = link.feed(banner)
+    spots += link.feed(line)
+    assert [s.call for s in spots] == ["K1ABC"]
+    assert link.sent_login
+    text = sent_text(bytes(sent))
+    assert text.strip() == "WA1HCO"
+    assert "DX de" not in text
+    for banned in ("set/", "announce", "sh/dx", "talk", "bye"):
+        assert banned not in text.lower()
+    # The telnet refusal is present, and it is not text.
+    assert bytes(sent).startswith(bytes([255, 254, 1]))
+
+
+def test_name_prompt_is_not_answered():
+    sent = bytearray()
+    link = ClusterLink("WA1HCO", sent.extend)
+    link.feed(b"Your name:\r\n")
+    assert link.extra
+    assert sent == bytearray()
+    assert not is_login_prompt("Your name:")
+    assert is_login_prompt("Please enter your call:")
+    assert is_login_prompt("login:")
+    assert is_login_prompt("LOGIN:")
+    assert is_login_prompt("CALL:")
+    assert is_login_prompt("Callsign:")
+    for prompt in (b"Login:\r\n", b"CALL:\r\n", b"PLEASE ENTER YOUR CALL:\r\n"):
+        sent = bytearray()
+        again = ClusterLink("wa1hco", sent.extend)
+        again.feed(prompt)
+        assert again.sent_login, prompt
+        assert sent_text(bytes(sent)).strip() == "WA1HCO"
+
+
+def test_mode_from_comment_then_frequency():
+    assert infer_mode(28_074_000, "FN42 FT8", "10m") == "FT8"
+    assert infer_mode(28_025_000, "CW", "10m") == "CW"
+    assert infer_mode(28_074_000, "", "10m") == "FT8"
+    assert infer_mode(28_180_000, "", "10m") == "FT4"
+    assert infer_mode(28_400_000, "", "10m") == "SSB"
+    assert infer_mode(50_313_000, "", "6m") == "FT8"
+    assert infer_mode(50_260_000, "MSK", "6m") == "MSK144"
+    assert infer_mode(144_174_000, "", "2m") == "FT8"
+    assert infer_mode(50_125_000, "SSB", "6m") == "SSB"
+    assert infer_mode(14_074_000, "Q65", "20m") == "Q65"
+
+
+def test_other_bands_stay_and_are_marked_qsy():
+    rows, drops = _rows(
+        [
+            "DX de K1TTT: 28074.0 K1ABC FN42 FT8 1734Z",
+            "DX de K2SPO: 144174.0 W2XYZ FN20 1736Z",
+            "DX de G4ABC: 50313.0 EA8/DK9TN IL18 1737Z",
+        ],
+        operations=[OnAir("10m", "FT8")],
+    )
+    by = {row["call"]: row for row in rows}
+    assert "K1ABC" in by and by["K1ABC"]["where"] == "on band"
+    assert by["K1ABC"]["mode"] == "FT8" and by["K1ABC"]["band"] == "10m"
+    assert "W2XYZ" in by and by["W2XYZ"]["where"] == "QSY"
+    assert by["W2XYZ"]["band"] == "2m" and by["W2XYZ"]["mode"] == "FT8"
+    # 6m is not the radio we are on. IL18 is about 5100 km, inside the 6m window.
+    assert distance_km(HOME, "IL18") < 6000
+    assert in_range(distance_km(HOME, "IL18"), "6m", "FT8")
+    assert "EA8/DK9TN" in by and by["EA8/DK9TN"]["where"] == "QSY"
+    assert by["EA8/DK9TN"]["band"] == "6m"
+    assert drops["spot_count"] == 3
+
+
+def test_cw_on_the_same_band_is_qsy_not_dropped():
+    rows, _drops = _rows(
+        ["DX de K5DX: 28025.0 K4CW CW 1736Z"],
+        operations=[OnAir("10m", "FT8")],
+        heard=_heard("K4CW", "FN42"),
+    )
+    assert len(rows) == 1
+    assert rows[0]["mode"] == "CW"
+    assert rows[0]["where"] == "QSY"
+    assert rows[0]["band"] == "10m"
+    names = [f["name"] for f in rows[0]["factors"]]
+    assert "qsy" in names
+
+
+def test_far_vhf_dropped_hf_kept():
+    assert distance_km(HOME, "PM95") > 900
+    assert distance_km(HOME, "PM95") < 18000
+    assert not in_range(distance_km(HOME, "PM95"), "2m", "FT8")
+    assert in_range(distance_km(HOME, "PM95"), "20m", "FT8")
+    rows, drops = _rows([
+        "DX de N1ABC: 144174.0 JA1ABC PM95 FT8 1737Z",
+        "DX de N1ABC: 14074.0 JA1ABC PM95 FT8 1737Z",
+    ])
+    assert [row["band"] for row in rows] == ["20m"]
+    assert drops["range"] == 1
+
+
+def test_dupe_and_missing_grid_and_age():
+    log = _log()
+    log.upsert(LoggedQso(
+        id="q1", call="K1ABC", band="10m", grid="FN42", mode="FT8",
+        points=1, is_mult=True, contest="VHF", timestamp="", operator="",
+        rover_location=None, source="test",
+    ))
+    rows, drops = _rows(
+        [
+            "DX de K1TTT: 28074.0 K1ABC FN42 FT8 1734Z",
+            "DX de K1TTT: 28074.0 N0NEW 1734Z",
+        ],
+        log=log,
+    )
+    assert rows == []
+    assert drops["worked"] == 1
+    assert drops["no_grid"] == 1
+    old, old_drops = _rows(
+        ["DX de K1TTT: 28074.0 K1ABC FN42 FT8 1734Z"],
+        received=NOW,
+        now=NOW + 16 * 60,
+    )
+    assert old == []
+    assert old_drops["spot_count"] == 0
+
+
+def test_heard_grid_fills_a_blank_comment():
+    heard = _heard("W2XYZ", "FN20")
+    rows, drops = _rows(
+        ["DX de K2SPO: 144174.0 W2XYZ 1736Z"],
+        heard=heard,
+    )
+    assert drops["no_grid"] == 0
+    assert len(rows) == 1 and rows[0]["grid"] == "FN20"
+
+
+def test_unchecked_band_is_hidden():
+    rows, drops = _rows(
+        [
+            "DX de K1TTT: 28074.0 K1ABC FN42 FT8 1734Z",
+            "DX de K2SPO: 144174.0 W2XYZ FN20 1736Z",
+        ],
+        allowed={"10m"},
+    )
+    assert [row["call"] for row in rows] == ["K1ABC"]
+    assert drops["spot_count"] == 1
+
+
+def test_msk_too_close_is_not_workable():
+    assert not in_range(distance_km(HOME, "FN42"), "6m", "MSK144")
+    rows, drops = _rows(
+        ["DX de K1TTT: 50260.0 K1MSK FN42 MSK144 1734Z"],
+    )
+    assert rows == []
+    assert drops["range"] == 1
+
+
+def test_qsy_cost_is_a_penalty_not_a_gate():
+    same = dict(
+        is_new_mult=True, chase="", is_rover=False, age_s=0, ttl_s=900,
+        spotter_count=1, spotter_near=0, distance_fit=1,
+    )
+    on = S.score_spot(S.SpotFeatures(needs_qsy=False, **same))
+    qsy = S.score_spot(S.SpotFeatures(needs_qsy=True, **same))
+    free = S.score_spot(
+        S.SpotFeatures(needs_qsy=True, **same), S.cluster_weights(0),
+    )
+    assert qsy.total == round(on.total - 8, 1)
+    assert free.total == on.total
+    assert any(f.name == "qsy" and f.contribution == -8 for f in qsy.factors)
+    assert all(f.name != "qsy" for f in free.factors)
+    # A new grid that needs a QSY still outranks an ordinary needed contact.
+    plain = S.score_spot(S.SpotFeatures(
+        is_new_mult=False, needs_qsy=False, age_s=0, ttl_s=900,
+        spotter_count=1, distance_fit=1,
+    ))
+    assert qsy.total > plain.total
+
+
+def test_weights_are_named():
+    names = set(S.CLUSTER_WEIGHTS)
+    assert names == {
+        "need_new", "need_call", "need_unconfirmed", "recency", "spotters",
+        "spotter_near", "distance", "rover", "qsy",
+    }
+    assert S.CLUSTER_WEIGHTS["qsy"] < 0
+    assert S.cluster_weights(12)["qsy"] == -12
+
+
+def test_status_lines_name_the_next_step():
+    assert status_line(
+        enabled=False, phase="off", host=DEFAULT_HOST, port=23, callsign="",
+        retry_s=0, reason="", spot_count=0, needed_count=0,
+        bands_empty=False, have_grid=True,
+    ) == "Cluster: off. Turn it on in Setup."
+    assert "no callsign. Set the station call in Setup" in status_line(
+        enabled=True, phase="need_call", host=DEFAULT_HOST, port=23, callsign="",
+        retry_s=0, reason="", spot_count=0, needed_count=0,
+        bands_empty=False, have_grid=True,
+    )
+    connected = status_line(
+        enabled=True, phase="connected", host=DEFAULT_HOST, port=DEFAULT_PORT,
+        callsign="WA1HCO", retry_s=0, reason="", spot_count=12, needed_count=3,
+        bands_empty=False, have_grid=True,
+    )
+    assert connected == "Cluster: logged in, 12 spots, 3 needed"
+    assert status_line(
+        enabled=True, phase="tcp", host=DEFAULT_HOST, port=DEFAULT_PORT,
+        callsign="WA1HCO", retry_s=0, reason="", spot_count=0, needed_count=0,
+        bands_empty=False, have_grid=True,
+    ) == "Cluster: connected, no spots yet."
+    assert status_line(
+        enabled=True, phase="logged_in", host=DEFAULT_HOST, port=DEFAULT_PORT,
+        callsign="WA1HCO", retry_s=0, reason="", spot_count=0, needed_count=0,
+        bands_empty=False, have_grid=True,
+    ) == "Cluster: logged in, no spots yet."
+    silent = status_line(
+        enabled=True, phase="silent", host="dxc.ve7cc.net", port=23,
+        callsign="WA1HCO", retry_s=5, reason="silent", spot_count=0,
+        needed_count=0, bands_empty=False, have_grid=True,
+    )
+    assert silent.startswith("Cluster: node sent nothing. Try another node on Setup.")
+    assert "0 spots" not in silent
+    retry = status_line(
+        enabled=True, phase="retry", host=DEFAULT_HOST, port=23,
+        callsign="WA1HCO", retry_s=40, reason="timeout", spot_count=0,
+        needed_count=0, bands_empty=False, have_grid=True,
+    )
+    assert "can't reach" in retry and "Setup" in retry and "40" in retry
+    assert "Choose bands in Setup" in status_line(
+        enabled=True, phase="connected", host=DEFAULT_HOST, port=23,
+        callsign="WA1HCO", retry_s=0, reason="", spot_count=0, needed_count=0,
+        bands_empty=True, have_grid=True,
+    )
+    assert "Choose modes on Operate" in status_line(
+        enabled=True, phase="connected", host=DEFAULT_HOST, port=23,
+        callsign="WA1HCO", retry_s=0, reason="", spot_count=0, needed_count=0,
+        bands_empty=False, have_grid=True, modes_empty=True,
+    )
+    assert "No grid from WSJT-X" in status_line(
+        enabled=True, phase="connected", host=DEFAULT_HOST, port=23,
+        callsign="WA1HCO", retry_s=0, reason="", spot_count=4, needed_count=0,
+        bands_empty=False, have_grid=False,
+    )
+
+
+def test_backoff_never_tight():
+    assert next_backoff(0) == BACKOFF_START
+    assert next_backoff(5) == 10
+    assert next_backoff(160) == 300
+    assert next_backoff(300) == 300
+    assert BACKOFF_START >= 5
+
+
+def test_settings_default_all_bands_and_node():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "cluster.json"
+        fresh = load(path)
+        assert fresh["enabled"] is False
+        assert fresh["host"] == "k1ttt.net"
+        assert fresh["port"] == 7373
+        assert fresh["node"] == "k1ttt"
+        assert fresh["bands"] == "all"
+        assert fresh["modes"] == "all"
+        assert fresh["qsy_cost"] == 8
+        assert fresh["station_call"] == ""
+        save({"enabled": True, "host": "bad host", "port": 23,
+              "bands": ["10m", "nope", "6m"], "qsy_cost": 12,
+              "station_call": "wa1hco"}, path)
+        again = load(path)
+        assert again["enabled"] is True
+        assert again["host"] == DEFAULT_HOST
+        assert again["bands"] == ["10m", "6m"]
+        assert again["modes"] == "all"
+        assert again["qsy_cost"] == 12
+        assert again["station_call"] == "WA1HCO"
+        assert "160m" in all_bands() and "2m" in all_bands() and "70cm" in all_bands()
+        old = Path(tmp) / "old.json"
+        old.write_text(
+            '{"schema": 1, "enabled": true, "host": "dxc.ve7cc.net", '
+            '"port": 23, "bands": "all", "qsy_cost": 8}\n',
+            encoding="utf-8",
+        )
+        moved = load(old)
+        assert moved["host"] == "k1ttt.net" and moved["port"] == 7373
+        assert moved["node"] == "k1ttt"
+        assert moved["modes"] == "all"
+        assert moved["station_call"] == ""
+        kept = Path(tmp) / "kept.json"
+        kept.write_text(
+            '{"schema": 2, "node": "ve7cc", "enabled": true, '
+            '"host": "dxc.ve7cc.net", "port": 23, "bands": "all", "qsy_cost": 8}\n',
+            encoding="utf-8",
+        )
+        stay = load(kept)
+        assert stay["node"] == "ve7cc"
+        assert stay["host"] == "dxc.ve7cc.net" and stay["port"] == 23
+        assert stay["modes"] == "all"
+
+
+def test_reconnect_waits_out_the_backoff():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "cluster.json"
+        sleeps = []
+
+        def boom(_address, _timeout):
+            raise ConnectionRefusedError("no")
+
+        svc = ClusterService(path=path, connect=boom)
+
+        def pause(seconds):
+            sleeps.append(seconds)
+            svc._stop.set()
+
+        svc._sleep = pause
+        svc.update({"enabled": True})
+        svc.start(lambda: "WA1HCO")
+        svc._thread.join(timeout=2)
+        assert sleeps == [5.0]
+        assert svc.phase == "retry"
+        assert svc.reason == "refused_port"
+
+
+def test_select_does_not_transmit_or_retune():
+    from wims.server.app import LiveFleet
+
+    live = LiveFleet()
+
+    class Tx:
+        def __init__(self):
+            self.calls = []
+
+        def reply(self, *args, **kwargs):
+            self.calls.append(("reply", args, kwargs))
+
+        def halt(self, *args, **kwargs):
+            self.calls.append(("halt", args, kwargs))
+
+        def configure(self, *args, **kwargs):
+            self.calls.append(("configure", args, kwargs))
+
+        def configure_grid(self, *args, **kwargs):
+            self.calls.append(("grid", args, kwargs))
+
+    live._tx = Tx()
+    out = live.select_spot({
+        "call": "K1ABC", "grid": "FN42ev", "band": "10m", "mode": "FT8",
+    })
+    assert out["ok"] is True
+    assert out["transmitted"] is False
+    assert out["retuned"] is False
+    assert live._tx.calls == []
+    assert "not retuned" in out["line"]
+    assert "Work needs a live decode" in out["line"]
+    found = live._heard.lookup("K1ABC", time.time())
+    assert (found.grid or "").startswith("FN42")
+    # The click path is not the Work path.
+    assert not hasattr(live.select_spot, "reply")
+
+
+def test_telnet_refusal_only():
+    reply = bytearray()
+    plain = strip_telnet(bytes([255, 251, 1, 65, 66]), reply, {})
+    assert plain == b"AB"
+    assert bytes(reply) == bytes([255, 254, 1])
+
+
+def _heard(call, grid):
+    memory = HeardGrids()
+    assert memory.note(call, grid, "10m", NOW)
+    return memory
+
+
+def test_service_public_uses_goal_and_qsy_flag():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "cluster.json"
+        svc = ClusterService(path=path)
+        svc.update({"enabled": True, "qsy_cost": 8, "bands": "all"})
+        assert svc.ingest("DX de K1TTT: 28074.0 K1ABC FN42 FT8 1734Z", NOW)
+        assert svc.ingest("DX de K2SPO: 144174.0 W2XYZ FN20 1736Z", NOW)
+        with svc._lock:
+            svc.phase = "connected"
+        log = _log()
+
+        def classify(call, band, grid, mode):
+            return log.classify(call, band, grid, mode)
+
+        view = svc.public(
+            now=NOW, callsign="WA1HCO", our_grid=HOME,
+            operations=[OnAir("10m", "FT8")], classify=classify,
+        )
+        assert view["status_line"] == "Cluster: logged in, 2 spots, 2 needed"
+        assert "Last spot" in view["detail"]
+        where = {row["call"]: row["where"] for row in view["rows"]}
+        assert where["K1ABC"] == "on band"
+        assert where["W2XYZ"] == "QSY"
+        assert view["rows"][0]["score"] >= view["rows"][1]["score"]
+        # Sorted, and the QSY row is still present.
+        assert {row["call"] for row in view["rows"]} == {"K1ABC", "W2XYZ"}
+
+
+def test_no_callsign_does_not_open_a_socket():
+    with tempfile.TemporaryDirectory() as tmp:
+        opened = []
+
+        def boom(*_a, **_k):
+            opened.append(1)
+            raise AssertionError("should not connect")
+
+        svc = ClusterService(path=Path(tmp) / "cluster.json", connect=boom)
+
+        def pause(_seconds):
+            svc._stop.set()
+
+        svc._sleep = pause
+        svc.update({"enabled": True})
+        svc.start(lambda: "")
+        svc._thread.join(timeout=2)
+        assert opened == []
+        assert svc.phase == "need_call"
+
+
+class _Clock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+class _ScriptSock:
+    def __init__(self, chunks):
+        self.chunks = list(chunks)
+        self.sent = bytearray()
+
+    def settimeout(self, _seconds):
+        return None
+
+    def sendall(self, data):
+        self.sent += data
+
+    def recv(self, _n):
+        if not self.chunks:
+            return b""
+        item = self.chunks.pop(0)
+        if item is None:
+            raise socket.timeout()
+        return item
+
+    def close(self):
+        return None
+
+
+def _node_bytes(path: Path) -> bytes:
+    lines = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        lines.append(line)
+    if not lines:
+        return b""
+    return ("\r\n".join(lines) + "\r\n").encode("ascii")
+
+
+def _play(blob: bytes):
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({"enabled": True, "bands": "all"})
+        sock = _ScriptSock([blob])
+        try:
+            svc._read_loop(sock, "WA1HCO", svc._gen)
+        except TimeoutError:
+            pass
+        log = _log()
+
+        def classify(call, band, grid, mode):
+            return log.classify(call, band, grid, mode)
+
+        view = svc.public(
+            now=time.time(), callsign="WA1HCO", our_grid=HOME, operations=[],
+            classify=classify,
+        )
+        return sock, view
+
+
+def test_prompt_any_case_and_no_login_into_silence():
+    clock = _Clock()
+    sent = bytearray()
+    link = ClusterLink("WA1HCO", sent.extend, now=clock)
+    clock.t = LOGIN_WAIT_S + 1
+    link.poll()
+    assert sent == bytearray()
+    link.feed(b"Welcome to the DX Spider cluster\r\n")
+    clock.t = LOGIN_WAIT_S - 0.1
+    link.poll()
+    assert b"WA1HCO" not in sent
+    clock.t = LOGIN_WAIT_S
+    link.poll()
+    assert sent_text(bytes(sent)).strip() == "WA1HCO"
+
+
+def test_silent_node_is_not_called_connected():
+    assert _node_bytes(SILENT_NODE) == b""
+    clock = _Clock()
+
+    class Sock(_ScriptSock):
+        def __init__(self):
+            super().__init__([])
+            self.calls = 0
+
+        def recv(self, _n):
+            self.calls += 1
+            clock.t = 59.0 if self.calls == 1 else 60.0
+            raise socket.timeout()
+
+    sock = Sock()
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(
+            path=Path(tmp) / "cluster.json", connect=lambda *_a, **_k: sock,
+            monotonic=clock,
+        )
+
+        def pause(_seconds):
+            svc._stop.set()
+
+        svc._sleep = pause
+        svc.update({"enabled": True})
+        svc.start(lambda: "WA1HCO")
+        svc._thread.join(timeout=2)
+        assert svc.phase == "silent"
+        assert sock.sent.startswith(b"\r\n")
+        assert b"WA1HCO" not in sock.sent
+        view = svc.public(
+            now=NOW, callsign="WA1HCO", our_grid=HOME, operations=[],
+            classify=lambda *_a: None,
+        )
+        assert view["status_line"].startswith(
+            "Cluster: node sent nothing. Try another node on Setup.")
+        assert "0 spots" not in view["status_line"]
+        assert "No spot line yet" in view["detail"]
+
+
+def test_ar_cluster_and_dx_spider_transcripts():
+    ar_sock, ar = _play(_node_bytes(AR_CLUSTER))
+    assert ar_sock.sent.startswith(b"\r\n")
+    assert sent_text(bytes(ar_sock.sent)).strip() == "WA1HCO"
+    assert "set/" not in sent_text(bytes(ar_sock.sent)).lower()
+    assert "logged in" in ar["status_line"]
+    assert any(row["call"] == "K1ABC" for row in ar["rows"])
+    assert "Last spot" in ar["detail"]
+
+    spider_sock, spider = _play(_node_bytes(DX_SPIDER))
+    assert sent_text(bytes(spider_sock.sent)).strip() == "WA1HCO"
+    assert any(row["call"] == "JA1ABC" for row in spider["rows"])
+    assert "logged in" in spider["status_line"]
+
+
+def test_thread_stops():
+    # A disabled service pauses and must exit when stopped.
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        started = threading.Event()
+
+        def pause(_seconds):
+            started.set()
+            svc._stop.wait(1)
+
+        svc._sleep = pause
+        svc.start(lambda: "WA1HCO")
+        assert started.wait(2)
+        svc.stop()
+        assert svc._thread is None or not svc._thread.is_alive()
+
+
+# Not a copy of cty.dat. Enough for the one-place badge.
+_CTY = """\
+United States:5:8:NA:43.00:-87.90:0.0:K:
+    K,W,N,AA;
+Italy:15:28:EU:42.00:12.00:0.0:I:
+    I;
+Federal Republic of Germany:14:28:EU:51.00:10.00:0.0:DL:
+    DL,DA;
+"""
+
+_ALL_LINES = {
+    "grid": {"enabled": True, "scope": "overall"},
+    "state": {"enabled": True, "scope": "overall"},
+    "dxcc": {"enabled": True, "scope": "overall"},
+    "continent": {"enabled": True, "scope": "overall"},
+    "cq": {"enabled": True, "scope": "overall"},
+    "itu": {"enabled": True, "scope": "overall"},
+    "call": {"enabled": True, "scope": "overall"},
+}
+
+
+def _checklist(items, rows, *, cty=True):
+    use_paths([])
+    store = LogStore(":memory:")
+    store.rules = ChecklistRules(
+        items, title="Checklist",
+        cty=CtyIndex.parse(_CTY) if cty else None,
+        log_label="the log",
+    )
+    for row in rows:
+        store.upsert(row)
+    return store
+
+
+def test_spot_badge_is_the_roster_label_for_that_band_and_mode():
+    """One place, from classify, on the spot's own band and mode.
+
+    The order lives in the roster rules. A spot does not invent a second
+    one. A contest row leaves the place badge off. The mult reason stays.
+    """
+    wide = _checklist(_ALL_LINES, [])
+    fresh, _drops = _rows(
+        ["DX de K1TTT: 14074.0 DL1ABC JO62 FT8 1734Z"],
+        log=wide,
+    )
+    assert len(fresh) == 1
+    hit = fresh[0]
+    assert hit["chase"] == "needed"
+    assert hit["need_label"] == "grid"
+    assert hit["why"] == "grid"
+    assert hit["is_new_mult"] is True
+    assert "JO62" in hit["need_reason"]
+    for other in ("Germany", "Europe", "CQ zone", "ITU zone", "new call"):
+        assert other not in hit["need_reason"], other
+    assert sum(1 for f in hit["factors"] if f["name"] == "need_new") == 1
+
+    worked = _checklist(_ALL_LINES, [
+        LoggedQso(
+            id="q-us", call="K1ABC", band="6m", grid="FN42", mode="FT8",
+            points=1, is_mult=False, contest="T", timestamp="", operator="",
+            rover_location=None, source="test",
+        ),
+    ])
+    call_only, _drops = _rows(
+        ["DX de K1TTT: 50313.0 N1NEW FN42 FT8 1734Z"],
+        log=worked,
+    )
+    assert len(call_only) == 1
+    assert call_only[0]["need_label"] == "call"
+    assert call_only[0]["why"] == "call"
+    assert call_only[0]["is_new_mult"] is False
+    assert "N1NEW" in call_only[0]["need_reason"]
+
+    banded = _checklist(
+        {"grid": {"enabled": True, "scope": "band"}},
+        [LoggedQso(
+            id="q-6", call="K1ABC", band="6m", grid="FN42", mode="FT8",
+            points=1, is_mult=False, contest="T", timestamp="", operator="",
+            rover_location=None, source="test",
+        )],
+        cty=False,
+    )
+    both, drops = _rows(
+        [
+            "DX de K1TTT: 50313.0 K1ABC FN42 FT8 1734Z",
+            "DX de K1TTT: 144174.0 K1ABC FN42 FT8 1734Z",
+        ],
+        log=banded,
+    )
+    assert [row["band"] for row in both] == ["2m"]
+    assert both[0]["need_label"] == "grid"
+    assert "2m" in both[0]["need_reason"]
+    assert "6m" not in both[0]["need_reason"]
+    assert drops["worked"] == 1
+
+    modes = _checklist(
+        {"call": {"enabled": True, "scope": "mode"}},
+        [LoggedQso(
+            id="q-ft8", call="K1ABC", band="10m", grid="FN42", mode="FT8",
+            points=1, is_mult=False, contest="T", timestamp="", operator="",
+            rover_location=None, source="test",
+        )],
+        cty=False,
+    )
+    same_mode, same_drops = _rows(
+        ["DX de K1TTT: 28074.0 K1ABC FN42 FT8 1734Z"],
+        log=modes,
+    )
+    assert same_mode == []
+    assert same_drops["worked"] == 1
+    other_mode, _drops = _rows(
+        ["DX de K1TTT: 28025.0 K1ABC CW 1734Z"],
+        log=modes,
+        heard=_heard("K1ABC", "FN42"),
+    )
+    assert len(other_mode) == 1
+    assert other_mode[0]["mode"] == "CW"
+    assert other_mode[0]["need_label"] == "call"
+    assert "CW" in other_mode[0]["need_reason"]
+
+    open_store = _checklist(
+        {"grid": {"enabled": True, "scope": "overall"}},
+        [LoggedQso(
+            id="q-open", call="K1ABC", band="6m", grid="FN42", mode="FT8",
+            points=1, is_mult=False, contest="T", timestamp="", operator="",
+            rover_location=None, source="test", confirmed=False,
+        )],
+        cty=False,
+    )
+    opened, _drops = _rows(
+        ["DX de K1TTT: 14074.0 W1AW FN42 FT8 1734Z"],
+        log=open_store,
+    )
+    assert len(opened) == 1
+    assert opened[0]["chase"] == "unconfirmed"
+    assert opened[0]["need_label"] == ""
+    assert opened[0]["why"] == "unconfirmed"
+
+    contest, _drops = _rows(["DX de K1TTT: 50313.0 K1ABC FN42 FT8 1734Z"])
+    assert contest[0]["need_label"] == ""
+    assert contest[0]["chase"] == ""
+    assert contest[0]["why"] == ""
+    assert contest[0]["is_new_mult"] is True
+    assert "FN42" in contest[0]["mult_reason"]
+
+
+def test_spot_row_uses_roster_fields_and_keeps_spot_extras():
+    rows, _drops = _rows(
+        ["DX de K1TTT: 50313.0 K1ABC FN42 FT8 1734Z"],
+        operations=[OnAir("6m", "FT8")],
+    )
+    row = rows[0]
+    assert row["country"] == "United States"
+    assert row["band"] == "6m" and row["mode"] == "FT8"
+    assert row["grid"] == "FN42"
+    assert row["freq_hz"] == 50_313_000
+    assert row["az"] == round(bearing(HOME, "FN42"))
+    assert row["distance_km"] == round(distance_km(HOME, "FN42"), 1)
+    assert row["age"] == 0
+    assert row["spotter"] == "K1TTT"
+    assert row["spotters"] == 1
+    assert row["qsy"] == "on band"
+    assert row["where"] == "on band"
+    assert row["needs_qsy"] is False
+    assert row["qsy_points"] == 0
+    assert "rotator_id" not in row
+    assert row["is_rover"] is False
+
+    class Found:
+        grid = "FN20"
+        remembered = True
+        assumed = True
+        tip = "Grid assumed. FN20, heard on 2m at 17:36 UTC."
+        stale = False
+
+    class Near:
+        grid = "FN42"
+        remembered = False
+
+    remembered, drops = build_list(
+        _book(["DX de K2SPO: 144174.0 W2XYZ 1736Z"]).rows(),
+        now=NOW, ttl_s=15 * 60, our_grid=HOME, allowed=None,
+        operations=[], classify=_log().classify,
+        grid_for=lambda _call: Found(),
+        spotter_grid=lambda _call: Near(),
+    )
+    assert drops["no_grid"] == 0
+    assert remembered[0]["grid"] == "FN20"
+    assert remembered[0]["grid_assumed"] is True
+    assert remembered[0]["grid_remembered"] is True
+    assert "Grid assumed" in remembered[0]["grid_tip"]
+    assert any(f["name"] == "spotter_near" for f in remembered[0]["factors"])
+
+    class Stale:
+        grid = None
+        remembered = False
+        assumed = False
+        tip = "too old"
+        stale = True
+
+    gone, gone_drops = build_list(
+        _book(["DX de K2SPO: 144174.0 W2XYZ 1736Z"]).rows(),
+        now=NOW, ttl_s=15 * 60, our_grid=HOME, allowed=None,
+        operations=[], classify=_log().classify,
+        grid_for=lambda _call: Stale(),
+    )
+    assert gone == []
+    assert gone_drops["no_grid"] == 1
+
+    qsy, _drops = _rows(["DX de K1TTT: 50313.0 K1ABC FN42 FT8 1734Z"])
+    assert qsy[0]["qsy"] == "QSY"
+    assert qsy[0]["qsy_points"] == -8
+
+
+def test_spot_call_hides_mult_when_need_label_shown():
+    """Both lists hide generic mult when the place word is shown.
+
+    The rule lives in rosCall, shared by the call roster and the Spotted
+    list. Contest rows have no need_label, so mult stays. The spotCall
+    wrapper is gone.
+    """
+    root = Path(__file__).resolve().parents[2]
+    js = (root / "src/wims/server/static/wims.js").read_text(encoding="utf-8")
+    ros = js.split("function rosCall", 1)[1].split("function rosChase", 1)[0]
+    assert ">mult</span>" in ros
+    assert "need_label" in ros
+    assert "is_new_mult && !labeled" in ros
+    assert js.count("function rosCall(") == 1
+    assert "function spotCall" not in js
+    assert "spotCall" not in js
+    picker = js.split("function spotCols", 1)[1].split("function spotTitle", 1)[0]
+    assert "ROS_COLS.find" in picker
+    assert "spotCall" not in picker
+    assert 'key === "call"' not in picker
+    ros_cols = js.split("const ROS_COLS = [", 1)[1].split("\n];", 1)[0]
+    assert "rosCall" in ros_cols
+    assert "spotCall" not in ros_cols
+
+
+def test_mode_filter_settings_round_trip_and_old_files():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "cluster.json"
+        fresh = load(path)
+        assert fresh["modes"] == "all"
+        save({"enabled": True, "modes": ["cw", "FT8", "nope", "Other", "FT8"]}, path)
+        again = load(path)
+        assert again["modes"] == ["CW", "FT8", "Other"]
+        assert sanitize({"modes": "all"})["modes"] == "all"
+        assert sanitize({"modes": "*"})["modes"] == "all"
+        assert sanitize({"modes": []})["modes"] == []
+        assert sanitize(None)["modes"] == "all"
+        old = Path(tmp) / "legacy.json"
+        old.write_text(
+            '{"schema": 2, "enabled": true, "host": "k1ttt.net", '
+            '"port": 7373, "bands": ["6m", "2m"], "qsy_cost": 8}\n',
+            encoding="utf-8",
+        )
+        legacy = load(old)
+        assert "modes" not in old.read_text(encoding="utf-8")
+        assert legacy["modes"] == "all"
+        assert legacy["bands"] == ["6m", "2m"]
+
+
+def test_mode_filter_other_unknown_and_status_counts():
+    assert mode_bucket("FT8") == "FT8"
+    assert mode_bucket("ft4") == "FT4"
+    assert mode_bucket("SSB") == "SSB"
+    assert mode_bucket("USB") == "SSB"
+    assert mode_bucket("CW") == "CW"
+    assert mode_bucket("MSK144") == "Other"
+    assert mode_bucket("Q65") == "Other"
+    assert mode_bucket("FM") == "Other"
+    assert mode_bucket("data") == "Other"
+    assert mode_bucket("WSPR") == "Other"
+    assert mode_bucket("mystery") == "Other"
+    assert mode_bucket("") == "Other"
+    choices = mode_choices("all")
+    assert [item["mode"] for item in choices] == list(MODE_FILTERS)
+    assert all(item["on"] for item in choices)
+    partial = mode_choices(["CW", "Other"])
+    assert {item["mode"]: item["on"] for item in partial} == {
+        "SSB": False, "CW": True, "FT8": False, "FT4": False, "Other": True,
+    }
+
+    lines = [
+        "DX de K1TTT: 14074.0 DL1ABC JO62 FT8 1734Z",
+        "DX de K1TTT: 14025.0 G4ABC IO91 CW 1734Z",
+        "DX de K1TTT: 14100.0 K1DAT FN42 data 1734Z",
+        "DX de K1TTT: 50260.0 K1MSK FN20 MSK144 1734Z",
+        "DX de K1TTT: 144120.0 W2Q65 FN20 Q65 1734Z",
+        "DX de K1TTT: 146520.0 K1FM FN42 FM 1734Z",
+        "DX de K1TTT: 14095.6 W1SPR FN42 WSPR 1734Z",
+    ]
+    ft8, ft8_drops = _rows(lines, allowed_modes={"FT8"})
+    assert [row["mode"] for row in ft8] == ["FT8"]
+    assert ft8_drops["spot_count"] == 1
+    cw, cw_drops = _rows(lines, allowed_modes={"CW"})
+    assert [row["mode"] for row in cw] == ["CW"]
+    assert cw_drops["spot_count"] == 1
+    other, other_drops = _rows(lines, allowed_modes={"Other"})
+    modes = {row["mode"] for row in other}
+    for wanted in ("data", "MSK144", "Q65", "FM", "WSPR"):
+        assert wanted in modes, wanted
+    assert "FT8" not in modes and "CW" not in modes
+    assert other_drops["spot_count"] == len(other)
+    none, none_drops = _rows(lines, allowed_modes=set())
+    assert none == []
+    assert none_drops["spot_count"] == 0
+    both, both_drops = _rows(lines, allowed_modes={"FT8", "CW"})
+    assert {row["mode"] for row in both} == {"FT8", "CW"}
+    assert both_drops["spot_count"] == 2
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "cluster.json"
+        svc = ClusterService(path=path)
+        svc.update({"enabled": True, "bands": "all", "modes": ["FT8"]})
+        for line in lines:
+            svc.ingest(line, NOW)
+        with svc._lock:
+            svc.phase = "connected"
+        log = _log()
+
+        def classify(call, band, grid, mode):
+            return log.classify(call, band, grid, mode)
+
+        view = svc.public(
+            now=NOW, callsign="WA1HCO", our_grid=HOME,
+            operations=[], classify=classify,
+        )
+        assert view["modes"] == ["FT8"]
+        assert view["all_modes"] is False
+        assert [row["mode"] for row in view["rows"]] == ["FT8"]
+        assert view["spot_count"] == 1
+        assert view["needed_count"] == 1
+        assert view["status_line"] == "Cluster: logged in, 1 spots, 1 needed"
+        assert "Modes: FT8." in view["detail"]
+
+        svc.update({"modes": []})
+        empty = svc.public(
+            now=NOW, callsign="WA1HCO", our_grid=HOME,
+            operations=[], classify=classify,
+        )
+        assert empty["rows"] == []
+        assert empty["modes"] == []
+        assert "Choose modes on Operate" in empty["status_line"]
+
+        svc.update({"modes": "all"})
+        full = svc.public(
+            now=NOW, callsign="WA1HCO", our_grid=HOME,
+            operations=[], classify=classify,
+        )
+        assert full["all_modes"] is True
+        assert full["modes"] == "all"
+        assert full["needed_count"] == full["spot_count"]
+        assert f"{full['spot_count']} spots, {full['needed_count']} needed" in full["status_line"]
+        assert "Modes: every mode." in full["detail"]
+
+
+def test_spot_columns_match_the_roster():
+    root = Path(__file__).resolve().parents[2]
+    js = (root / "src/wims/server/static/wims.js").read_text(encoding="utf-8")
+    html = (root / "src/wims/server/static/ops.html").read_text(encoding="utf-8")
+    view = (root / "src/wims/integrations/cluster/view.py").read_text(encoding="utf-8")
+    css = (root / "src/wims/server/static/wims.css").read_text(encoding="utf-8")
+
+    ros = js.split("const ROS_COLS = [", 1)[1].split("\n];", 1)[0]
+    ros_keys = re.findall(r'\{key:"([a-z0-9_]+)"', ros)
+    labels = dict(re.findall(
+        r'\{key:"([a-z0-9_]+)",\s+label:"([^"]*)"', ros,
+    ))
+    spot = re.search(r"const SPOT_COL_KEYS = \[([^\]]+)\]", js)
+    assert spot, "SPOT_COL_KEYS missing"
+    spot_keys = re.findall(r'"([a-z0-9_]+)"', spot.group(1))
+    shared = [key for key in spot_keys if key in ros_keys]
+    assert shared == [key for key in ros_keys if key in set(shared)]
+    assert spot_keys[spot_keys.index("band") + 1] == "spotter"
+    assert spot_keys[spot_keys.index("spotter") + 1] == "mode"
+    assert spot_keys[spot_keys.index("score") - 1] == "qsy"
+    for skip in ("to_call", "msg", "instance", "snr", "az_ant", "delta_az"):
+        assert skip not in spot_keys, skip
+    extra = js.split("const SPOT_EXTRA = {", 1)[1].split("\n};", 1)[0]
+    for key in shared:
+        assert f'key: "{key}"' not in extra
+        assert labels[key]
+    assert 'label: "Spotter"' in extra
+    assert 'label: "QSY"' in extra
+    picker = js.split("function spotCols", 1)[1].split("function spotTitle", 1)[0]
+    assert "ROS_COLS.find" in picker
+    assert "spotCall" not in picker
+    assert js.count("function rosChase") == 1
+    chase = js.split("function rosChase", 1)[1].split("function rosCountryTip", 1)[0]
+    assert "need_label" in chase
+    draw = js.split("function renderSpotted", 1)[1].split("function clusterReadForm", 1)[0]
+    assert "item.cell(row)" in draw
+    assert "need_label" not in draw
+    assert "rosFitColumns" in draw
+    fit = js.split("function fitOperateColumns", 1)[1].split("function rosFitColumns", 1)[0]
+    assert '$("ros")' in fit and '$("spot")' in fit
+    assert "Math.max" in fit
+    assert "#ros, #spot" in css
+    assert "#ros th, #ros td, #spot th, #spot td" in css
+    assert 'id="spot-head"' in html
+    assert 'id="spot-modes"' in html
+    assert 'class="band-checks"' in html.split('id="spot-modes"', 1)[1]
+    spot_html = html.split('id="spot"', 1)[1].split("</table>", 1)[0]
+    assert "Why" not in spot_html
+    assert "MHz" not in spot_html
+    assert "def short_why" not in view
+    assert "NEED_LABEL" not in view
+
+
+def _public(svc, callsign="", live_calls=None, grid=HOME):
+    def classify(call, band, square, mode):
+        return {"needed": True}
+
+    return svc.public(
+        now=NOW, callsign=callsign, our_grid=grid,
+        operations=[], classify=classify, live_calls=live_calls,
+    )
+
+
+def test_station_call_settings_validate_and_prefer_setup():
+    assert effective_call({"station_call": "wa1hco"}, "K1ABC") == "WA1HCO"
+    assert effective_call({"station_call": ""}, "K1ABC") == "K1ABC"
+    assert effective_call({"station_call": "NOPE"}, "K1ABC") == "K1ABC"
+    assert effective_call({"station_call": ""}, "") == ""
+    assert sanitize({"station_call": "not a call"})["station_call"] == ""
+    assert sanitize({"station_call": "  k1abc/p "})["station_call"] == "K1ABC/P"
+    assert call_mismatch_warning("", ["K1ABC"]) == ""
+    assert call_mismatch_warning("WA1HCO", ["WA1HCO"]) == ""
+    assert call_mismatch_warning("WA1HCO", []) == ""
+    warning = call_mismatch_warning("WA1HCO", ["K1ABC", "N1XYZ"])
+    assert "WA1HCO" in warning and "K1ABC" in warning and "N1XYZ" in warning
+    assert "different" in warning
+    assert "will use WA1HCO" in warning
+
+
+def test_setup_station_call_is_used_when_wsjtx_is_not_running():
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({"enabled": True, "station_call": "wa1hco"})
+        view = _public(svc, callsign="")
+        assert view["station_call"] == "WA1HCO"
+        assert view["phase"] == "connecting"
+        assert view["callsign"] == "WA1HCO"
+        assert view["call_warning"] == ""
+        assert "no callsign" not in view["status_line"]
+
+
+def test_blank_setup_call_uses_live_call_and_warns_on_mismatch():
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({"enabled": True, "station_call": ""})
+        live = _public(svc, callsign="K1ABC", live_calls=["K1ABC"])
+        assert live["phase"] == "connecting"
+        assert live["callsign"] == "K1ABC"
+        assert live["call_warning"] == ""
+        neither = _public(svc, callsign="")
+        assert neither["phase"] == "need_call"
+        assert "Set the station call in Setup" in neither["status_line"]
+        svc.update({"enabled": True, "station_call": "WA1HCO"})
+        mismatch = _public(svc, callsign="K1ABC", live_calls=["K1ABC"])
+        assert mismatch["callsign"] == "WA1HCO"
+        assert "K1ABC" in mismatch["call_warning"]
+        assert "WA1HCO" in mismatch["call_warning"]
+
+
+def test_setup_station_call_connects_without_a_live_wsjtx_call():
+    with tempfile.TemporaryDirectory() as tmp:
+        opened = []
+
+        def boom(*_a, **_k):
+            opened.append(1)
+            raise ConnectionRefusedError("no")
+
+        svc = ClusterService(path=Path(tmp) / "cluster.json", connect=boom)
+
+        def pause(_seconds):
+            if opened or svc.phase == "need_call":
+                svc._stop.set()
+
+        svc._sleep = pause
+        svc.update({"enabled": True, "station_call": "WA1HCO"})
+        svc.start(lambda: "")
+        svc._thread.join(timeout=2)
+        assert opened == [1]
+        assert svc.phase != "need_call"
+        assert svc.login_call == "WA1HCO"
+
+
+def test_setup_page_has_station_call_and_warning():
+    root = Path(__file__).resolve().parents[2]
+    html = (root / "src/wims/server/static/setup.html").read_text(encoding="utf-8")
+    js = (root / "src/wims/server/static/wims.js").read_text(encoding="utf-8")
+    assert 'id="cluster-station-call"' in html
+    assert "Station call" in html
+    assert 'id="cluster-call-warning"' in html
+    assert "station_call" in js
+    assert "invalid_call" in js
+    assert "call_warning" in js
+    assert "That is not a valid station call." in js
+    assert "python -m" not in html.lower()
+    assert "PYTHONPATH" not in html
+
+
+
+
+if __name__ == "__main__":
+    import traceback
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    failed = 0
+    for t in tests:
+        try:
+            t()
+            print(f"PASS {t.__name__}")
+        except Exception:
+            failed += 1
+            print(f"FAIL {t.__name__}")
+            traceback.print_exc()
+    print(f"\n{len(tests) - failed}/{len(tests)} passed")
+    sys.exit(1 if failed else 0)
