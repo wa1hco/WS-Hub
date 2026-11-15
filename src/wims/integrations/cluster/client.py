@@ -29,7 +29,9 @@ CC Cluster asks the same kind of call prompt. The match is any case.
 
 A TCP session that sends no bytes is not logged in. After 60 seconds with
 no banner the status says the node sent nothing. Reconnect waits, starting
-at 5 seconds and doubling up to 5 minutes. This thread holds one socket.
+at a few seconds and doubling up to one minute. The socket is closed before
+that wait, so a dropped session does not keep the login busy. This thread
+holds one socket.
 """
 
 from __future__ import annotations
@@ -72,7 +74,7 @@ _REFUSED = re.compile(
 )
 
 BACKOFF_START = 5.0
-BACKOFF_CAP = 300.0
+BACKOFF_CAP = 60.0
 LOGIN_WAIT_S = 8.0
 QUIET_S = 180.0
 # TCP is up and the node has sent nothing. Do not call that logged in.
@@ -80,7 +82,7 @@ SILENT_S = 60.0
 
 
 def next_backoff(previous: float) -> float:
-    """Seconds to wait after a failed connection. Never under 5."""
+    """Seconds to wait after a failed connection. A few seconds, then up to 60."""
     if previous < BACKOFF_START:
         return BACKOFF_START
     return min(BACKOFF_CAP, previous * 2.0)
@@ -211,6 +213,8 @@ def _reason_for_os(exc: BaseException) -> str:
         text = str(exc).lower()
         if "quiet" in text:
             return "quiet"
+        if "closed" in text:
+            return "closed"
         return "timeout"
     return "timeout"
 
@@ -400,6 +404,7 @@ class ClusterService:
             bands=None if allowed is None else sorted(allowed),
             ttl_s=DEFAULT_TTL_S, drops=drops, weights=weights,
             last_spot_age=last_age, node_spoke=node_spoke, login_sent=login_sent,
+            phase=phase,
             modes=None if modes is None else [
                 name for name in MODE_FILTERS if name in modes
             ],
@@ -437,6 +442,17 @@ class ClusterService:
             "selected": selected,
             "selected_line": selected_line,
         }
+
+    def _mark_retry(self, phase: str, reason: str, backoff: float) -> None:
+        """Record a failed attempt. Login flags do not carry into the wait."""
+        with self._lock:
+            if self.phase == "off" and phase == "retry":
+                return
+            self.phase = phase
+            self.reason = reason
+            self.retry_s = backoff
+            self.login_sent = False
+            self.node_spoke = False
 
     def _pause(self, seconds: float) -> None:
         """Wait, but wake immediately when Setup changes or the server stops."""
@@ -495,37 +511,31 @@ class ClusterService:
                 sock = self._connect((host, port), 10.0)
             except Exception as exc:
                 backoff = next_backoff(backoff)
-                with self._lock:
-                    self.phase = "retry"
-                    self.reason = _reason_for_os(exc)
-                    self.retry_s = backoff
+                self._mark_retry("retry", _reason_for_os(exc), backoff)
                 self._pause(backoff)
                 continue
+            wait = 0.0
             try:
                 with self._lock:
                     self._sock = sock
                     self.phase = "tcp"
                     self.reason = ""
+                    self.login_sent = False
+                    self.node_spoke = False
                 self._read_loop(sock, call, gen)
                 backoff = 0.0
-                continue
             except LinkStop as stop:
                 backoff = next_backoff(backoff)
-                with self._lock:
-                    self.phase = stop.phase
-                    self.reason = stop.reason
-                    self.retry_s = backoff
-                self._pause(backoff)
+                self._mark_retry(stop.phase, stop.reason, backoff)
+                wait = backoff
             except Exception as exc:
                 backoff = next_backoff(backoff)
-                with self._lock:
-                    if self.phase != "off":
-                        self.phase = "retry"
-                        self.reason = _reason_for_os(exc)
-                        self.retry_s = backoff
-                self._pause(backoff)
+                self._mark_retry("retry", _reason_for_os(exc), backoff)
+                wait = backoff
             finally:
                 self._close_socket()
+            if wait and not self._stop.is_set():
+                self._pause(wait)
 
     def _note_progress(self, link: ClusterLink, saw_bytes: bool) -> None:
         """TCP up is not logged in. Logged in is not the same as spots."""
@@ -560,7 +570,7 @@ class ClusterService:
                 with self._lock:
                     if self._gen != gen or not self._settings.get("enabled"):
                         return
-                raise TimeoutError("closed") from exc
+                raise LinkStop("retry", "closed") from exc
             if data is None:
                 link.poll()
                 if link.extra:
@@ -578,7 +588,7 @@ class ClusterService:
                 with self._lock:
                     if self._gen != gen or not self._settings.get("enabled"):
                         return
-                raise TimeoutError("closed")
+                raise LinkStop("retry", "closed")
             saw_bytes = True
             last_byte = self._monotonic()
             spots = link.feed(data)
