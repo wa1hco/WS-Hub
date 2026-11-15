@@ -77,7 +77,7 @@ class UpdatesPanel:
         self._list.bind("<Leave>", self._on_list_leave, add="+")
 
         self._summary = tk.Label(
-            frame, text="No update list yet.",
+            frame, text="Hover a version to read what changed.",
             font=_ui_font(11), bg="#f4f4f4", fg="#444444",
             wraplength=500, justify="left", anchor="w",
         )
@@ -95,7 +95,7 @@ class UpdatesPanel:
             row, text="Install this update", font=_ui_font(12),
             command=on_install, padx=8, pady=3,
         )
-        self._install_btn.pack(side="left", padx=(8, 0))
+        # Packed only while the selected row is newer than this copy.
         ToolTip(
             self._install_btn,
             "Install the update you selected. You can go back afterwards.",
@@ -142,12 +142,18 @@ class UpdatesPanel:
         if not self._entries:
             self._summary.configure(text="No versions to show.")
             self._list_tip.set_text("No versions to show.")
+            self._show_install(False)
             return
         self._list_tip.hide()
         pick = 0
         if previous:
             for i, entry in enumerate(self._entries):
                 if entry.tag == previous:
+                    pick = i
+                    break
+        else:
+            for i, entry in enumerate(self._entries):
+                if entry.relation == "newer":
                     pick = i
                     break
         self._list.selection_clear(0, "end")
@@ -181,9 +187,32 @@ class UpdatesPanel:
         if entry is not None:
             self._show_entry(entry)
 
+    def _relation_line(self, entry: ReleaseEntry) -> str:
+        if entry.relation == "current":
+            return "This is the copy already on this PC."
+        if entry.relation == "newer":
+            return "This update is newer than the copy on this PC. Hover the row to read what changed."
+        if entry.relation == "older":
+            return "This is an older copy. Hover the row to read what changed."
+        return "Hover the row to read what changed."
+
+    def _show_install(self, visible: bool) -> None:
+        try:
+            packed = bool(self._install_btn.winfo_manager())
+        except Exception:
+            packed = False
+        if visible and not packed:
+            try:
+                self._install_btn.pack(side="left", padx=(8, 0), before=self._back_btn)
+            except Exception:
+                self._install_btn.pack(side="left", padx=(8, 0))
+        elif not visible and packed:
+            self._install_btn.pack_forget()
+
     def _show_entry(self, entry: ReleaseEntry) -> None:
-        """Selection drives the summary line and Install. Hover drives the tip."""
-        self._summary.configure(text=entry.summary())
+        """Selection drives the short status line and Install. Hover shows notes."""
+        self._summary.configure(text=self._relation_line(entry))
+        self._show_install(entry.relation == "newer")
 
     def _row_at(self, y: int) -> int | None:
         if not self._entries:

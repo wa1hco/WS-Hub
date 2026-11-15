@@ -1262,7 +1262,8 @@ const ADV_TIPS = {
   saveCustom: "Save these contest choices and switch Goal to Custom.",
   udcPath: "An N1MM contest file on this computer. WIMS reads it, shows what it understood, and does not change the file.",
   udcImport: "Read the N1MM contest file named above and show the name, how often a station counts, the points, and the multipliers.",
-  checkLogs: "Compare the logs WIMS found on this computer and list what does not match. Nothing in the logs is changed.",
+  checkLogs: "Compare the logs WIMS found on the site server computer and list what does not match. Nothing in the logs is changed.",
+  checkLogsHere: "Compare the logs on this computer. The seat agent must be running, and nothing in the logs is changed.",
 };
 
 function tipBtn(text) {
@@ -1372,10 +1373,14 @@ function renderLogPageControls() {
   if (check && check.dataset.ready !== "1") {
     check.innerHTML =
       `<p class="advline"><button type="button" id="logs-check" title="${escAttr(ADV_TIPS.checkLogs)}">Check logs</button>${tipBtn(ADV_TIPS.checkLogs)} ` +
+      `<button type="button" id="logs-check-here" title="${escAttr(ADV_TIPS.checkLogsHere)}">Check logs on this computer</button>${tipBtn(ADV_TIPS.checkLogsHere)} ` +
       `<span id="logs-check-progress" class="meta"></span></p>` +
       `<div id="logs-check-out"></div>`;
     check.dataset.ready = "1";
     $("logs-check").onclick = () => startLogCheck();
+    $("logs-check-here").onclick = () => {
+      window.open("http://127.0.0.1:8790/check-logs", "_blank", "noopener");
+    };
   }
 }
 

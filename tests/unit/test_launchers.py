@@ -151,8 +151,13 @@ class ZeroKnowledgeWordingTests(unittest.TestCase):
         src = (ROOT / "src" / "wims" / "launcher" / "home_panel.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn('text="Check logs"', src)
-        self.assertIn("on_check_logs", src)
+        self.assertNotIn('text="Check logs"', src)
+        self.assertNotIn("on_check_logs", src)
+        console_js = (ROOT / "src" / "wims" / "server" / "static" / "wims.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("logs-check", console_js)
+        self.assertIn("Check logs on this computer", console_js)
         shortcut = (ROOT / "scripts" / "windows" / "Install-WimsDesktopShortcut.ps1").read_text(
             encoding="utf-8"
         )
@@ -163,9 +168,7 @@ class ZeroKnowledgeWordingTests(unittest.TestCase):
             shortcut,
         )
         self.assertIn("Removed the Check logs icon", shortcut)
-        # The constructor still accepts the existing callers; the new
-        # callback is optional.
-        self.assertIn("on_check_logs", AgentHomePanel.__init__.__code__.co_varnames)
+        self.assertNotIn("on_check_logs", AgentHomePanel.__init__.__code__.co_varnames)
 
     def test_start_local_log_check_runs_the_existing_page(self):
         from wims.launcher.app import start_local_log_check

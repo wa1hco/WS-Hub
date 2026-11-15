@@ -69,6 +69,8 @@ class AgentState:
         self.server_url: str | None = None
         self.configured_server: str | None = None  # CLI/env, may differ from discover
         self.presence: dict | None = None          # last plane-E beacon
+        self.presence_hints: list[str] = []
+        self.presence_reachable = False
         self.fleet: bool = True
         self.solo: bool = False
         self.agent_id: str | None = None
@@ -166,21 +168,36 @@ class AgentState:
 
     def discover_server(self, duration_s: float | None = None,
                         *, http_fallback: bool = True) -> dict | None:
-        """UDP presence then HTTP /24 probe; update state. Returns beacon or None."""
+        """UDP presence then HTTP confirm; update state. Returns a live beacon or None."""
         if P is None:
             self.set_presence(None)
+            self.presence_hints = []
+            self.presence_reachable = False
             return None
         try:
-            b = P.discover_site_server(
+            result = P.discover_site_server_detailed(
                 iface=self.presence_iface,
                 duration_s=duration_s if duration_s is not None else P.STARTUP_LISTEN_S,
                 http_fallback=http_fallback,
             )
+            b = result.beacon
+            announced = result.announced or b
+            self.presence_hints = list(result.hints or [])
+            self.presence_reachable = bool(b)
         except Exception as e:
             # Multicast join can fail on locked-down NICs; never crash the agent.
             print(f"  (discovery failed: {e})", file=sys.stderr)
             b = None
-        self.set_presence(b)
+            announced = None
+            self.presence_hints = []
+            self.presence_reachable = False
+        if b:
+            self.set_presence(b)
+        else:
+            # Keep the announcement for the status page, but do not adopt
+            # an unreachable URL as the export target.
+            with self._lock:
+                self.presence = announced
         return b
 
 
@@ -194,45 +211,49 @@ def _same_site_host(configured: str, discovered: str) -> bool:
 
 
 def _presence_block_html(state: AgentState) -> str:
-    """Clickable Operate / Status / Setup links from last presence beacon."""
+    """Plain site-server status, with links only when this PC can reach it."""
+    from wims.discovery.presence import beacon_endpoints
+    from wims.launcher.site_status import format_site_server_status, canonical_site_base
+
     p = state.get_presence()
+    reachable = bool(getattr(state, "presence_reachable", False))
+    hints = list(getattr(state, "presence_hints", None) or [])
     if not p:
+        line = format_site_server_status()
         return (
-            '<div class="sum" style="color:#9a6700">'
-            "No WIMS site server heard on the LAN (presence multicast). "
-            "Start the site server on the contest PC (double-click WIMS). "
-            "This PC finds it on the network."
-            "</div>"
+            f'<div class="sum" style="color:#9a6700">{html.escape(line)}</div>'
         )
-    urls = p.get("urls") or {}
-    host = html.escape(str(p.get("hostname") or "?"))
-    base = html.escape(str(p.get("console_base") or ""))
-    op = html.escape(urls.get("operate") or (p.get("console_base") or "") + "/")
-    st = html.escape(urls.get("status") or urls.get("overview") or "")
-    su = html.escape(urls.get("setup") or "")
-    links = []
-    if op:
-        links.append(f'<a class="btn" href="{op}" target="_blank" rel="noopener">Operate</a>')
-    if st:
-        links.append(f'<a class="btn" href="{st}" target="_blank" rel="noopener">Status</a>')
-    if su:
-        links.append(f'<a class="btn" href="{su}" target="_blank" rel="noopener">Setup</a>')
-    # Only mention a mismatch when export would hit a *different* host than the
-    # buttons — same-machine localhost vs LAN IP is silent on purpose.
-    note = ""
-    cfg = state.configured_server or ""
-    disc = (p.get("console_base") or "").rstrip("/")
-    if cfg and disc and not _same_site_host(cfg, disc):
-        note = (
-            f'<div class="meta">Export target {html.escape(cfg.rstrip("/"))} '
-            f"(buttons open {html.escape(disc)}).</div>"
+    hostname = str(p.get("hostname") or "")
+    ends = beacon_endpoints(p)
+    address = ends[0] if ends else canonical_site_base(p.get("console_base") or "")
+    line = format_site_server_status(
+        reachable=reachable,
+        announced=not reachable,
+        hostname=hostname,
+        address=address,
+    )
+    links = ""
+    if reachable and address:
+        base = address.rstrip("/")
+        urls = p.get("urls") or {}
+        op = urls.get("operate") or (base + "/")
+        st = urls.get("status") or urls.get("overview") or (base + "/overview")
+        su = urls.get("setup") or (base + "/setup")
+        links = (
+            f'<div class="bar">'
+            f'<a class="btn" href="{html.escape(op)}" target="_blank" rel="noopener">Operate</a>'
+            f'<a class="btn" href="{html.escape(st)}" target="_blank" rel="noopener">Status</a>'
+            f'<a class="btn" href="{html.escape(su)}" target="_blank" rel="noopener">Setup</a>'
+            f"</div>"
         )
+    hint_html = ""
+    if hints and not reachable:
+        hint_html = f'<div class="meta">{html.escape(hints[0])}</div>'
     return (
         f'<div class="panel">'
-        f'<div><b>Site WIMS server</b> (heard on LAN)</div>'
-        f'<div class="meta">{host} · {base}</div>'
-        f'<div class="bar">{"".join(links)}</div>'
-        f'{note}'
+        f'<div><b>{html.escape(line)}</b></div>'
+        f'{links}'
+        f'{hint_html}'
         f"</div>"
     )
 
@@ -422,6 +443,7 @@ def _page_html(state: AgentState) -> bytes:
     <form method="post" action="/export"><button type="submit">Export to server</button></form>
     <form method="post" action="/discover"><button type="submit">Find site server</button></form>
     <form method="post" action="/check-update"><button type="submit">Check for updates</button></form>
+    <a class="btn" href="/check-logs">Check logs</a>
   </div>
   <h2 class="sec">WSJT-X</h2>
   {wsjt_table}
@@ -462,6 +484,8 @@ def make_handler(state: AgentState):
                            json.dumps(p or {}, indent=2).encode("utf-8"))
             elif path == "/healthz":
                 self._send(200, "application/json", b'{"ok":true,"role":"agent"}')
+            elif path == "/check-logs":
+                self._do_check_logs()
             elif path == "/export":
                 # GET convenience for browser link
                 self._do_export()
@@ -501,6 +525,21 @@ def make_handler(state: AgentState):
                 self._do_export()
             else:
                 self._send(404, "text/plain", b"not found")
+
+        def _do_check_logs(self):
+            try:
+                from wims.logaudit.page import start_in_background
+                url = start_in_background()
+            except Exception as e:
+                msg = (
+                    "Check logs did not open. The logs on this computer "
+                    "could not be read."
+                )
+                self._send(503, "text/plain; charset=utf-8", msg.encode("utf-8"))
+                return
+            self.send_response(303)
+            self.send_header("Location", url)
+            self.end_headers()
 
         def _do_if_seat(self, raw: bytes):
             from wims.core.if_seats import set_reports_if

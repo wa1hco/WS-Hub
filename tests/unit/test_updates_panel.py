@@ -108,13 +108,16 @@ class HoverTests(unittest.TestCase):
         panel._on_list_leave()
         self.assertIsNone(panel._hover_index)
 
-    def test_selection_keeps_the_summary_and_not_the_hover_tip(self):
+    def test_selection_does_not_put_notes_in_the_summary(self):
         panel = self._panel()
         panel._on_list_motion(SimpleNamespace(y=25))
         hovered = panel._list_tip.text
+        panel._show_install = lambda visible: None
         panel._show_entry(panel._entries[0])
-        self.assertIn("Halt stays live", panel._summary.text)
+        self.assertNotIn("Halt stays live", panel._summary.text)
+        self.assertIn("Hover the row", panel._summary.text)
         self.assertEqual(panel._list_tip.text, hovered)
+        self.assertIn("September", hovered)
 
 
 if __name__ == "__main__":

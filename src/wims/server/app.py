@@ -3094,17 +3094,23 @@ def make_handler(live: LiveFleet, refresh: float):
                 # Rich healthz for zero-memory discovery (agent HTTP subnet probe).
                 # Legacy clients only need "ok": true.
                 host_hdr = (self.headers.get("Host") or "").strip()
+                port = int(self.server.server_address[1])
+                from wims.discovery.presence import list_lan_ipv4s, plain_ipv4
                 if host_hdr:
-                    base = f"http://{host_hdr}"
+                    host_only = host_hdr.split(":", 1)[0]
+                    host_only = plain_ipv4(host_only) or host_only
+                    base = f"http://{host_only}:{port}"
                 else:
-                    base = f"http://127.0.0.1:{self.server.server_address[1]}"
+                    base = f"http://127.0.0.1:{port}"
+                lan_ips = list_lan_ipv4s()
                 body = {
                     "ok": True,
                     "role": "wims-site-server",
                     "kind": "wims-server",
                     "hostname": socket.gethostname(),
                     "console_base": base,
-                    "http_port": self.server.server_address[1],
+                    "lan_ips": lan_ips,
+                    "http_port": port,
                     "urls": {
                         "operate": f"{base}/",
                         "status": f"{base}/overview",
@@ -3593,9 +3599,23 @@ def main() -> None:
             exclude_instance_id=instance_id,
         )
         if peers and not args.force_server:
-            print(P.format_conflict_message(peers, self_host=socket.gethostname()),
-                  file=sys.stderr)
-            sys.exit(2)
+            live = P.live_conflict_peers(peers)
+            if live:
+                print(P.format_conflict_message(live, self_host=socket.gethostname()),
+                      file=sys.stderr)
+                sys.exit(2)
+            # UDP heard a server this PC cannot reach (often a firewall).
+            # Starting here is allowed so the station still has a console.
+            announced = peers[0]
+            host = announced.get("hostname") or "another PC"
+            where = (P.beacon_endpoints(announced) or [""])[0].replace("http://", "").replace("https://", "")
+            print(
+                f"{host} is announcing a site server"
+                + (f" at {where}" if where else "")
+                + ", but this PC cannot reach it. Starting a site server on this PC. "
+                "The firewall on that other PC may be blocking the site console.",
+                file=sys.stderr,
+            )
         if peers and args.force_server:
             print("WARNING: --force-server: another WIMS site server is announcing; "
                   "starting anyway (lab only).", file=sys.stderr)
@@ -3805,7 +3825,10 @@ def main() -> None:
 
     if not args.no_presence:
         def _on_conflict(peers):
-            print("\n" + P.format_conflict_message(peers), file=sys.stderr)
+            live = P.live_conflict_peers(peers)
+            if not live:
+                return
+            print("\n" + P.format_conflict_message(live), file=sys.stderr)
             print("Demoting: another site server appeared on the LAN. Exiting.",
                   file=sys.stderr)
             # Hard exit from daemon thread — dual primary is worse than a drop.
