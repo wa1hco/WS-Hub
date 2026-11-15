@@ -29,7 +29,8 @@ from urllib.request import Request, urlopen
 
 from wims import __version__ as _PKG_VERSION
 
-_DEFAULT_GITHUB_REPO = "wa1hco/WIMS"
+# Renamed from wa1hco/WIMS; GitHub redirects the old name for 1.0.17 installs.
+_DEFAULT_GITHUB_REPO = "wa1hco/WS-Hub"
 _TAG_VER = re.compile(
     r"^v?(?P<base>\d+\.\d+\.\d+)(?:-(?P<suffix>tester|rc(?P<rc>[1-9]\d*)))?$"
 )
@@ -69,6 +70,77 @@ class UpdateInfo:
     def remote_label(self) -> str:
         s = self.remote_short
         return f"{s} {self.remote_date}".strip() if self.remote_date else s
+
+
+@dataclass(frozen=True)
+class BannerUpdateAction:
+    """What the launcher banner button should say and do."""
+
+    kind: str  # install | pull | download
+    button_label: str
+    tooltip: str
+    how: str
+    install_tag: str = ""
+
+    @property
+    def display_version(self) -> str:
+        tag = (self.install_tag or "").strip()
+        if not tag:
+            return "update"
+        return tag if tag.lower().startswith("v") else f"v{tag}"
+
+
+def banner_update_action(
+    info: UpdateInfo,
+    *,
+    windows: bool | None = None,
+) -> BannerUpdateAction:
+    """Choose the banner button for this copy: install, pull, or download.
+
+    A Linux (or macOS) release install has no git and can replace itself in
+    place. A git clone still pulls origin/main. A Windows zip cannot swap
+    itself yet, so the button only opens GitHub Releases.
+    """
+    if windows is None:
+        windows = sys.platform.startswith("win")
+    dirty = " (local edits present)" if info.dirty else ""
+    tag = (info.release_tag or "").strip()
+    stay = "Site server on this PC is left running; seat agents restart after."
+    if not info.is_git and not windows:
+        action_name = "update"
+        if tag:
+            action_name = tag if tag.lower().startswith("v") else f"v{tag}"
+        label = f"Install\n{action_name}"
+        how = f"Click Install {action_name} to replace this copy."
+        tooltip = (
+            "Download and install this release in place. "
+            "The current copy is saved so you can go back. " + stay
+        )
+        return BannerUpdateAction(
+            kind="install",
+            button_label=label,
+            tooltip=tooltip,
+            how=how,
+            install_tag=tag,
+        )
+    if not info.is_git and windows:
+        return BannerUpdateAction(
+            kind="download",
+            button_label="Download\nupdate",
+            tooltip="Open GitHub Releases in a browser. This copy cannot be replaced in place on Windows yet.",
+            how="Click Download update to open GitHub Releases.",
+        )
+    if info.source == "release":
+        picked = tag or "a release"
+        how = f"Click Update WS Hub to pull, or pick {picked} in Updates."
+    else:
+        how = f"Click Update WS Hub to pull GitHub main{dirty}."
+    return BannerUpdateAction(
+        kind="pull",
+        button_label="Update\nWS Hub",
+        tooltip="Pull latest from GitHub main (one click). " + stay,
+        how=how,
+    )
 
 
 def _git_env() -> dict[str, str]:
@@ -1184,6 +1256,10 @@ def apply_release(
     if not wanted:
         return False, "Select an update in the list first."
     if not (root / ".git").exists():
+        if _can_replace_tree():
+            return _apply_release_tree(
+                root, wanted, rollback_file=rollback_file, on_progress=on_progress,
+            )
         _say(on_progress, "This copy cannot switch versions by itself.")
         return False, (
             "This copy was not installed from git, so WIMS cannot switch it "
@@ -1223,7 +1299,7 @@ def apply_release(
     code, _out = _git(root, ["checkout", "--detach", wanted])
     if code != 0:
         return False, "Could not switch to that release. This copy is unchanged."
-    return True, f"Now on {wanted}. Restarting the WIMS window."
+    return True, f"Now on {wanted}. Restarting the WS Hub window."
 
 
 def rollback_release(
@@ -1242,6 +1318,8 @@ def rollback_release(
             "WIMS remembers one when you install an update."
         )
     if not (root / ".git").exists():
+        if saved.get("kind") == "tree" and _can_replace_tree():
+            return _rollback_release_tree(root, saved, on_progress=on_progress)
         return False, "This copy cannot switch versions by itself."
     if _tree_dirty(root):
         return False, (
@@ -1261,4 +1339,179 @@ def rollback_release(
         restored = code_c == 0
     if not restored:
         return False, "Could not go back. This copy is unchanged."
-    return True, "Back on the previous copy. Restarting the WIMS window."
+    return True, "Back on the previous copy. Restarting the WS Hub window."
+
+
+# ── Release download installs (Linux / macOS, no git) ─────────────────
+# A copy from "Install WS Hub" lives in ~/.local/share/ws-hub with no .git.
+# Install this update downloads that release's Linux tarball and
+# SHA256SUMS, checks the hash, unpacks next to the copy, and swaps it in.
+# The replaced copy stays at <folder>.previous for Go back.
+
+_LINUX_ASSET = re.compile(r"^wims-(?P<ver>.+)-linux-x86_64\.tar\.gz$")
+
+
+def _can_replace_tree() -> bool:
+    return not sys.platform.startswith("win")
+
+
+def _download(url: str, dest: Path, *, timeout: float = 60.0) -> None:
+    req = Request(url, headers={"User-Agent": f"wims-update/{_PKG_VERSION}"})
+    with urlopen(req, timeout=timeout) as resp, open(dest, "wb") as out:  # noqa: S310
+        while True:
+            chunk = resp.read(1 << 16)
+            if not chunk:
+                break
+            out.write(chunk)
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def release_assets(tag: str, *, github: str | None = None) -> tuple[dict[str, str], str]:
+    """Asset name -> download URL for one release tag. ("", error) on failure."""
+    gh = (github or github_repo()).strip("/")
+    data, err = _http_json(
+        f"https://api.github.com/repos/{gh}/releases/tags/{quote(tag, safe='')}"
+    )
+    if not isinstance(data, dict):
+        return {}, err or "no release"
+    out: dict[str, str] = {}
+    for item in data.get("assets") or []:
+        if isinstance(item, dict) and item.get("name") and item.get("browser_download_url"):
+            out[str(item["name"])] = str(item["browser_download_url"])
+    return out, ""
+
+
+def _expected_sum(sums_text: str, name: str) -> str:
+    for line in sums_text.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[-1].lstrip("*") == name:
+            return parts[0].lower()
+    return ""
+
+
+def _safe_extract(archive: Path, into: Path) -> Path:
+    """Unpack the tarball and return its one top folder."""
+    import tarfile
+
+    with tarfile.open(archive, "r:gz") as tf:
+        base = into.resolve()
+        for m in tf.getmembers():
+            target = (into / m.name).resolve()
+            if target != base and base not in target.parents:
+                raise ValueError(f"unsafe path in archive: {m.name}")
+            if m.issym() or m.islnk():
+                link = (target.parent / m.linkname).resolve()
+                if base not in link.parents:
+                    raise ValueError(f"unsafe link in archive: {m.name}")
+        if hasattr(tarfile, "data_filter"):
+            tf.extractall(into, filter="data")
+        else:  # Python before 3.10.12 / 3.11.4; paths were checked above.
+            tf.extractall(into)
+    tops = [p for p in into.iterdir() if p.is_dir()]
+    if len(tops) != 1:
+        raise ValueError("the download did not have one program folder")
+    return tops[0]
+
+
+def _apply_release_tree(
+    root: Path,
+    tag: str,
+    *,
+    rollback_file: Path | None = None,
+    on_progress=None,
+    assets: dict[str, str] | None = None,
+) -> tuple[bool, str]:
+    import shutil
+    import tempfile
+
+    from wims.launcher.install_tree import is_program_tree, previous_dir, swap_in
+
+    if not is_program_tree(root):
+        return False, "This copy is not a WS Hub program folder. Nothing was changed."
+    _say(on_progress, f"Finding the {tag} download.")
+    if assets is None:
+        assets, err = release_assets(tag)
+        if not assets and err:
+            return False, "Could not reach GitHub. This copy is unchanged."
+    tar_name = next((n for n in assets if _LINUX_ASSET.match(n)), "")
+    if not tar_name or "SHA256SUMS" not in assets:
+        return False, (
+            f"{tag} has no Linux download with a checksum. This copy is unchanged."
+        )
+    stage = Path(tempfile.mkdtemp(prefix=f".{root.name}-update-", dir=root.parent))
+    try:
+        archive = stage / tar_name
+        sums = stage / "SHA256SUMS"
+        try:
+            _say(on_progress, f"Downloading {tar_name}.")
+            _download(assets[tar_name], archive)
+            _download(assets["SHA256SUMS"], sums)
+        except (OSError, URLError, HTTPError, ValueError):
+            return False, "The download did not finish. This copy is unchanged."
+        want = _expected_sum(sums.read_text(encoding="utf-8", errors="replace"), tar_name)
+        if not want or want != _sha256(archive):
+            return False, (
+                "The download did not match its checksum. This copy is unchanged."
+            )
+        _say(on_progress, "Unpacking.")
+        unpack = stage / "unpacked"
+        unpack.mkdir()
+        try:
+            tree = _safe_extract(archive, unpack)
+        except (OSError, ValueError) as e:
+            return False, f"Could not unpack the download ({e}). This copy is unchanged."
+        if not is_program_tree(tree):
+            return False, "The download is not a WS Hub program. This copy is unchanged."
+        dest = Path(rollback_file) if rollback_file is not None else rollback_path()
+        try:
+            _write_rollback(dest, {
+                "schema": 1,
+                "kind": "tree",
+                "sha": f"tree:{_PKG_VERSION}",
+                "previous": str(previous_dir(root)),
+                "tag": tag,
+            })
+        except OSError:
+            return False, "Could not save the previous copy. Nothing was changed."
+        _say(on_progress, f"Switching to {tag}.")
+        try:
+            swap_in(tree, root, keep_previous=True)
+        except (OSError, ValueError):
+            return False, "Could not switch to that release. This copy is unchanged."
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    return True, f"Now on {tag}. Restarting the WS Hub window."
+
+
+def _rollback_release_tree(root: Path, saved: dict, *, on_progress=None) -> tuple[bool, str]:
+    import shutil
+    import tempfile
+
+    from wims.launcher.install_tree import is_program_tree, swap_in
+
+    prev = Path(str(saved.get("previous") or ""))
+    if not str(saved.get("previous") or "") or not is_program_tree(prev):
+        return False, "The previous copy is gone, so there is nothing to go back to."
+    _say(on_progress, "Restoring the previous copy.")
+    stage = Path(tempfile.mkdtemp(prefix=f".{root.name}-back-", dir=root.parent))
+    try:
+        held = stage / "tree"
+        os.replace(prev, held)
+        try:
+            swap_in(held, root, keep_previous=True)
+        except (OSError, ValueError):
+            if held.exists() and not prev.exists():
+                os.replace(held, prev)
+            return False, "Could not go back. This copy is unchanged."
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    return True, "Back on the previous copy. Restarting the WS Hub window."

@@ -60,23 +60,30 @@ from wims.launcher.assets import (
     AGENT_SERVER,
     AGENT_WSJT,
     INTENT_N1MM,
+    INTENT_ANTENNAS,
     INTENT_SERVER,
     INTENT_SSB_CW,
     INTENT_TO_AGENT,
     INTENT_WSJT,
     agents_for_intent,
     detect_assets,
-    is_wsjt_only_seat,
     load_key_device,
+    load_antennas,
     AssetSnapshot,
     load_seat_intent,
     missing_intent_agent_labels,
     n1mm_seat_flags,
     offer_site_server,
     save_key_device,
+    save_antennas,
     save_seat_intent,
     seat_intent_saved,
     seed_intent_from_assets,
+)
+from wims.launcher.site_choice import (
+    LOCAL_SITE,
+    same_site_host,
+    should_host_local_site_server,
 )
 from wims.launcher.home_panel import AgentHomePanel
 from wims.launcher.process_replace import (
@@ -96,6 +103,7 @@ from wims.launcher.update_check import (
     UpdateSnapshot,
     apply_git_update,
     apply_release,
+    banner_update_action,
     clamp_check_interval,
     env_skip_update_check,
     gather_updates,
@@ -110,9 +118,18 @@ _SRC = _REPO_ROOT / "src"
 _ICON_ICO = _REPO_ROOT / "scripts" / "windows" / "assets" / "wims.ico"
 # Linux/.desktop needs PNG — .ico often renders blank/transparent in GNOME/KDE.
 _ICON_PNG = _REPO_ROOT / "scripts" / "assets" / "wims.png"
+# What the Desktop icon and the app menu entry are called. Older installs used
+# "WIMS"; writing the new shortcut removes that one so there is never two.
+SHORTCUT_NAME = "WS Hub"
+_LEGACY_SHORTCUT_NAMES = ("WIMS",)
+# X11 instance name (first WM_CLASS field) for every WS Hub Tk window.
+# Tk capitalizes the class (second field) to "Ws-hub". Ubuntu's dock matches
+# StartupWMClass against the instance first, so the desktop entry uses this
+# same string.
+WM_CLASS_LAUNCHER = "ws-hub"
 _DETAILS_LOG = _REPO_ROOT / "scratch" / "launcher-details.log"
 
-_DEFAULT_SITE = "http://192.168.1.119:8787"
+_DEFAULT_SITE = LOCAL_SITE
 # Pixels under the last fitted row so the checkbox border is not clipped.
 _HOME_FIT_PAD = 4
 # Other tools… may grow the window, then scroll. The margin stays small so
@@ -356,6 +373,11 @@ def find_window_icon_path() -> Path | None:
     return find_icon_path()
 
 
+def new_tk_root(tk_mod, class_name: str = WM_CLASS_LAUNCHER):
+    """A top-level window GNOME can match to the WS Hub desktop icon."""
+    return tk_mod.Tk(className=class_name)
+
+
 def _which_browser(candidate: str) -> str | None:
     """Resolve a browser executable, including common Windows install paths."""
     if not candidate:
@@ -477,15 +499,8 @@ _FIREFOX_USER_CHROME = """\
 
 def _kiosk_profile_dir() -> Path:
     """Dedicated Firefox/Chrome profile so the console is not mixed with browsing."""
-    if sys.platform.startswith("win"):
-        local = (os.environ.get("LOCALAPPDATA") or "").strip()
-        if local:
-            return Path(local) / "WIMS" / "kiosk-profile"
-        return Path.home() / "AppData" / "Local" / "WIMS" / "kiosk-profile"
-    xdg = (os.environ.get("XDG_DATA_HOME") or "").strip()
-    if xdg:
-        return Path(xdg) / "wims" / "kiosk-profile"
-    return Path.home() / ".local" / "share" / "wims" / "kiosk-profile"
+    from wims.console.kiosk import default_kiosk_profile_dir
+    return default_kiosk_profile_dir()
 
 
 def prepare_firefox_kiosk_profile(profile: Path | None = None) -> Path:
@@ -530,7 +545,10 @@ def _firefox_kiosk_command(url: str) -> list[str] | None:
     for candidate in candidates:
         executable = _which_browser(candidate)
         if executable:
-            profile = prepare_firefox_kiosk_profile()
+            from wims.console.kiosk import firefox_kiosk_profile_dir
+            profile = prepare_firefox_kiosk_profile(
+                firefox_kiosk_profile_dir(executable),
+            )
             return [
                 executable,
                 "--new-instance",
@@ -542,37 +560,98 @@ def _firefox_kiosk_command(url: str) -> list[str] | None:
     return None
 
 
+def _open_url_in_default_browser(url: str) -> str:
+    """Open the console with the desktop's usual browser (no dedicated profile)."""
+    if sys.platform.startswith("linux"):
+        xdg = shutil.which("xdg-open")
+        if xdg:
+            subprocess.Popen(
+                [xdg, url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return "browser"
+    webbrowser.open(url)
+    return "browser"
+
+
+def _start_console_command(command: list[str], *, mode: str, hidden: bool) -> str:
+    """Start a dedicated console window; fall back if it exits immediately."""
+    from wims.console.kiosk import (
+        clear_console_pid,
+        console_process_stayed_up,
+        remember_console_pid,
+    )
+
+    kw: dict = {}
+    if hidden:
+        kw["stdout"] = subprocess.DEVNULL
+        kw["stderr"] = subprocess.DEVNULL
+    proc = subprocess.Popen(command, **kw)
+    if console_process_stayed_up(proc):
+        remember_console_pid(proc.pid)
+        return mode
+    try:
+        proc.wait(timeout=1)
+    except Exception:
+        pass
+    clear_console_pid()
+    return ""
+
+
 def open_wims_url(url: str) -> str:
     """Open the site console on this PC, or reload the one already open.
 
     A page on another PC is not "already open" here. Chrome, Chromium, and
-    Edge get an app window whose spot is saved. Anything else is today's
-    browser open; the caller says the window cannot be placed.
+    Edge get an app window whose spot is saved. Snap Firefox gets a profile
+    it can write. If a dedicated window exits immediately, the usual
+    browser opens the same URL instead.
     """
+    from wims.console.kiosk import (
+        hold_console_launch_lock,
+        live_console_pid,
+    )
     from wims.console.place import local_console_is_open, request_console_reload
 
     if local_console_is_open(url):
         request_console_reload(url)
         return "reuse"
-    configured = os.environ.get("WIMS_BROWSER", "").strip()
-    # Honor an explicit Firefox choice before Chromium --app= (this PC).
-    if configured and "firefox" in Path(configured).name.lower():
+
+    with hold_console_launch_lock() as got_lock:
+        if local_console_is_open(url):
+            request_console_reload(url)
+            return "reuse"
+        if live_console_pid() is not None:
+            # Another start is already bringing the window up.
+            return "reuse"
+        if not got_lock:
+            return _open_url_in_default_browser(url)
+
+        configured = os.environ.get("WIMS_BROWSER", "").strip()
+        # Honor an explicit Firefox choice before Chromium --app= (this PC).
+        if configured and "firefox" in Path(configured).name.lower():
+            command = _firefox_kiosk_command(url)
+            if command:
+                mode = _start_console_command(command, mode="kiosk", hidden=False)
+                if mode:
+                    return mode
+                _open_url_in_default_browser(url)
+                return "browser-fallback"
+        command = _browser_app_command(url)
+        if command:
+            mode = _start_console_command(command, mode="app", hidden=True)
+            if mode:
+                return mode
+            _open_url_in_default_browser(url)
+            return "browser-fallback"
         command = _firefox_kiosk_command(url)
         if command:
-            subprocess.Popen(command)
-            return "kiosk"
-    command = _browser_app_command(url)
-    if command:
-        subprocess.Popen(
-            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        return "app"
-    command = _firefox_kiosk_command(url)
-    if command:
-        subprocess.Popen(command)
-        return "kiosk"
-    webbrowser.open(url)
-    return "browser"
+            mode = _start_console_command(command, mode="kiosk", hidden=False)
+            if mode:
+                return mode
+            _open_url_in_default_browser(url)
+            return "browser-fallback"
+        return _open_url_in_default_browser(url)
 
 
 def desktop_dir() -> Path:
@@ -606,7 +685,7 @@ def freedesktop_exec(argv: list[str]) -> str:
 
 
 def linux_desktop_entry_text() -> str:
-    """Freedesktop entry named WIMS. The program finds its own files."""
+    """Freedesktop entry named WS Hub. The program finds its own files."""
     icon = find_icon_path()
     icon_line = f"Icon={icon}" if icon else "Icon=utilities-terminal"
     script = _REPO_ROOT / "scripts" / "start-wims.sh"
@@ -615,37 +694,137 @@ def linux_desktop_entry_text() -> str:
         "[Desktop Entry]\n"
         "Type=Application\n"
         "Version=1.0\n"
-        "Name=WIMS\n"
+        f"Name={SHORTCUT_NAME}\n"
         "GenericName=WSJT-X Instance Management\n"
-        "Comment=WIMS agents and site console\n"
+        "Comment=WS Hub (formerly WIMS) agents and site console\n"
         f"Exec={exec_line}\n"
         f"Path={_REPO_ROOT}\n"
         f"{icon_line}\n"
         "Terminal=false\n"
         "Categories=HamRadio;Network;\n"
         "StartupNotify=true\n"
+        f"StartupWMClass={WM_CLASS_LAUNCHER}\n"
     )
 
 
-def linux_check_logs_desktop_entry_text() -> str:
-    """Freedesktop entry for the occasional log compare. Not the live console."""
-    icon = find_icon_path()
-    icon_line = f"Icon={icon}" if icon else "Icon=utilities-terminal"
-    script = _REPO_ROOT / "scripts" / "Check logs.sh"
-    exec_line = freedesktop_exec(["/bin/bash", str(script)])
-    return (
-        "[Desktop Entry]\n"
-        "Type=Application\n"
-        "Version=1.0\n"
-        "Name=Check logs\n"
-        "GenericName=Compare contest logs\n"
-        "Comment=See whether WSJT-X, N1MM, and other logs agree\n"
-        f"Exec={exec_line}\n"
-        f"Path={_REPO_ROOT}\n"
-        f"{icon_line}\n"
-        "Terminal=true\n"
-        "Categories=HamRadio;\n"
-        "StartupNotify=true\n"
+# Markers in a leftover Check logs icon that was written by this program.
+_CHECK_LOGS_MARKERS = (
+    "Check logs.sh",
+    "Check-Logs.cmd",
+    "Check logs.bat",
+    "wims.logaudit",
+)
+
+
+def check_logs_desktop_entry_is_ours(text: str) -> bool:
+    """True when a .desktop file starts this program's Check logs."""
+    exec_line = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("Exec=") and not exec_line:
+            exec_line = line[5:]
+            break
+    return any(marker in exec_line for marker in _CHECK_LOGS_MARKERS)
+
+
+def windows_check_logs_shortcut_is_ours(data: bytes) -> bool:
+    """True when a .lnk's bytes point at this program's Check logs."""
+    if not data:
+        return False
+    hay = data.decode("utf-16-le", errors="ignore") + "\n" + data.decode(
+        "latin-1", errors="ignore"
+    )
+    return any(marker in hay for marker in _CHECK_LOGS_MARKERS)
+
+
+def _unlink_ours_check_logs_icon(path: Path, *, windows: bool) -> bool:
+    """Delete one Check logs icon if it starts this program. Never raises."""
+    if not path.is_file():
+        return False
+    try:
+        if windows:
+            ours = windows_check_logs_shortcut_is_ours(path.read_bytes())
+        else:
+            ours = check_logs_desktop_entry_is_ours(
+                path.read_text(encoding="utf-8", errors="replace")
+            )
+    except OSError:
+        return False
+    if not ours:
+        return False
+    try:
+        path.unlink()
+    except OSError:
+        return False
+    return True
+
+
+def remove_check_logs_shortcuts() -> list[Path]:
+    """Delete leftover Check logs icons that start this program.
+
+    Check logs now lives only in the WS Hub window and on the Log page.
+    Only files that point at this program's checker are removed. Never raises.
+    """
+    removed: list[Path] = []
+    try:
+        desk = desktop_dir()
+        if sys.platform.startswith("win"):
+            appdata = os.environ.get("APPDATA", "")
+            start = (
+                Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+                if appdata
+                else None
+            )
+            candidates = [desk / "Check logs.lnk"]
+            if start is not None:
+                candidates.append(start / "Check logs.lnk")
+            windows = True
+        else:
+            menu = Path.home() / ".local" / "share" / "applications"
+            candidates = [
+                desk / "Check logs.desktop",
+                menu / "Check logs.desktop",
+            ]
+            windows = False
+        for path in candidates:
+            if _unlink_ours_check_logs_icon(path, windows=windows):
+                removed.append(path)
+        if removed and not windows:
+            menu = Path.home() / ".local" / "share" / "applications"
+            _refresh_applications_menu(menu)
+    except Exception:
+        return removed
+    return removed
+
+
+def start_local_log_check() -> subprocess.Popen:
+    """Compare the logs on this PC and open the report. Reads only.
+
+    Same check the old Desktop icon ran. The report opens in the browser
+    and stays up if the WS Hub window is closed.
+    """
+    from wims.launcher.process_replace import windows_hidden_popen_kwargs
+
+    env = _role_env()
+    env.pop("WIMS_CAPTURED_LOG", None)
+    kw: dict = {
+        "cwd": str(_REPO_ROOT),
+        "env": env,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if sys.platform.startswith("win"):
+        kw.update(windows_hidden_popen_kwargs())
+        flags = int(kw.get("creationflags", 0) or 0)
+        flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        kw["creationflags"] = flags
+    else:
+        kw["start_new_session"] = True
+    return subprocess.Popen(
+        _python_cmd() + ["-m", "wims.logaudit.page"],
+        **kw,
     )
 
 
@@ -684,38 +863,121 @@ def _refresh_applications_menu(menu: Path) -> None:
     )
 
 
+def legacy_entry_starts_wims(text: str) -> bool:
+    """True when a desktop entry's text starts this program, by any form used.
+
+    Forms seen: ``Exec=... scripts/start-wims.sh`` (1.0.x installer),
+    ``Exec=env PYTHONPATH=.../src python -m wims.launcher`` (earliest), and a
+    ``Path=`` that is a WIMS/WS Hub program folder. Anything else is left alone.
+    """
+    exec_line = ""
+    path_line = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("Exec=") and not exec_line:
+            exec_line = line[5:]
+        elif line.startswith("Path=") and not path_line:
+            path_line = line[5:].strip()
+    if "start-wims.sh" in exec_line or "wims.launcher" in exec_line:
+        return True
+    if path_line:
+        name = Path(path_line.rstrip("/")).name.lower()
+        if name in ("wims", "ws-hub") or re.fullmatch(
+            r"wims-\d+\.\d+\.\d+.*", name
+        ):
+            return True
+    return False
+
+
+def _is_our_legacy_linux_entry(path: Path) -> bool:
+    """True for an older WIMS.desktop that starts this program."""
+    try:
+        return path.is_file() and legacy_entry_starts_wims(
+            path.read_text(encoding="utf-8", errors="replace")
+        )
+    except OSError:
+        return False
+
+
+def _remove_legacy_linux_entries(folder: Path) -> None:
+    """Drop an older WIMS.desktop that starts this program (not anything else)."""
+    for name in _LEGACY_SHORTCUT_NAMES:
+        old = folder / f"{name}.desktop"
+        if _is_our_legacy_linux_entry(old):
+            try:
+                old.unlink()
+            except OSError:
+                pass
+
+
 def write_linux_desktop_shortcut() -> Path:
     desk = desktop_dir()
     desk.mkdir(parents=True, exist_ok=True)
-    path = desk / "WIMS.desktop"
+    path = desk / f"{SHORTCUT_NAME}.desktop"
     content = linux_desktop_entry_text()
     path.write_text(content, encoding="utf-8")
     mark_linux_launcher_trusted(path)
+    _remove_legacy_linux_entries(desk)
     menu = Path.home() / ".local" / "share" / "applications"
     try:
         menu.mkdir(parents=True, exist_ok=True)
-        menu_path = menu / "WIMS.desktop"
+        menu_path = menu / f"{SHORTCUT_NAME}.desktop"
         menu_path.write_text(content, encoding="utf-8")
         mark_linux_launcher_trusted(menu_path)
+        _remove_legacy_linux_entries(menu)
     except OSError:
         pass
-    check = linux_check_logs_desktop_entry_text()
-    check_path = desk / "Check logs.desktop"
-    check_path.write_text(check, encoding="utf-8")
-    mark_linux_launcher_trusted(check_path)
-    try:
-        menu.mkdir(parents=True, exist_ok=True)
-        menu_check = menu / "Check logs.desktop"
-        menu_check.write_text(check, encoding="utf-8")
-        mark_linux_launcher_trusted(menu_check)
-    except OSError:
-        pass
+    remove_check_logs_shortcuts()
     _refresh_applications_menu(menu)
     return path
 
 
+def _linux_entry_is_this_tree(text: str) -> bool:
+    """True when a .desktop file was written for this program folder."""
+    return f"Path={_REPO_ROOT}" in text
+
+
+def refresh_linux_desktop_entries() -> Path | None:
+    """Rewrite existing Linux icons so they stay in step with this copy.
+
+    After an in-app update the window restarts under the new code. If the
+    Desktop or app-menu icon already starts this folder but is missing
+    StartupWMClass (or other current fields), it is rewritten. Does not
+    create a first icon on a PC that never added one. Never raises.
+    """
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        remove_check_logs_shortcuts()
+        menu = Path.home() / ".local" / "share" / "applications"
+        candidates = [
+            desktop_dir() / f"{SHORTCUT_NAME}.desktop",
+            menu / f"{SHORTCUT_NAME}.desktop",
+        ]
+        found_ours = False
+        stale = False
+        want = f"StartupWMClass={WM_CLASS_LAUNCHER}"
+        for path in candidates:
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not _linux_entry_is_this_tree(text):
+                continue
+            found_ours = True
+            if want not in text:
+                stale = True
+        if found_ours and stale:
+            return write_linux_desktop_shortcut()
+    except Exception:
+        return None
+    return None
+
+
 def write_windows_shortcut() -> Path:
-    """Create/refresh Desktop WIMS.lnk with sticky custom icon.
+    """Create/refresh Desktop "WS Hub.lnk" with sticky custom icon.
 
     Prefer the Install-WimsDesktopShortcut.ps1 helper (wscript + VBS + absolute
     .ico). Direct .cmd targets often revert to the default batch icon on Windows.
@@ -731,10 +993,10 @@ def write_windows_shortcut() -> Path:
             ],
             check=False, capture_output=True, text=True,
         )
-        return desk / "WIMS.lnk"
+        return desk / f"{SHORTCUT_NAME}.lnk"
 
     # Fallback if the helper is missing from an old tree.
-    lnk = desk / "WIMS.lnk"
+    lnk = desk / f"{SHORTCUT_NAME}.lnk"
     icon = find_icon_path()
     starter = _REPO_ROOT / "scripts" / "windows" / "Start-WimsLauncher.cmd"
     vbs = _REPO_ROOT / "scripts" / "windows" / "Start-WimsLauncher.vbs"
@@ -747,7 +1009,7 @@ def write_windows_shortcut() -> Path:
             f"$s.Arguments = '//nologo \"{vbs}\"'; "
             f"$s.WorkingDirectory = '{workdir}'; "
             "$s.WindowStyle = 1; "
-            "$s.Description = 'WIMS launcher — agents + site console'; "
+            "$s.Description = 'WS Hub launcher — agents + site console'; "
             f"$s.IconLocation = '{icon},0'; "
             "$s.Save()"
         )
@@ -761,7 +1023,7 @@ def write_windows_shortcut() -> Path:
             f"$s.TargetPath = '{starter}'; "
             f"$s.WorkingDirectory = '{workdir}'; "
             "$s.WindowStyle = 1; "
-            "$s.Description = 'WIMS launcher — agents + site console'; "
+            "$s.Description = 'WS Hub launcher — agents + site console'; "
             f"{icon_ps}"
             "$s.Save()"
         )
@@ -776,7 +1038,7 @@ def write_windows_shortcut() -> Path:
             f"$s.Arguments = '-m wims.launcher'; "
             f"$s.WorkingDirectory = '{_REPO_ROOT}'; "
             "$s.WindowStyle = 1; "
-            "$s.Description = 'WIMS launcher — agents + site console'; "
+            "$s.Description = 'WS Hub launcher — agents + site console'; "
             f"{icon_ps}"
             "$s.Save()"
         )
@@ -785,6 +1047,35 @@ def write_windows_shortcut() -> Path:
         check=False, capture_output=True, text=True,
     )
     return lnk
+
+
+def migrate_legacy_shortcut() -> Path | None:
+    """Rename an older WIMS Desktop icon to WS Hub, once, after an update.
+
+    Only creates an icon when the old one is still on the Desktop, so a PC
+    that never added the icon gets none. On Linux, also rewrites an existing
+    WS Hub icon for this folder when it is missing current fields such as
+    StartupWMClass, so an in-app update picks up the dock-icon match.
+    Never raises.
+    """
+    try:
+        remove_check_logs_shortcuts()
+        desk = desktop_dir()
+        if sys.platform.startswith("win"):
+            if any(
+                (desk / f"{n}.lnk").is_file() for n in _LEGACY_SHORTCUT_NAMES
+            ) and not (desk / f"{SHORTCUT_NAME}.lnk").is_file():
+                # The helper removes the old icon only when it starts WIMS.
+                return write_windows_shortcut()
+            return None
+        if any(
+            _is_our_legacy_linux_entry(desk / f"{n}.desktop")
+            for n in _LEGACY_SHORTCUT_NAMES
+        ) and not (desk / f"{SHORTCUT_NAME}.desktop").is_file():
+            return write_linux_desktop_shortcut()
+        return refresh_linux_desktop_entries()
+    except Exception:
+        return None
 
 
 class LauncherApp:
@@ -797,7 +1088,7 @@ class LauncherApp:
         self.root = root
         self._rev = _git_rev()
         self.root.title(
-            f"WIMS launcher  ·  {launcher_rev_label(__version__, self._rev)}"
+            f"WS Hub launcher  ·  {launcher_rev_label(__version__, self._rev)}"
         )
         # Closed window fits through Other tools…. Checking that box may grow
         # the window; a short screen scrolls the extra panel.
@@ -812,6 +1103,7 @@ class LauncherApp:
         self._site_var = tk.StringVar(value=site_base_url())
         self._card_widgets: dict[str, dict] = {}
         self._discovering = False
+        self._site_choice_ready = False
         self._last_wsjt_sev: str | None = None
         self._last_wsjt_msg: str = ""
         self._site_ok = False
@@ -839,6 +1131,7 @@ class LauncherApp:
             INTENT_N1MM: tk.BooleanVar(value=bool(self._intent.get(INTENT_N1MM))),
             INTENT_WSJT: tk.BooleanVar(value=bool(self._intent.get(INTENT_WSJT))),
             INTENT_SSB_CW: tk.BooleanVar(value=bool(self._intent.get(INTENT_SSB_CW))),
+            INTENT_ANTENNAS: tk.BooleanVar(value=bool(self._intent.get(INTENT_ANTENNAS))),
             INTENT_SERVER: tk.BooleanVar(value=bool(self._intent.get(INTENT_SERVER))),
         }
         # KEY/CTS device — persisted; mirrored to WIMS_KEY_DEVICE for seat child.
@@ -993,8 +1286,8 @@ class LauncherApp:
         )
         ToolTip(self._server_rev_lbl, SERVER_REV_TIP)
 
-        # Banner row: message + action button side by side, so e.g. Update WIMS
-        # sits next to the "Update available" text instead of below the fold.
+        # Banner row: message + action button side by side, so the update
+        # action sits next to the "Update available" text instead of below the fold.
         banner_row = tk.Frame(home, bg="#f4f4f4")
         banner_row.pack(fill="x", pady=(4, 2))
         self._banner = tk.Label(
@@ -1004,10 +1297,10 @@ class LauncherApp:
         )
         self._banner.pack(side="left", fill="x", expand=True)
         self._update_btn = tk.Button(
-            banner_row, text="Update\nWIMS", font=_ui_font(11, "bold"),
+            banner_row, text="Update\nWS Hub", font=_ui_font(11, "bold"),
             command=self._do_update, padx=8, pady=4,
         )
-        ToolTip(
+        self._update_btn_tip = ToolTip(
             self._update_btn,
             "Pull latest from GitHub main (one click). "
             "Site server on this PC is left running; seat agents restart after.",
@@ -1030,12 +1323,13 @@ class LauncherApp:
             on_open_local=self._open_local_status,
             on_restart_server=self._restart_local_site_server,
             on_start_server=self._start_site_server_offer,
+            on_check_logs=self._check_logs,
             key_device_var=self._key_device_var,
             on_key_device_change=self._on_key_device_change,
             on_refresh_key_ports=self._refresh_key_ports,
+            antennas=load_antennas(),
+            on_antennas_change=self._on_antennas_change,
         )
-        if is_wsjt_only_seat(self._current_intent()):
-            self._home_panel.set_server_intent_visible(False)
         self._updates = UpdatesPanel(
             home,
             tk=tk,
@@ -1046,6 +1340,9 @@ class LauncherApp:
         self._refresh_key_ports()
         self._home_panel.show_key_device_row(
             bool(self._intent_vars[INTENT_SSB_CW].get()),
+        )
+        self._home_panel.show_antenna_settings(
+            bool(self._intent_vars[INTENT_ANTENNAS].get()),
         )
         self.root.after(1500, self._pulse_key_cts)
 
@@ -1203,6 +1500,7 @@ class LauncherApp:
             f"N1MM={'on' if self._intent.get(INTENT_N1MM) else 'off'} "
             f"WSJT={'on' if self._intent.get(INTENT_WSJT) else 'off'} "
             f"KEY={'on' if self._intent.get(INTENT_SSB_CW) else 'off'} "
+            f"Antennas={'on' if self._intent.get(INTENT_ANTENNAS) else 'off'} "
             f"Server={'on' if self._intent.get(INTENT_SERVER) else 'off'}"
         )
         seed_note = " (first-run, from apps on this PC)" if self._intent_seeded else ""
@@ -1440,7 +1738,7 @@ class LauncherApp:
         self._fix_text.set(fix)
 
     def _show_update_button(self, show: bool) -> None:
-        """Show/hide the Update WIMS button beside the banner message.
+        """Show/hide the banner update button beside the banner message.
 
         winfo_manager (not winfo_ismapped): ismapped stays False until the
         widget is actually drawn, which would skip a hide that follows a
@@ -1622,16 +1920,30 @@ class LauncherApp:
         if entry.relation == "current":
             self._updates.set_notice("This copy is already that version.")
             return
+        self._start_release_install(entry.tag, entry.html_url)
+
+    def _start_release_install(self, tag: str, url: str = "") -> None:
+        """Install one release in place (banner button or Install this update)."""
+        if self._updating:
+            return
+        wanted = (tag or "").strip()
+        if not wanted:
+            self._updates.set_notice("Select an update in the list first.")
+            return
         self._updating = True
         self._updates.set_busy(True)
-        tag = entry.tag
-        url = entry.html_url
+        self._show_update_button(False)
+        self._set_banner(
+            "busy",
+            f"Installing {wanted}…",
+            "Site server left alone.",
+        )
 
         def progress(message: str) -> None:
             self.root.after(0, self._updates.set_notice, message)
 
         def work() -> None:
-            ok, msg = apply_release(_REPO_ROOT, tag, on_progress=progress)
+            ok, msg = apply_release(_REPO_ROOT, wanted, on_progress=progress)
             self.root.after(0, self._on_release_applied, ok, msg, url, False)
 
         threading.Thread(target=work, daemon=True).start()
@@ -1670,10 +1982,26 @@ class LauncherApp:
         self._updates.set_notice(notice)
         self._set_banner(
             "ok",
-            "Restoring the WIMS window…" if went_back else "Restarting the WIMS window…",
+            "Restoring the WS Hub window…" if went_back else "Restarting the WS Hub window…",
             finish or "The window opens again on that copy.",
         )
         self.root.after(600, self._relaunch_self)
+
+    def _offer_update(self, info: UpdateInfo) -> None:
+        """Show the banner button and text that match this copy's update path."""
+        action = banner_update_action(info)
+        self._update_btn.configure(text=action.button_label)
+        try:
+            self._update_btn_tip.set_text(action.tooltip)
+        except Exception:
+            pass
+        subj = f" — {info.remote_subject}" if info.remote_subject else ""
+        self._set_banner(
+            "warn",
+            f"Update available — {info.local_label} → {info.remote_label}{subj}",
+            action.how + " Site server stays up; seat agents restart after.",
+        )
+        self._show_update_button(True)
 
     def _on_update_check(self, info: UpdateInfo) -> None:
         self._update_info = info
@@ -1682,25 +2010,11 @@ class LauncherApp:
         if not info.available:
             self._show_update_button(False)
             return
-        self._show_update_button(True)
-        subj = f" — {info.remote_subject}" if info.remote_subject else ""
-        dirty = " (local edits present)" if info.dirty else ""
-        if info.source == "release" and not info.is_git:
-            how = "Click Update WIMS to open GitHub Releases (this tree is not a git clone)."
-        elif info.source == "release":
-            how = (
-                f"Click Update WIMS to pull, or download {info.release_tag or 'the release'}."
-            )
-        else:
-            how = f"Click Update WIMS to pull GitHub main{dirty}."
-        self._set_banner(
-            "warn",
-            f"Update available — {info.local_label} → {info.remote_label}{subj}",
-            how + " Site server stays up; seat agents restart after.",
-        )
+        self._offer_update(info)
         identity = info.remote_sha or info.release_tag or info.remote_label
         if identity and identity != getattr(self, "_logged_update_id", ""):
             self._logged_update_id = identity
+            subj = f" — {info.remote_subject}" if info.remote_subject else ""
             self._append_log(
                 f"Update available: {info.local_label} → {info.remote_label}{subj}"
             )
@@ -1712,22 +2026,49 @@ class LauncherApp:
             if not already_nagged(info.remote_sha):
                 subj2 = info.remote_subject or "bugfix on main"
                 if notify_no_focus(
-                    "WIMS update available",
+                    "WS Hub update available",
                     f"{info.local_label} -> {info.remote_label}: {subj2}. "
-                    "Run Desktop Update WIMS when convenient.",
+                    "When convenient, use the update button in the WS Hub window.",
                 ):
                     mark_nagged(info.remote_sha)
         except Exception:
             pass
 
+    def _newest_installable_entry(self) -> ReleaseEntry | None:
+        """Newest newer release in the Updates list, if any."""
+        try:
+            entries = list(getattr(self._updates, "_entries", []) or [])
+        except Exception:
+            entries = []
+        for entry in entries:
+            if getattr(entry, "relation", "") == "newer":
+                return entry
+        return None
+
     def _do_update(self) -> None:
-        """Pull origin/main when this is a git clone; else open GitHub Releases."""
+        """Install, pull, or open Releases, matching the banner button."""
         if self._updating:
             return
         info = self._update_info
-        if info is not None and not info.is_git:
+        if info is None:
+            is_git = (_REPO_ROOT / ".git").exists()
+            info = UpdateInfo(available=True, is_git=is_git)
+        action = banner_update_action(info)
+        if action.kind == "install":
+            tag = action.install_tag
+            url = (info.release_url or "").strip()
+            if not tag:
+                entry = self._newest_installable_entry()
+                if entry is not None:
+                    tag, url = entry.tag, entry.html_url
+            if not tag:
+                self._updates.set_notice("Select an update in the list first.")
+                return
+            self._start_release_install(tag, url)
+            return
+        if action.kind == "download":
             url = (info.release_url or "").strip() or (
-                f"https://github.com/{os.environ.get('WIMS_GITHUB_REPO') or 'wa1hco/WIMS'}/releases"
+                f"https://github.com/{os.environ.get('WIMS_GITHUB_REPO') or 'wa1hco/WS-Hub'}/releases"
             )
             self._append_log(f"Open release {url}")
             try:
@@ -1745,7 +2086,7 @@ class LauncherApp:
         self._updating = True
         self._set_banner(
             "busy",
-            "Updating WIMS…",
+            "Updating WS Hub…",
             "Pulling origin/main. Site server left alone.",
         )
         # Stop owned seat agents only (not site server).
@@ -1816,7 +2157,7 @@ class LauncherApp:
     def _relaunch_self(self) -> None:
         # Drop the singleton lock *before* spawn. The child acquires the same
         # lock at startup; if we still hold it, pythonw exits silently and
-        # this window then closes — Update WIMS never comes back.
+        # this window then closes — the update never comes back.
         from wims.launcher.singleton import (
             release_launcher_lock,
             try_acquire_launcher_lock,
@@ -1956,6 +2297,19 @@ class LauncherApp:
                 lambda: self._start_agent(AGENT_N1MM_SEAT, open_browser=False),
             )
 
+    def _on_antennas_change(self, rows: list) -> None:
+        """Remember antennas. The running agent reads the same file."""
+        save_antennas(rows)
+
+    def _sync_wsjt_agent(self, *, open_browser: bool) -> None:
+        """Start or stop the seat agent for WSJT-X and/or Rotators."""
+        want = bool(agents_for_intent(self._current_intent()).get(AGENT_WSJT))
+        if want:
+            if not self._agent_running(AGENT_WSJT):
+                self._start_agent(AGENT_WSJT, open_browser=open_browser)
+        elif self._agent_running(AGENT_WSJT):
+            self._stop_agent(AGENT_WSJT, explicit=True)
+
     def _close_cts_monitor(self) -> None:
         mon = self._cts_monitor
         self._cts_monitor = None
@@ -2032,8 +2386,10 @@ class LauncherApp:
 
         self._apply_site_server_policy(ok_site=ok_site, base=base)
 
-        # During Update WIMS, do not restart agents that were stopped for the pull.
-        if not self._updating:
+        # During an update, do not restart agents that were stopped for the pull.
+        # Wait for LAN discovery (or auto-host) so agents are not pointed at
+        # a guessed address before we know whether a server is already up.
+        if not self._updating and (self._site_choice_ready or ok_site):
             intent = self._current_intent()
             want = agents_for_intent(intent)
             # Combined N1MM seat: restart if log/key flags changed.
@@ -2121,6 +2477,15 @@ class LauncherApp:
             )
             # Ensure child sees current device before seat start/restart.
             save_key_device((self._key_device_var.get() or "").strip())
+        if intent_id == INTENT_ANTENNAS:
+            self._home_panel.show_antenna_settings(
+                bool(self._intent_vars[INTENT_ANTENNAS].get()),
+            )
+            # Same seat agent as WSJT-X. Unchecking stops only this side
+            # unless WSJT-X is off too. The agent reads the intent file.
+            self._sync_wsjt_agent(open_browser=False)
+            self._refresh_status()
+            return
         agent_id = INTENT_TO_AGENT[intent_id]
         if agent_id == AGENT_N1MM_SEAT:
             # N1MM / SSB-CW share one process — sync flags (may restart).
@@ -2132,15 +2497,19 @@ class LauncherApp:
                 self._server_start_blocked = False
             self._start_agent(agent_id, open_browser=True)
         else:
+            # WSJT-X off while Rotators stays on: keep the seat agent.
+            if (
+                intent_id == INTENT_WSJT
+                and self._current_intent().get(INTENT_ANTENNAS)
+            ):
+                self._refresh_status()
+                return
             # Explicit operator uncheck — for site server, stop owned *or* local
             # orphan server on this PC (user asked). Sync must never do that alone.
             self._stop_agent(agent_id, explicit=True)
         self._refresh_status()
 
     def _start_agent(self, agent_id: str, *, open_browser: bool = False) -> None:
-        if agent_id == AGENT_SERVER and is_wsjt_only_seat(self._current_intent()):
-            self._append_log("WSJT-X seat: not starting site server.")
-            return
         role_id = self._agent_role[agent_id]
         if self._proc_running(role_id) or agent_id in self._starting:
             self._append_log(f"{agent_id} agent already starting/running — not starting a second copy.")
@@ -2335,7 +2704,9 @@ class LauncherApp:
 
     def _apply_discovered_site(self, url: str | None) -> None:
         self._discovering = False
+        self._site_choice_ready = True
         if url:
+            previous = (self._site_var.get() or "").strip()
             self._site_var.set(url)
             os.environ["WIMS_SERVER"] = url
             save_last_site_url(url)
@@ -2343,12 +2714,22 @@ class LauncherApp:
             if not self._proc_running("server"):
                 self._site_external = True
             self._append_log(f"Site server: {url}")
+            self._repoint_agents_if_needed(previous, url)
+        elif should_host_local_site_server(
+            discovery_done=True,
+            site_reachable=False,
+            last_site_url=load_last_site_url(),
+            env_server=(os.environ.get("WIMS_SERVER") or "").strip() or None,
+        ):
+            self._auto_host_local_site_server()
         else:
             self._site_ok = False
             self._append_log(
                 f"No site server heard — using {self._site_var.get() or site_base_url()}"
             )
         self._refresh_status()
+        if self._replace_done:
+            self._sync_detect_and_agents()
 
     def _fetch_wsjt_report(self) -> None:
         """Pull last agent summary from local monitor (best-effort)."""
@@ -2415,7 +2796,8 @@ class LauncherApp:
         )
         want_any = bool(
             intent.get(INTENT_N1MM) or intent.get(INTENT_WSJT)
-            or intent.get(INTENT_SSB_CW) or intent.get(INTENT_SERVER)
+            or intent.get(INTENT_SSB_CW) or intent.get(INTENT_ANTENNAS)
+            or intent.get(INTENT_SERVER)
         )
         seat_up = self._agent_running(AGENT_WSJT)
         n1mm_seat_up = self._agent_running(AGENT_N1MM_SEAT)
@@ -2459,7 +2841,7 @@ class LauncherApp:
         )
 
         if self._updating:
-            # Keep "Updating WIMS…" / "Updated — restarting". The 4s status
+            # Keep "Updating WS Hub…" / "Updated — restarting". The 4s status
             # pulse used to restore "Update available" so the click looked dead.
             self._schedule_status(4000)
             return
@@ -2479,7 +2861,7 @@ class LauncherApp:
             self._set_banner(
                 "busy",
                 "Set seat intent below",
-                "Check N1MM / WSJT-X / SSB-CW KEY / Site server for what this PC will run.",
+                "Check N1MM / WSJT-X / SSB-CW KEY / Antennas / Site server for what this PC will run.",
             )
         elif missing:
             self._set_banner(
@@ -2496,14 +2878,7 @@ class LauncherApp:
         elif update_pending:
             info = self._update_info
             assert info is not None
-            subj = f" — {info.remote_subject}" if info.remote_subject else ""
-            self._set_banner(
-                "warn",
-                f"Update available — {info.local_label} → {info.remote_label}{subj}",
-                "Click Update WIMS to pull GitHub main. "
-                "Site server stays up; seat agents restart after.",
-            )
-            self._show_update_button(True)
+            self._offer_update(info)
         elif wsjt_intent and not wsjt_live:
             self._set_banner(
                 "warn",
@@ -2596,7 +2971,7 @@ class LauncherApp:
             self._set_banner(
                 "warn",
                 "Seat agent is not running",
-                "Check WSJT-X to start the seat agent, then Open local status.",
+                "Check WSJT-X or Antennas to start the seat agent, then Open local status.",
             )
             return
 
@@ -2650,8 +3025,40 @@ class LauncherApp:
             pass
         return out
 
+    def _auto_host_local_site_server(self) -> None:
+        """No server on the LAN — run one on this PC and open the console."""
+        base = LOCAL_SITE
+        self._site_var.set(base)
+        os.environ["WIMS_SERVER"] = base
+        self._server_start_blocked = False
+        self._intent_vars[INTENT_SERVER].set(True)
+        self._persist_intent()
+        self._append_log("No site server on the LAN — starting one on this PC.")
+        self._start_agent(AGENT_SERVER, open_browser=True)
+
+    def _repoint_agents_if_needed(self, previous: str, new: str) -> None:
+        """Restart local agents when the site server moved to another host."""
+        if same_site_host(previous, new):
+            return
+        if not (previous or "").strip() or not (new or "").strip():
+            return
+        for aid, label in (
+            (AGENT_WSJT, "Seat agent"),
+            (AGENT_N1MM_SEAT, "N1MM agent"),
+        ):
+            if not self._agent_running(aid):
+                continue
+            self._append_log(
+                f"Site server is now {new} — restarting {label} so it follows."
+            )
+            self._stop_agent(aid, explicit=True)
+            self.root.after(
+                600,
+                lambda a=aid: self._start_agent(a, open_browser=False),
+            )
+
     def _apply_site_server_policy(self, *, ok_site: bool, base: str) -> None:
-        """Hide/clear Site server on WSJT-X seats; N1MM does not start a second."""
+        """Show Site server when this PC may host; hide it when a remote one is up."""
         intent = self._current_intent()
         local = bool(self._local_server_procs()) or (
             ok_site and self._site_url_is_local(base)
@@ -2666,15 +3073,7 @@ class LauncherApp:
             return
         if not intent.get(INTENT_SERVER) and not self._proc_running("server"):
             return
-        if is_wsjt_only_seat(intent):
-            if intent.get(INTENT_SERVER):
-                self._intent_vars[INTENT_SERVER].set(False)
-                self._persist_intent()
-                self._append_log("WSJT-X seat: Site server not offered; intent cleared.")
-            if self._proc_running("server"):
-                self._stop_agent(AGENT_SERVER, explicit=True)
-            return
-        # Remote site already running (N1MM / dedicated): do not host a second.
+        # Remote site already running: do not host a second.
         if intent.get(INTENT_SERVER):
             self._intent_vars[INTENT_SERVER].set(False)
             self._persist_intent()
@@ -2713,11 +3112,6 @@ class LauncherApp:
         check, and the second-launcher handoff are not changed. An open
         console on this PC reconnects in the same window.
         """
-        if is_wsjt_only_seat(self._current_intent()):
-            self._append_log(
-                "Restart refused — WSJT-X seat does not host the site server."
-            )
-            return
         ok, base = probe_site_urls(self._site_var.get().strip() or None)
         health = fetch_site_health(base, timeout=0.8) if ok else None
         # The URL this window settled on is the server it would restart.
@@ -2882,8 +3276,6 @@ class LauncherApp:
             pass
         if hasattr(hp, "set_restart_needed"):
             hp.set_restart_needed(False)
-        if is_wsjt_only_seat(intent):
-            return
         if ok_site and local:
             restart_btn.pack(side="left", padx=(8, 0))
             if stale and hasattr(hp, "set_restart_needed"):
@@ -2930,7 +3322,7 @@ class LauncherApp:
                 pass
         line = f"{launcher}    {server}" if server else launcher
         try:
-            self.root.title(f"WIMS launcher  ·  {line}")
+            self.root.title(f"WS Hub launcher  ·  {line}")
         except Exception:
             pass
         hp = getattr(self, "_home_panel", None)
@@ -2940,6 +3332,7 @@ class LauncherApp:
                     server_version=server_version,
                     server_rev=server_rev,
                     disk_rev=disk_rev,
+                    disk_version=__version__,
                 ))
             except Exception:
                 pass
@@ -2975,11 +3368,13 @@ class LauncherApp:
         local = bool(self._local_server_procs()) or (
             ok_site and self._site_url_is_local(base)
         )
-        restart_shown = bool(
-            ok_site and local and not is_wsjt_only_seat(self._current_intent())
-        )
-        # No server_rev (older build, or the server is down) → not stale.
-        stale = bool(restart_shown and server_restart_needed(disk, server_rev))
+        restart_shown = bool(ok_site and local)
+        # No server_rev (older build, or the server is down) → not stale
+        # unless both sides only have a package version and those differ.
+        stale = bool(restart_shown and server_restart_needed(
+            disk, server_rev,
+            disk_version=__version__, server_version=server_version,
+        ))
         self._server_code_stale = stale
         return stale
 
@@ -2996,6 +3391,7 @@ class LauncherApp:
             base = ""
         ok, used, health = probe_site_with_health(base or None, timeout=0.6)
         server_rev = ""
+        server_version = ""
         if (
             ok
             and isinstance(health, dict)
@@ -3004,6 +3400,9 @@ class LauncherApp:
             raw = health.get("server_rev")
             if isinstance(raw, str):
                 server_rev = raw.strip()
+            raw_v = health.get("version")
+            if isinstance(raw_v, str):
+                server_version = raw_v.strip()
         local = bool(ok and (
             self._local_server_procs() or self._site_url_is_local(used)
         ))
@@ -3012,6 +3411,8 @@ class LauncherApp:
             disk_rev=disk,
             server_rev=server_rev,
             local_server=local,
+            disk_version=__version__,
+            server_version=server_version,
         )
 
     def _reset_console_window(self) -> None:
@@ -3390,6 +3791,13 @@ class LauncherApp:
             widgets["state"].configure(text="")
             widgets["stop"].configure(state="disabled")
 
+    def _check_logs(self) -> None:
+        try:
+            start_local_log_check()
+            self._append_log("Check logs: opened the report for logs on this PC.")
+        except Exception as e:
+            self._append_log(f"Check logs failed: {e}")
+
     def _install_shortcut(self) -> None:
         try:
             path = (
@@ -3417,7 +3825,7 @@ def show_operator_message(text: str) -> None:
         import tkinter as tk
         from tkinter import messagebox
 
-        root = tk.Tk()
+        root = new_tk_root(tk)
     except Exception:
         if not show_plain_message(text):
             print(text, flush=True)
@@ -3482,6 +3890,11 @@ def main(argv: list[str] | None = None) -> int:
         start_raise_server()
     except Exception:
         pass
+    # Rename an old WIMS Desktop icon in the background; on Windows this waits
+    # on PowerShell, and the window should not.
+    threading.Thread(
+        target=migrate_legacy_shortcut, name="shortcut-migrate", daemon=True,
+    ).start()
 
     try:
         import tkinter as tk
@@ -3494,7 +3907,7 @@ def main(argv: list[str] | None = None) -> int:
         print(WINDOW_LIBRARY_MESSAGE, file=sys.stderr)
         return 2
 
-    root = tk.Tk()
+    root = new_tk_root(tk)
     # Temporary size. _fit_default_geometry then fits through Other tools….
     root.geometry("560x440")
     LauncherApp(root)

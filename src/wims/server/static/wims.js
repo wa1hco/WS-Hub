@@ -24,7 +24,7 @@
 // no-ops when its container is absent. The frontend is the disposable part; the
 // state contract (server/state.py) is the durable boundary.
 //
-//   Operate  — roster; TX groups banner only when a group conflicts
+//   Operate  — roster, spotted list; TX groups banner only when a group conflicts
 //   Status   — overview / WSJT / N1MM (N1MM owns contest log pick/resync)
 //   Setup    — install diagnostics: networking checklist, host app configs
 
@@ -1170,9 +1170,14 @@ function renderContestRules(s) {
     : (rules.summary || "");
   if (rules.suggested_note) line += " " + rules.suggested_note;
   if (rules.n1mm_line) line += " " + rules.n1mm_line;
-  for (const id of ["contest-summary", "ros-rules", "n1mm-rules-line"]) {
+  for (const id of ["contest-summary", "n1mm-rules-line"]) {
     const el = $(id);
     if (el) el.textContent = line;
+  }
+  const rosHeading = $("ros-heading");
+  if (rosHeading) {
+    if (line) rosHeading.title = line;
+    else rosHeading.removeAttribute("title");
   }
   const logs = $("contest-logs");
   if (logs) {
@@ -1845,7 +1850,7 @@ const ROS_COLS = [
   {key:"az",            label:"Az DX",   cls:"num", num:1, cell:rosAzDx},
   {key:"az_ant",        label:"Az ant",  cls:"num", num:1, cell:rosAzAnt},
   {key:"delta_az",      label:"Δaz",     cls:"num", num:1, cell:c=>c.delta_az==null?"-":c.delta_az+"°"},
-  {key:"distance_km",   label:"km",      cls:"num", num:1, cell:c=>c.distance_km==null?"-":c.distance_km},
+  {key:"distance_km",   label:"km",      cls:"num", num:1, cell:rosKm},
   {key:"age",           label:"Age",     cls:"num", num:1, cell:c=>age(c.age)},
   {key:"score",         label:"Score",   cls:"num score", num:1, cell:c=>c.score.toFixed(1)},
 ];
@@ -1853,6 +1858,14 @@ const ROS_COLS = [
 // Message sits immediately after Calling.
 const ROS_COLS_DEFAULT = [
   "call", "country", "to_call", "msg", "band", "grid", "snr", "az", "age", "score",
+];
+// Spotted columns. Same keys, in this same order, wherever a spot has that
+// fact. Calling, Message, Source, dB, Az ant, and Δaz are a decode or a
+// radio, so they are not on this list. Spotter fills the Source slot.
+// QSY sits just before Score: the retune mark. The points are already in Score.
+const SPOT_COL_KEYS = [
+  "call", "country", "band", "spotter", "mode", "grid",
+  "freq_hz", "az", "distance_km", "age", "qsy", "score",
 ];
 // Visible Message text. Longer QSY / free text is cut here so rosFitColumns
 // measures a short cell; the title attribute keeps the full decode.
@@ -1902,10 +1915,14 @@ const ROS_AGE_DEFAULT = 120; // match GridTracker-ish “last ~2 minutes” feel
 let _rosColsBuilt = false;
 
 function rosCall(c) {
+  // The place word already says why the row is needed, so hide the
+  // generic mult badge when need_label is shown. Contest rows have no
+  // place word, so mult stays. us, TX, and R are unchanged.
+  const labeled = String((c && c.need_label) || "").trim() !== "";
   const badges =
     (c.is_calling_us ? '<span class="badge callus">us</span>' : '') +
     (c.is_armed ? '<span class="badge armed">TX</span>' : '') +
-    (c.is_new_mult ? '<span class="badge" title="' + escAttr(c.mult_reason || '') + '">mult</span>' : '') +
+    (c.is_new_mult && !labeled ? '<span class="badge" title="' + escAttr(c.mult_reason || '') + '">mult</span>' : '') +
     rosChase(c) +
     (c.is_rover ? '<span class="badge rover">R</span>' : '');
   return `${esc(c.call)}${badges}`;
@@ -1918,8 +1935,10 @@ function rosChase(c) {
   if (!c || (c.chase !== "unconfirmed" && c.chase !== "needed")) return "";
   const open = c.chase === "unconfirmed";
   const tip = c.need_reason || (open ? "Worked but not confirmed." : "Not in the log yet.");
-  const word = open ? "unconfirmed" : "needed";
-  return '<span class="badge ' + word + '" title="' + escAttr(tip) + '">' + word + '</span>';
+  // One place. The score already counted a new multiplier once.
+  const word = open ? "unconfirmed" : (String(c.need_label || "").trim() || "needed");
+  const cls = open ? "unconfirmed" : "needed";
+  return '<span class="badge ' + cls + '" title="' + escAttr(tip) + '">' + esc(word) + '</span>';
 }
 
 function rosCountryTip(c) {
@@ -1995,14 +2014,45 @@ function rosSource(c) {
   if (!raw || short === raw) return esc(short) + mark;
   return `<span title="${esc(raw)}">${esc(short)}</span>${mark}`;
 }
+function bearingApprox(c) {
+  return c && c.bearing_source === "dxcc";
+}
+function azText(c) {
+  if (c.az == null) return "";
+  return (bearingApprox(c) ? "~" : "") + c.az + "°";
+}
+function approxTip(c, kind) {
+  // kind is "heading" or "distance". Same country-file wording.
+  const who = (c.country || "the DXCC entity");
+  const what = kind === "distance" ? "distance" : "heading";
+  return "Approximate " + what + " from " + who + " (country file)";
+}
 function rosAzDx(c) {
   // Clickable when a rotator is mapped — point antenna to this Az DX.
+  // A DXCC-centroid heading is marked ~ and explained in the tooltip.
   if (c.az == null) return "-";
+  const text = azText(c);
+  const approx = bearingApprox(c);
+  const tip = approx ? approxTip(c, "heading") : "";
   if (c.rotator_id) {
-    return `<button type="button" class="azbtn" data-point-row="${esc(c.id||"")}" ` +
-           `title="Point ${esc(c.rotator_id)} to ${c.az}°">${c.az}°</button>`;
+    const point = "Point " + (c.rotator_id || "") + " to " + text;
+    const title = tip ? (point + ". " + tip) : point;
+    const cls = approx ? "azbtn az-approx" : "azbtn";
+    return `<button type="button" class="${cls}" data-point-row="${esc(c.id||"")}" ` +
+           `title="${escAttr(title)}">${esc(text)}</button>`;
   }
-  return c.az + "°";
+  if (tip) {
+    return `<span class="az-approx" title="${escAttr(tip)}">${esc(text)}</span>`;
+  }
+  return text;
+}
+function rosKm(c) {
+  if (c.distance_km == null) return "-";
+  if (bearingApprox(c)) {
+    const text = "~" + c.distance_km;
+    return `<span class="az-approx" title="${escAttr(approxTip(c, "distance"))}">${esc(text)}</span>`;
+  }
+  return String(c.distance_km);
 }
 function rosAzAnt(c) {
   if (c.az_ant == null) return "—";
@@ -2126,27 +2176,23 @@ function rosBuildHead() {
   }).join("");
 }
 
-/** Measure content and pin each roster column to the narrowest width that still
- *  shows its cells (no wrap). Re-run after data, visible-column, or zoom/resize. */
-function rosFitColumns() {
-  const table = $("ros");
-  const head = $("ros-head");
-  const body = $("ros-body");
-  if (!table || !head) return;
-  const ths = [...head.children];
+/** Natural content width of each header cell, after dropping a prior pin. */
+function measureTableColumns(table) {
+  const head = table && table.tHead && table.tHead.rows[0];
+  if (!table || !head) return null;
+  const ths = [...head.cells];
   const n = ths.length;
-  if (!n) return;
-
-  // Natural measure pass: drop prior col widths so scrollWidth reflects content.
-  const old = table.querySelector("colgroup.ros-fit");
+  if (!n) return null;
+  const old = table.querySelector("colgroup.col-fit, colgroup.ros-fit");
   if (old) old.remove();
   table.style.width = "max-content";
   table.style.tableLayout = "auto";
-
+  const keys = ths.map(th => th.dataset.key || "");
   const widths = new Array(n).fill(0);
   for (let i = 0; i < n; i++) {
     widths[i] = Math.ceil(ths[i].getBoundingClientRect().width);
   }
+  const body = table.tBodies[0];
   if (body) {
     for (const tr of body.rows) {
       const cells = tr.cells;
@@ -2155,18 +2201,63 @@ function rosFitColumns() {
       }
     }
   }
+  return {keys, widths};
+}
 
+function applyTableColumnWidths(table, keys, widths) {
+  const old = table.querySelector("colgroup.col-fit, colgroup.ros-fit");
+  if (old) old.remove();
   const cg = document.createElement("colgroup");
-  cg.className = "ros-fit";
-  for (const w of widths) {
+  cg.className = "col-fit";
+  for (let i = 0; i < keys.length; i++) {
     const col = document.createElement("col");
+    if (keys[i]) col.dataset.key = keys[i];
     // +1px avoids occasional ellipsis/clip from subpixel rounding after zoom.
-    col.style.width = (w + 1) + "px";
+    col.style.width = (widths[i] + 1) + "px";
     cg.appendChild(col);
   }
   table.insertBefore(cg, table.firstChild);
   table.style.tableLayout = "fixed";
   table.style.width = "max-content";
+}
+
+/** Pin the call roster and the Spotted list. A column key that is on both
+ *  tables uses the wider of the two, so DX, Country, Band, and the rest
+ *  share one width. Spotter and QSY stay on the spot list only. */
+function fitOperateColumns() {
+  const tables = [];
+  const ros = $("ros");
+  const spot = $("spot");
+  if (ros) tables.push(ros);
+  if (spot && !spot.hidden) tables.push(spot);
+  const measured = [];
+  for (const table of tables) {
+    const got = measureTableColumns(table);
+    if (got) measured.push({table, keys: got.keys, widths: got.widths});
+  }
+  const present = {};
+  for (const item of measured) {
+    item.keys.forEach((key, i) => {
+      if (!key) return;
+      if (!present[key]) present[key] = [];
+      present[key].push(item.widths[i]);
+    });
+  }
+  for (const item of measured) {
+    const widths = item.widths.map((w, i) => {
+      const all = present[item.keys[i]];
+      if (!all || all.length < 2) return w;
+      return Math.max.apply(null, all);
+    });
+    applyTableColumnWidths(item.table, item.keys, widths);
+  }
+}
+
+/** Measure content and pin each roster column to the narrowest width that still
+ *  shows its cells (no wrap). The Spotted list is measured in the same pass.
+ *  Re-run after data, visible-column, or zoom/resize. */
+function rosFitColumns() {
+  fitOperateColumns();
 }
 
 let _rosFitTimer = 0;
@@ -2539,6 +2630,57 @@ function operateOfferedBands(s) {
   return out;
 }
 
+
+function rosDecodeWord(n) {
+  return Number(n) === 1 ? "decode" : "decodes";
+}
+
+/** Band and max-age filters only — the Show menu is applied separately. */
+function rosPassesBandAndAge(c, selected, maxAge) {
+  if (selected && selected.size) {
+    const hitBand = c.band && c.band !== "?" && selected.has(c.band);
+    const hitInst = c.instance && selected.has(c.instance);
+    const unknown = !c.band || c.band === "?";
+    if (!hitBand && !hitInst && !unknown) return false;
+  }
+  if (maxAge > 0 && c.age != null && c.age > maxAge) return false;
+  return true;
+}
+
+/**
+ * Empty-roster line. Uses the candidates already in the roster window
+ * (server keeps ~5 min; the max-age control may narrow that). Not one
+ * FT8 period, so the text does not say "this period".
+ */
+function rosEmptyText(r, needMode, selected, maxAge) {
+  const cands = (r && Array.isArray(r.candidates)) ? r.candidates : [];
+  if (!cands.length) return "no decodes yet…";
+  const inWindow = cands.filter((c) => rosPassesBandAndAge(c, selected, maxAge));
+  const n = inWindow.length || cands.length;
+  const mode = rosNormalizeNeed(needMode);
+  if (!inWindow.length) {
+    return n + " " + rosDecodeWord(n) + ", none match Show";
+  }
+  if (mode === "needed") {
+    return n + " " + rosDecodeWord(n) + ", none needed";
+  }
+  return n + " " + rosDecodeWord(n) + ", none match Show";
+}
+
+function rosEmptyTip(r, needMode, selected, maxAge) {
+  const cands = (r && Array.isArray(r.candidates)) ? r.candidates : [];
+  if (!cands.length) return "";
+  const inWindow = cands.filter((c) => rosPassesBandAndAge(c, selected, maxAge));
+  const mode = rosNormalizeNeed(needMode);
+  if (!inWindow.length) {
+    return "Band or max age hid every station heard in the roster window.";
+  }
+  if (mode === "needed") {
+    return "Show is Needed. Stations were heard in the current band and max age filters, and none are needed.";
+  }
+  return "The Show menu hid every station in the current band and max age filters.";
+}
+
 function rosDraw() {
   const r = _rosData; if (!r) return;
   rosSyncMaxAgeControl();
@@ -2554,14 +2696,8 @@ function rosDraw() {
   const maxAge = rosMaxAgeSec();
   let rows = r.candidates.filter(c => {
     if (!rosKeepCandidate(c, needMode)) return false;
-    if (selected && selected.size) {
-      const hitBand = c.band && c.band !== "?" && selected.has(c.band);
-      const hitInst = c.instance && selected.has(c.instance);
-      const unknown = !c.band || c.band === "?";
-      // Unknown-band lines stay visible until Status fills dial/band.
-      if (!hitBand && !hitInst && !unknown) return false;
-    }
-    if (maxAge > 0 && c.age != null && c.age > maxAge) return false;
+    // Unknown-band lines stay visible until Status fills dial/band.
+    if (!rosPassesBandAndAge(c, selected, maxAge)) return false;
     return true;
   });
 
@@ -2592,10 +2728,21 @@ function rosDraw() {
     `${needNote} · ${r.not_needed} worked · ${r.count} heard` +
     ` · showing ${rows.length} · ${bandNote} · ${colNote}`;
   const body = $("ros-body"); body.innerHTML = "";
-  $("ros-empty").style.display = rows.length ? "none" : "block";
+  const empty = $("ros-empty");
+  if (empty) {
+    if (rows.length) {
+      empty.style.display = "none";
+    } else {
+      empty.style.display = "block";
+      empty.textContent = rosEmptyText(r, needMode, selected, maxAge);
+      const tip = rosEmptyTip(r, needMode, selected, maxAge);
+      if (tip) empty.title = tip;
+      else empty.removeAttribute("title");
+    }
+  }
   // Drop prior fit widths before painting new cells so measure sees content.
   const table = $("ros");
-  const oldFit = table && table.querySelector("colgroup.ros-fit");
+  const oldFit = table && table.querySelector("colgroup.col-fit, colgroup.ros-fit");
   if (oldFit) oldFit.remove();
   if (table) table.style.tableLayout = "auto";
   const canWorkBase = !!( _txState && _txState.can_tx );
@@ -2911,9 +3058,10 @@ async function rotPost(url, payload) {
     const j = await r.json().catch(() => ({}));
     const m = $("tx-meta");
     if (m) {
+      const mark = j.approximate ? "~" : "";
       const text = j.ok
         ? (j.az != null
-          ? `→ Point ${j.rotator || "?"} to ${j.az}°` + (j.detail ? ` (${j.detail})` : "")
+          ? `→ Point ${j.rotator || "?"} to ${mark}${j.az}°` + (j.detail ? ` (${j.detail})` : "")
           : (j.detail || "rotator ok"))
         : `Point failed: ${j.detail || j.error || "failed"}`;
       // Same Point wording as before. This only replaces a Work/Halt note.
@@ -2925,14 +3073,44 @@ async function rotPost(url, payload) {
   }
 }
 
-function renderRotators(list) {
-  const body = $("rot-body");
+function antennaTableRows(s) {
+  const out = [];
+  const ants = (s && s.antennas) || [];
+  if (ants.length) {
+    for (const ant of ants) {
+      const name = ant.name || ant.id || "Antenna";
+      for (const d of (ant.devices || [])) {
+        out.push({
+          name: name,
+          kind: d.kind || "rotator",
+          az: d.az,
+          connection: d.connection,
+          detail: d.detail || "",
+        });
+      }
+    }
+    return out;
+  }
+  // Lab sim rotators use the same compact row until they sit on an antenna.
+  for (const r of (s && s.rotators) || []) {
+    const connected = r.connection === "connected" || (r.link_ok && r.az != null);
+    out.push({
+      name: r.label || r.name || r.id || "Rotator",
+      kind: "rotator",
+      az: r.az,
+      connection: connected && r.az != null ? "connected" : "stale",
+      detail: r.detail || "",
+    });
+  }
+  return out;
+}
+
+function renderAntennas(s) {
+  const body = $("ant-body");
   if (!body) return;
-  const rows = list || [];
-  const empty = $("rot-empty");
-  const section = $("rot-section") || $("rot-section-status");
-  const onOps = !!$("tx-halt");
-  // Hide Rotators until WIMS has seen at least one (Operate + Status overview).
+  const rows = antennaTableRows(s);
+  const empty = $("ant-empty");
+  const section = $("ant-section") || $("ant-section-status");
   if (section) {
     section.style.display = rows.length ? "block" : "none";
   } else if (empty) {
@@ -2940,30 +3118,20 @@ function renderRotators(list) {
   }
   body.innerHTML = "";
   for (const r of rows) {
+    const rotator = r.kind === "rotator";
+    const connected = rotator && r.connection === "connected" && r.az != null;
+    const heading = connected ? (r.az + "°") : (rotator ? "unknown" : "—");
+    const state = connected ? "connected" : "stale";
+    const detail = r.detail || (connected ? "" : (rotator ? "Heading unknown." : "Not read yet."));
     const tr = document.createElement("tr");
-    const move = r.moving ? '<span class="az-moving">slewing</span>' : "settled";
-    let tail = onOps
-      ? `<td class="act"><button type="button" class="txbtn" data-rot-stop="${esc(r.id)}">Stop</button></td>`
-      : `<td>${esc(r.source || "—")}</td>`;
     tr.innerHTML =
-      `<td>${esc(r.label || r.id)}</td>` +
-      `<td class="num">${r.az == null ? "—" : r.az + "°"}</td>` +
-      `<td class="num">${r.target_az == null ? "—" : r.target_az + "°"}</td>` +
-      `<td>${move}</td>` +
-      `<td>${esc(r.health || "?")}</td>` +
-      `<td>${esc((r.instances || []).join(", ") || "—")}</td>` +
-      tail;
+      `<td>${esc(r.name)}</td>` +
+      `<td>${esc(r.kind || "")}</td>` +
+      `<td class="num">${esc(heading)}</td>` +
+      `<td class="${connected ? "" : "rot-stale"}" title="${escAttr(detail)}">${state}</td>`;
     body.appendChild(tr);
   }
-  if (!_rotWired && onOps) {
-    _rotWired = true;
-    body.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-rot-stop]");
-      if (b) rotPost("/api/rotator/stop", {rotator_id: b.dataset.rotStop});
-    });
-  }
 }
-let _rotWired = false;
 
 function renderTxBar(tx) {
   if (!$("tx-status") && !$("tx-halt")) return;  // not on Operate
@@ -3001,6 +3169,385 @@ function renderTxBar(tx) {
   }
 }
 
+// -- DX cluster spots (separate from the live roster) ----------------------- //
+// Columns reuse the roster's header, class, and cell. The callsign badge is
+// rosCall → rosChase (one place; hide generic mult when a place word is
+// shown). A click only selects.
+
+function spotSpotter(row) {
+  const calls = row.spotter_calls || [];
+  const n = Number(row.spotters);
+  const count = Number.isFinite(n) && n > 0 ? n : calls.length;
+  const primary = String(row.spotter || calls[0] || "").trim();
+  const tip = calls.length ? calls.join(", ") : primary;
+  if (!count && !primary) return "-";
+  const label = count > 1 && primary
+    ? (primary + " +" + (count - 1))
+    : (primary || String(count));
+  const title = tip ? ` title="${escAttr(tip)}"` : "";
+  return `<span${title}>${esc(label)}</span>`;
+}
+
+function spotQsy(row) {
+  const word = row.qsy || row.where || "";
+  const cls = row.needs_qsy ? "spot-qsy" : "spot-here";
+  let tip = row.needs_qsy
+    ? "No live radio is on this band and mode."
+    : "A live radio is already on this band and mode.";
+  const cost = Number(row.qsy_points);
+  if (row.needs_qsy && cost) {
+    tip += " Score loses " + String(Math.abs(cost)) + ".";
+  }
+  return `<span class="${cls}" title="${escAttr(tip)}">${esc(word)}</span>`;
+}
+
+const SPOT_EXTRA = {
+  spotter: {
+    key: "spotter", label: "Spotter", cls: "",
+    hint: "Who posted this. A plus count means more than one. Hover lists them.",
+    cell: spotSpotter,
+  },
+  qsy: {
+    key: "qsy", label: "QSY", cls: "",
+    hint: "Retune. QSY means no live radio is on this band and mode. On band means one is. Score already includes that cost.",
+    cell: spotQsy,
+  },
+};
+
+function spotCols() {
+  return SPOT_COL_KEYS.map(key => {
+    if (SPOT_EXTRA[key]) return SPOT_EXTRA[key];
+    return ROS_COLS.find(c => c.key === key);
+  }).filter(Boolean);
+}
+
+function spotTitle(row) {
+  const factors = (row.factors || []).map(f => {
+    const n = Number(f.contribution);
+    const sign = n > 0 ? "+" : "";
+    return f.name + " " + sign + n + (f.detail ? " (" + f.detail + ")" : "");
+  }).join(" · ");
+  const who = (row.spotter_calls || []).join(", ");
+  const reason = row.need_reason || row.why_full || "";
+  const mult = row.mult_reason && row.mult_reason !== reason ? row.mult_reason : "";
+  return [
+    reason,
+    mult,
+    factors,
+    row.km != null ? ((row.bearing_source === "dxcc" ? "~" : "") + row.km + " km") : "",
+    who ? ("Spotters: " + who) : "",
+    "Click selects this station. It does not transmit or retune. Work needs a live decode.",
+  ].filter(Boolean).join("\n");
+}
+
+let _spotData = null;
+let _spotSort = {key: "score", dir: -1};
+let _spotWired = false;
+function spotWire() {
+  const body = $("spot-body");
+  if (!body || _spotWired) return;
+  _spotWired = true;
+  const head = $("spot-head");
+  if (head) {
+    head.addEventListener("click", (e) => {
+      const th = e.target.closest("th");
+      if (!th || !th.dataset.key) return;
+      const key = th.dataset.key;
+      if (_spotSort.key === key) _spotSort.dir *= -1;
+      else {
+        const col = spotCols().find(c => c.key === key) || {};
+        _spotSort = {key, dir: col.num ? -1 : 1};
+      }
+      if (_spotData) renderSpotted(_spotData);
+    });
+  }
+  body.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-call]");
+    if (!tr) return;
+    const note = $("spot-note");
+    fetch("/api/cluster/select", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        call: tr.dataset.call || "",
+        grid: tr.dataset.grid || "",
+        band: tr.dataset.band || "",
+        mode: tr.dataset.mode || "",
+      }),
+    }).then(r => r.json()).then(j => {
+      if (note) note.textContent = (j && j.line) || "";
+    }).catch(err => {
+      if (note) note.textContent = String(err);
+    });
+  });
+}
+
+function spotBuildHead() {
+  const head = $("spot-head");
+  if (!head) return;
+  const cols = spotCols();
+  head.innerHTML = cols.map(col => {
+    const active = col.key === _spotSort.key;
+    const arrow = active ? (_spotSort.dir < 0 ? " ▾" : " ▴") : "";
+    const hint = col.hint ? ` title="${escAttr(col.hint)}"` : "";
+    return `<th data-key="${col.key}" class="${col.cls}${active ? " sort" : ""}"${hint}>${col.label}${arrow}</th>`;
+  }).join("");
+}
+
+const SPOT_MODE_FILTERS = ["SSB", "CW", "FT8", "FT4", "Other"];
+let _spotModesWired = false;
+
+function spotModeChoices(c) {
+  const choices = c && c.mode_choices;
+  if (choices && choices.length) return choices;
+  return SPOT_MODE_FILTERS.map(mode => ({mode, on: true}));
+}
+
+function spotReadModes() {
+  const wrap = $("spot-modes");
+  if (!wrap) return "all";
+  const boxes = [...wrap.querySelectorAll("input[data-mode]")];
+  const on = boxes.filter(box => box.checked).map(box => box.dataset.mode);
+  if (on.length && on.length === boxes.length) return "all";
+  return on;
+}
+
+function spotSaveModes() {
+  fetch("/api/cluster", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({modes: spotReadModes()}),
+  }).catch(() => {});
+}
+
+function spotSyncModeChecks(c) {
+  const wrap = $("spot-modes");
+  if (!wrap) return;
+  const choices = spotModeChoices(c);
+  const key = choices.map(item => item.mode).join("|");
+  if (wrap.dataset.key !== key) {
+    wrap.dataset.key = key;
+    wrap.innerHTML = choices.map(item =>
+      `<label><input type="checkbox" data-mode="${escAttr(item.mode)}" ${item.on ? "checked" : ""}> ` +
+      `${esc(item.mode)}</label>`
+    ).join("");
+  } else {
+    for (const item of choices) {
+      const box = wrap.querySelector('input[data-mode="' + item.mode + '"]');
+      if (box) box.checked = !!item.on;
+    }
+  }
+  if (_spotModesWired) return;
+  _spotModesWired = true;
+  wrap.addEventListener("change", (e) => {
+    if (!e.target.closest("input[data-mode]")) return;
+    spotSaveModes();
+  });
+}
+
+function renderSpotted(c) {
+  const status = $("spot-status");
+  if (!status) return;
+  c = c || {};
+  _spotData = c;
+  spotSyncModeChecks(c);
+  status.textContent = c.status_line || "Cluster: off. Turn it on in Setup.";
+  if (c.detail) status.title = c.detail;
+  const note = $("spot-note");
+  if (note && c.selected_line) note.textContent = c.selected_line;
+  const table = $("spot");
+  const body = $("spot-body");
+  if (!table || !body) return;
+  spotWire();
+  const cols = spotCols();
+  const col = cols.find(item => item.key === _spotSort.key) || cols[cols.length - 1];
+  const rows = (c.rows || []).slice();
+  const val = (row) => {
+    if (!col) return "";
+    const v = row[col.key];
+    if (col.num) return v == null ? -Infinity : v;
+    return (v || "").toString().toUpperCase();
+  };
+  rows.sort((a, b) => {
+    const x = val(a), y = val(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * _spotSort.dir;
+  });
+  const oldFit = table.querySelector("colgroup.col-fit, colgroup.ros-fit");
+  if (oldFit) oldFit.remove();
+  table.style.tableLayout = "auto";
+  spotBuildHead();
+  table.hidden = rows.length === 0;
+  const selCall = (c.selected && c.selected.call) || "";
+  const selBand = (c.selected && c.selected.band) || "";
+  body.innerHTML = rows.map(row => {
+    const classes = [];
+    if (selCall && row.call === selCall && row.band === selBand) classes.push("spot-sel");
+    if (row.is_new_mult) classes.push("mult");
+    if (row.chase === "unconfirmed") classes.push("unconfirmed");
+    return `<tr class="${classes.join(" ")}" data-call="${escAttr(row.call)}" ` +
+      `data-grid="${escAttr(row.grid || "")}" data-band="${escAttr(row.band || "")}" ` +
+      `data-mode="${escAttr(row.mode || "")}" title="${escAttr(spotTitle(row))}">` +
+      cols.map(item => `<td class="${item.cls}">${item.cell(row)}</td>`).join("") +
+      `</tr>`;
+  }).join("");
+  requestAnimationFrame(() => rosFitColumns());
+}
+
+function clusterReadForm() {
+  const bands = [];
+  document.querySelectorAll("#cluster-bands input[data-band]").forEach(box => {
+    if (box.checked) bands.push(box.dataset.band);
+  });
+  const all = $("cluster-all");
+  const node = $("cluster-node");
+  return {
+    enabled: !!($("cluster-enabled") && $("cluster-enabled").checked),
+    node: node ? node.value : "custom",
+    host: ($("cluster-host") && $("cluster-host").value || "").trim(),
+    port: Number($("cluster-port") && $("cluster-port").value),
+    qsy_cost: Number($("cluster-qsy") && $("cluster-qsy").value),
+    bands: (all && all.checked) ? "all" : bands,
+    station_call: ($("cluster-station-call") && $("cluster-station-call").value || "").trim(),
+  };
+}
+
+function clusterApplyPick() {
+  const sel = $("cluster-node");
+  const host = $("cluster-host");
+  const port = $("cluster-port");
+  if (!sel || !host || !port) return;
+  const opt = sel.options[sel.selectedIndex];
+  const custom = !opt || opt.value === "custom" || !opt.dataset.host;
+  host.readOnly = !custom;
+  port.readOnly = !custom;
+  if (!custom) {
+    host.value = opt.dataset.host;
+    port.value = opt.dataset.port;
+  }
+}
+
+function clusterSave() {
+  const line = $("cluster-setup-line");
+  fetch("/api/cluster", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(clusterReadForm()),
+  }).then(r => r.json()).then(j => {
+    if (!line) return;
+    if (j && j.ok) {
+      delete line.dataset.err;
+      const call = $("cluster-station-call");
+      if (call && j.station_call != null) call.value = j.station_call;
+    } else if (j && j.error === "invalid_call") {
+      line.dataset.err = "1";
+      line.textContent = "That is not a valid station call.";
+    } else {
+      line.dataset.err = "1";
+      line.textContent = "Could not save. Try again.";
+    }
+  }).catch(() => {
+    if (!line) return;
+    line.dataset.err = "1";
+    line.textContent = "Could not save. Try again.";
+  });
+}
+
+let _clusterWired = false;
+function clusterWire() {
+  if (_clusterWired || !$("cluster-save")) return;
+  _clusterWired = true;
+  $("cluster-save").addEventListener("click", clusterSave);
+  const en = $("cluster-enabled");
+  if (en) en.addEventListener("change", clusterSave);
+  const all = $("cluster-all");
+  const wrap = $("cluster-bands");
+  if (all) all.addEventListener("change", () => {
+    if (wrap) wrap.querySelectorAll("input[data-band]").forEach(box => {
+      box.checked = all.checked;
+    });
+    clusterSave();
+  });
+  if (wrap) wrap.addEventListener("change", (e) => {
+    if (!e.target.closest("input[data-band]")) return;
+    if (all) {
+      const boxes = [...wrap.querySelectorAll("input[data-band]")];
+      all.checked = boxes.length > 0 && boxes.every(b => b.checked);
+    }
+    clusterSave();
+  });
+  const qsy = $("cluster-qsy");
+  if (qsy) qsy.addEventListener("change", clusterSave);
+  const station = $("cluster-station-call");
+  if (station) station.addEventListener("change", clusterSave);
+  const node = $("cluster-node");
+  if (node) node.addEventListener("change", () => {
+    clusterApplyPick();
+    clusterSave();
+  });
+  const host = $("cluster-host");
+  if (host) host.addEventListener("change", () => {
+    if (node && !host.readOnly) node.value = "custom";
+    clusterSave();
+  });
+  const port = $("cluster-port");
+  if (port) port.addEventListener("change", () => {
+    if (node && !port.readOnly) node.value = "custom";
+    clusterSave();
+  });
+}
+
+let _clusterReady = false;
+function renderCluster(c) {
+  renderSpotted(c);
+  const host = $("cluster-host");
+  const line = $("cluster-setup-line");
+  if (line && c && !line.dataset.err) {
+    line.textContent = c.status_line || "";
+    if (c.detail) line.title = c.detail;
+  }
+  const warn = $("cluster-call-warning");
+  if (warn) {
+    warn.textContent = (c && c.call_warning) || "";
+    warn.hidden = !warn.textContent;
+  }
+  if (!host) return;
+  clusterWire();
+  if (_clusterReady) return;
+  _clusterReady = true;
+  c = c || {};
+  const en = $("cluster-enabled");
+  if (en) en.checked = !!c.enabled;
+  const node = $("cluster-node");
+  if (node && c.nodes && c.nodes.length) {
+    const current = c.node || "custom";
+    node.innerHTML = c.nodes.map(item =>
+      `<option value="${escAttr(item.id)}" data-host="${escAttr(item.host)}" ` +
+      `data-port="${escAttr(String(item.port))}">${esc(item.label)}</option>`
+    ).join("") + '<option value="custom">Other</option>';
+    node.value = [...node.options].some(opt => opt.value === current) ? current : "custom";
+  } else if (node && c.node) {
+    node.value = c.node;
+  }
+  host.value = c.host || "k1ttt.net";
+  const port = $("cluster-port");
+  if (port) port.value = c.port || 7373;
+  clusterApplyPick();
+  const station = $("cluster-station-call");
+  if (station) station.value = c.station_call || "";
+  const qsy = $("cluster-qsy");
+  if (qsy && c.qsy_cost != null) qsy.value = String(c.qsy_cost);
+  const all = $("cluster-all");
+  if (all) all.checked = c.all_bands !== false;
+  const wrap = $("cluster-bands");
+  if (wrap) {
+    const choices = c.band_choices || [];
+    wrap.innerHTML = choices.map(item =>
+      `<label><input type="checkbox" data-band="${escAttr(item.band)}" ${item.on ? "checked" : ""}> ` +
+      `${esc(fmtBand(item.band))}</label>`
+    ).join("");
+  }
+}
+
 // -- dispatch + connect ----------------------------------------------------- //
 
 function render(s) {
@@ -3009,10 +3556,11 @@ function render(s) {
   renderBandInventory(s);
   renderAgents(s);
   renderTxBar(s.tx);                          // before roster: rosWork() reads can_tx
-  renderRotators(s.rotators);
+  renderAntennas(s);
   renderInterlock(s.interlock, s.tx);
   _rosOffered = operateOfferedBands(s);
   renderRoster(s.roster);
+  renderCluster(s.cluster);
   renderInstances(s);
   renderActivity(s.activity);
   renderDecodes(s.decodes);                   // no-op unless #dlog-body exists
