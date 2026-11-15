@@ -186,11 +186,26 @@ def clean_station_call(value) -> str:
 
 
 def effective_call(settings: dict | None, live_call: str | None = "") -> str:
-    """Setup station call first; otherwise the live WSJT-X / logger call."""
+    """Setup station call first; otherwise a live call already resolved.
+
+    Callers pass the first available live source, in this order: a running
+    WSJT-X Status call (de_call), then a logger mycall. Do not pass a call
+    read from a WSJT-X ini file — a loaner PC may still have another
+    station's call on disk.
+    """
     setup = clean_station_call((settings or {}).get("station_call"))
     if setup:
         return setup
     return clean_station_call(live_call)
+
+
+def first_live_call(*candidates) -> str:
+    """First valid call from live sources, skipping blanks and junk."""
+    for item in candidates:
+        call = clean_station_call(item)
+        if call:
+            return call
+    return ""
 
 
 def call_mismatch_warning(setup_call: str, live_calls) -> str:

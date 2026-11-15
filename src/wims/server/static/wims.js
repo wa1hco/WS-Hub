@@ -3517,9 +3517,18 @@ function renderCluster(c) {
   }
   if (!host) return;
   clusterWire();
+  c = c || {};
+  // Keep an empty Station call filled from the known login, but never
+  // overwrite a value the operator is typing or has already entered.
+  const stationField = $("cluster-station-call");
+  if (stationField && document.activeElement !== stationField) {
+    const known = (c.station_call || c.callsign || "").trim();
+    if (!stationField.value.trim() && known) {
+      stationField.value = known;
+    }
+  }
   if (_clusterReady) return;
   _clusterReady = true;
-  c = c || {};
   const en = $("cluster-enabled");
   if (en) en.checked = !!c.enabled;
   const node = $("cluster-node");
@@ -3538,7 +3547,9 @@ function renderCluster(c) {
   if (port) port.value = c.port || 7373;
   clusterApplyPick();
   const station = $("cluster-station-call");
-  if (station) station.value = c.station_call || "";
+  if (station && !station.value.trim()) {
+    station.value = c.station_call || c.callsign || "";
+  }
   const qsy = $("cluster-qsy");
   if (qsy && c.qsy_cost != null) qsy.value = String(c.qsy_cost);
   const all = $("cluster-all");
