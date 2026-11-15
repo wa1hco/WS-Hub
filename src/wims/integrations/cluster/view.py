@@ -180,7 +180,7 @@ def _ago(age_s: float | None) -> str:
 def _retry_wait(retry_s: float) -> str:
     if not retry_s:
         return ""
-    return f" Trying again in {max(0, int(retry_s))} seconds."
+    return f", retrying in {max(0, int(retry_s))} s"
 
 
 def mode_bucket(mode: str) -> str:
@@ -220,56 +220,52 @@ def status_line(*, enabled: bool, phase: str, host: str, port: int,
         return "Cluster: no modes are selected. Choose modes on Operate."
     if phase == "need_call":
         return "Cluster: no callsign. Set the station call in Setup."
-    if phase in {"off", "connecting"}:
+    if phase in {"off", "connecting", "tcp"}:
         return f"Cluster: connecting to {host}..."
     if phase == "refused":
         who = callsign or "that callsign"
-        return f"Cluster: {host} refused {who}. Check the callsign in WSJT-X."
+        return f"Cluster: {host} refused {who}. Check the callsign in Setup."
     if phase == "extra":
         return (
             "Cluster: the node asked for more than a callsign. "
             "WIMS only sends your callsign. Pick another node in Setup."
         )
     if phase == "silent" or (phase == "retry" and reason == "silent"):
-        return (
-            "Cluster: node sent nothing. Try another node on Setup."
-            + _retry_wait(retry_s)
-        )
+        return "Cluster: node sent nothing. Try another node on Setup" + _retry_wait(retry_s) + "."
     if phase == "retry":
         wait = _retry_wait(retry_s)
+        target = f"{host}:{port}" if port else host
         if reason == "dns":
             return (
                 f"Cluster: the name {host} did not resolve. "
-                f"Check the node address in Setup.{wait}"
+                f"Check the node address in Setup{wait}."
             )
         if reason == "refused_port":
             return (
                 f"Cluster: {host} refused the connection on port {port}. "
-                f"Check the port in Setup.{wait}"
+                f"Check the port in Setup{wait}."
             )
         if reason == "quiet":
-            return f"Cluster: {host} went quiet.{wait}"
-        return (
-            f"Cluster: can't reach {host} port {port}. "
-            f"Check the node address in Setup.{wait}"
-        )
-    if phase == "tcp":
-        return "Cluster: connected, no spots yet."
+            return f"Cluster: {host} went quiet{wait}."
+        if reason == "closed":
+            return f"Cluster: {host} closed the connection{wait}."
+        return f"Cluster: can't reach {target}{wait}."
+    who = callsign or "the station"
     if phase == "logged_in" and spot_count <= 0 and not have_lines:
-        return "Cluster: logged in, no spots yet."
+        return f"Cluster: logged in as {who}, no spots yet."
     if not have_grid:
         return (
-            f"Cluster: logged in, {spot_count} spots. "
+            f"Cluster: logged in as {who}, {spot_count} spots. "
             "No grid from WSJT-X yet, so range cannot be checked."
         )
-    return f"Cluster: logged in, {spot_count} spots, {needed_count} needed"
+    return f"Cluster: logged in as {who}, {spot_count} spots, {needed_count} needed"
 
 
 def status_detail(*, host: str, port: int, callsign: str, qsy_cost: int,
                   bands, ttl_s: int, drops: dict, weights: dict,
                   last_spot_age: float | None = None,
                   node_spoke: bool = False, login_sent: bool = False,
-                  modes=None) -> str:
+                  modes=None, phase: str = "") -> str:
     if bands is None:
         band_words = "every amateur band"
     elif not bands:
@@ -285,8 +281,16 @@ def status_detail(*, host: str, port: int, callsign: str, qsy_cost: int,
     parts = [
         f"Node {host} port {port}.",
         f"Login {callsign}." if callsign else "No callsign yet.",
-        "Logged in." if login_sent else "Not logged in yet.",
-        "The node has spoken." if node_spoke else "The node has not spoken.",
+        (
+            "Logged in."
+            if login_sent and phase in {"logged_in", "connected"}
+            else "Not logged in yet."
+        ),
+        (
+            "The node has spoken."
+            if node_spoke and phase in {"tcp", "logged_in", "connected"}
+            else "The node has not spoken."
+        ),
         _ago(last_spot_age),
         "Read-only. WIMS sends only your callsign, then listens.",
         "It does not post spots. A click does not transmit or retune a radio.",

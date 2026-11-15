@@ -108,7 +108,7 @@ A group with more than one instance is the multi-op case: the closed **TX groups
 
 Under the heading, checkboxes for **SSB**, **CW**, **FT8**, **FT4**, and **Other** hide spots that are not that mode. All start on. **Other** is MSK144, Q65, FM, data, and anything else. The choice is kept with the cluster settings. The count on the status line follows the boxes. The **mult** badge on a Spotted line follows the same rule as the call roster: it is left off when the place word is shown, and in a contest only **mult** shows.
 
-The line above the list is the connection, such as `Cluster: logged in, 12 spots, 3 needed`. Hover it for the node, the login, and why some spots were left off. A failure names the next step. Spots stay off until Setup turns them on (`Cluster: off. Turn it on in Setup.`).
+The line above the list is the connection, such as `Cluster: logged in as WA1HCO, 12 spots, 3 needed`. Hover it for the node, the login, and why some spots were left off. A failure names the next step. Spots stay off until Setup turns them on (`Cluster: off. Turn it on in Setup.`).
 
 Click a Spotted line to select that station. The radio is not retuned and nothing is transmitted. Work still needs a live decode on the roster. (Retuning the radio and pointing the antenna from a spot is planned. Even then, the contact starts from the roster after WSJT-X decodes the station.)
 
@@ -139,7 +139,7 @@ Click a Spotted line to select that station. The radio is not retuned and nothin
 
 **DX cluster** is under the Goal. **Show spots** turns the list on. It is off until you check it. The usual node is K1TTT (`k1ttt.net`, port 7373). The list also has NC7J, W3LPL, and VE7CC, or you can type another host and port. WS Hub logs in with the callsign from WSJT-X and then only listens. It does not post spots. **QSY cost** is how many points a spot loses when no radio is already on that band and mode. The usual cost is 8. The spot stays on the list. **All bands** starts checked, so a spot on another band can show. Uncheck a band to hide it. Save is immediate when you change a box. The choice is kept on this PC the same way the Goal is.
 
-The line on Operate tells you what the node is doing. **connected, no spots yet** means the connection is up and the node has not sent a spot. **logged in, no spots yet** means your callsign was sent. **logged in, 12 spots, 3 needed** means spot lines arrived. If the node accepts the connection and stays silent, the line says the node sent nothing and to try another node. Hover that line for how long since the last spot.
+The line on Operate tells you what the node is doing. **connecting to k1ttt.net...** means WS Hub is opening the connection or waiting for login. **logged in as WA1HCO, no spots yet** means your callsign was sent. **logged in as WA1HCO, 12 spots, 3 needed** means spot lines arrived. If the node closes the connection or cannot be reached, the line says so and that it will try again. If the node accepts the connection and stays silent, the line says the node sent nothing and to try another node. Hover that line for how long since the last spot.
 
 ---
 

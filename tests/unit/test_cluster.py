@@ -35,7 +35,7 @@ from wims.engine.goal_rules import ChecklistRules  # noqa: E402
 from wims.lotw import use_paths  # noqa: E402
 from wims.rules.cty import CtyIndex  # noqa: E402
 from wims.integrations.cluster.client import (  # noqa: E402
-    BACKOFF_START, LOGIN_WAIT_S, ClusterLink, ClusterService, is_login_prompt,
+    BACKOFF_CAP, BACKOFF_START, LOGIN_WAIT_S, ClusterLink, ClusterService, LinkStop, is_login_prompt,
     next_backoff, sent_text,
 )
 from wims.integrations.cluster.modes import infer_mode  # noqa: E402
@@ -338,30 +338,39 @@ def test_status_lines_name_the_next_step():
         callsign="WA1HCO", retry_s=0, reason="", spot_count=12, needed_count=3,
         bands_empty=False, have_grid=True,
     )
-    assert connected == "Cluster: logged in, 12 spots, 3 needed"
+    assert connected == "Cluster: logged in as WA1HCO, 12 spots, 3 needed"
     assert status_line(
         enabled=True, phase="tcp", host=DEFAULT_HOST, port=DEFAULT_PORT,
         callsign="WA1HCO", retry_s=0, reason="", spot_count=0, needed_count=0,
         bands_empty=False, have_grid=True,
-    ) == "Cluster: connected, no spots yet."
+    ) == f"Cluster: connecting to {DEFAULT_HOST}..."
     assert status_line(
         enabled=True, phase="logged_in", host=DEFAULT_HOST, port=DEFAULT_PORT,
         callsign="WA1HCO", retry_s=0, reason="", spot_count=0, needed_count=0,
         bands_empty=False, have_grid=True,
-    ) == "Cluster: logged in, no spots yet."
+    ) == "Cluster: logged in as WA1HCO, no spots yet."
     silent = status_line(
         enabled=True, phase="silent", host="dxc.ve7cc.net", port=23,
         callsign="WA1HCO", retry_s=5, reason="silent", spot_count=0,
         needed_count=0, bands_empty=False, have_grid=True,
     )
-    assert silent.startswith("Cluster: node sent nothing. Try another node on Setup.")
+    assert silent.startswith("Cluster: node sent nothing. Try another node on Setup")
+    assert "retrying in 5 s" in silent
     assert "0 spots" not in silent
     retry = status_line(
         enabled=True, phase="retry", host=DEFAULT_HOST, port=23,
         callsign="WA1HCO", retry_s=40, reason="timeout", spot_count=0,
         needed_count=0, bands_empty=False, have_grid=True,
     )
-    assert "can't reach" in retry and "Setup" in retry and "40" in retry
+    assert retry == f"Cluster: can't reach {DEFAULT_HOST}:23, retrying in 40 s."
+    closed = status_line(
+        enabled=True, phase="retry", host=DEFAULT_HOST, port=DEFAULT_PORT,
+        callsign="WA1HCO", retry_s=15, reason="closed", spot_count=0,
+        needed_count=0, bands_empty=False, have_grid=True,
+    )
+    assert closed == f"Cluster: {DEFAULT_HOST} closed the connection, retrying in 15 s."
+    assert "can't reach" not in closed
+    assert "Logged in" not in closed
     assert "Choose bands in Setup" in status_line(
         enabled=True, phase="connected", host=DEFAULT_HOST, port=23,
         callsign="WA1HCO", retry_s=0, reason="", spot_count=0, needed_count=0,
@@ -382,9 +391,10 @@ def test_status_lines_name_the_next_step():
 def test_backoff_never_tight():
     assert next_backoff(0) == BACKOFF_START
     assert next_backoff(5) == 10
-    assert next_backoff(160) == 300
-    assert next_backoff(300) == 300
-    assert BACKOFF_START >= 5
+    assert next_backoff(40) == BACKOFF_CAP
+    assert next_backoff(60) == BACKOFF_CAP
+    assert BACKOFF_START == 5
+    assert BACKOFF_CAP == 60
 
 
 def test_settings_default_all_bands_and_node():
@@ -524,7 +534,7 @@ def test_service_public_uses_goal_and_qsy_flag():
             now=NOW, callsign="WA1HCO", our_grid=HOME,
             operations=[OnAir("10m", "FT8")], classify=classify,
         )
-        assert view["status_line"] == "Cluster: logged in, 2 spots, 2 needed"
+        assert view["status_line"] == "Cluster: logged in as WA1HCO, 2 spots, 2 needed"
         assert "Last spot" in view["detail"]
         where = {row["call"]: row["where"] for row in view["rows"]}
         assert where["K1ABC"] == "on band"
@@ -604,7 +614,7 @@ def _play(blob: bytes):
         sock = _ScriptSock([blob])
         try:
             svc._read_loop(sock, "WA1HCO", svc._gen)
-        except TimeoutError:
+        except (TimeoutError, LinkStop):
             pass
         log = _log()
 
@@ -670,7 +680,7 @@ def test_silent_node_is_not_called_connected():
             classify=lambda *_a: None,
         )
         assert view["status_line"].startswith(
-            "Cluster: node sent nothing. Try another node on Setup.")
+            "Cluster: node sent nothing. Try another node on Setup")
         assert "0 spots" not in view["status_line"]
         assert "No spot line yet" in view["detail"]
 
@@ -1041,7 +1051,7 @@ def test_mode_filter_other_unknown_and_status_counts():
         assert [row["mode"] for row in view["rows"]] == ["FT8"]
         assert view["spot_count"] == 1
         assert view["needed_count"] == 1
-        assert view["status_line"] == "Cluster: logged in, 1 spots, 1 needed"
+        assert view["status_line"] == "Cluster: logged in as WA1HCO, 1 spots, 1 needed"
         assert "Modes: FT8." in view["detail"]
 
         svc.update({"modes": []})
@@ -1234,6 +1244,83 @@ def test_setup_page_has_station_call_and_warning():
     assert "python -m" not in html.lower()
     assert "PYTHONPATH" not in html
     assert "settings file" in html
+
+
+
+
+def test_dropped_session_closes_socket_before_the_wait_and_is_not_logged_in():
+    """A peer close is not 'can't reach', and the socket is not held during the wait."""
+    order = []
+
+    class Sock(_ScriptSock):
+        def close(self):
+            order.append("close")
+
+    sock = Sock([])  # recv returns b"" immediately, like the node hanging up
+
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(
+            path=Path(tmp) / "cluster.json",
+            connect=lambda *_a, **_k: sock,
+        )
+
+        def pause(seconds):
+            order.append(("pause", seconds))
+            svc._stop.set()
+
+        svc._sleep = pause
+        svc.update({"enabled": True, "station_call": "WA1HCO"})
+        # Pretend a prior session had already logged in, so a stale flag
+        # must not leak into the retry status.
+        svc.login_sent = True
+        svc.node_spoke = True
+        svc.start(lambda: "WA1HCO")
+        svc._thread.join(timeout=2)
+        assert "close" in order
+        assert any(item[0] == "pause" for item in order if isinstance(item, tuple))
+        assert order.index("close") < next(
+            i for i, item in enumerate(order) if isinstance(item, tuple) and item[0] == "pause"
+        )
+        assert svc.phase == "retry"
+        assert svc.reason == "closed"
+        assert svc.login_sent is False
+        assert svc.node_spoke is False
+        view = svc.public(
+            now=NOW, callsign="WA1HCO", our_grid=HOME, operations=[],
+            classify=lambda *_a: None,
+        )
+        assert "closed the connection" in view["status_line"]
+        assert "retrying in 5 s" in view["status_line"]
+        assert "can't reach" not in view["status_line"]
+        assert "Logged in." not in view["detail"]
+        assert "Not logged in yet." in view["detail"]
+
+
+def test_connect_failure_status_names_the_host_and_port():
+    with tempfile.TemporaryDirectory() as tmp:
+        sleeps = []
+
+        def boom(_address, _timeout):
+            raise TimeoutError("timed out")
+
+        svc = ClusterService(path=Path(tmp) / "cluster.json", connect=boom)
+
+        def pause(seconds):
+            sleeps.append(seconds)
+            svc._stop.set()
+
+        svc._sleep = pause
+        svc.update({"enabled": True, "station_call": "WA1HCO"})
+        svc.start(lambda: "WA1HCO")
+        svc._thread.join(timeout=2)
+        assert sleeps == [5.0]
+        assert svc.reason == "timeout"
+        view = svc.public(
+            now=NOW, callsign="WA1HCO", our_grid=HOME, operations=[],
+            classify=lambda *_a: None,
+        )
+        assert view["status_line"] == "Cluster: can't reach k1ttt.net:7373, retrying in 5 s."
+        assert "Logged in." not in view["detail"]
 
 
 
