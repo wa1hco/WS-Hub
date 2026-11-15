@@ -114,7 +114,12 @@
     transmit and it does not retune a radio. Work still needs a live decode.
     Spots can be on any band you check, including ones you would have to QSY
     to. They drop off after 15 minutes. If no call is known, set the Station
-    call here.
+    call here. Station grid is your Maidenhead square. If it is blank, WIMS
+    fills it from a running WSJT-X. It is never read from a WSJT-X settings
+    file. When "Use PSK Reporter to rank spots" is on, the site server looks
+    up recent reports with one end in that square and uses them, plus your
+    own recent decodes, to rank and dim cluster spots. The lookup is at most
+    once every five minutes.
   </p>
   <div id="cluster-setup" class="syncrow" style="align-items:center;gap:10px;flex-wrap:wrap">
     <label style="font-size:13px" title="Turn spots on. Saved on this PC, the same way the Goal is.">
@@ -125,6 +130,12 @@
     </label>
     <label style="font-size:13px" title="Use WA1HCO-1, -2… when two stations share one cluster node. Leave blank to use the Station call.">
       Cluster login <input id="cluster-login" size="10" spellcheck="false" autocomplete="off" placeholder="">
+    </label>
+    <label style="font-size:13px" title="Your Maidenhead square, such as FN41 or FN41VP. If it is blank, WIMS fills it from a running WSJT-X. A grid you type is kept. It is never read from a WSJT-X settings file.">
+      Station grid <input id="cluster-station-grid" size="8" spellcheck="false" autocomplete="off" maxlength="6">
+    </label>
+    <label style="font-size:13px" title="When this is on, cluster spots that look workable from your grid sort first. Others stay on the list, dimmed.">
+      <input type="checkbox" id="cluster-psk-rank" checked> Use PSK Reporter to rank spots
     </label>
     <label style="font-size:13px" title="K1TTT is the usual node. If the status says the node sent nothing, pick another.">
       Node
@@ -160,6 +171,7 @@
   </label>
   <div id="cluster-bands" class="cluster-bands"></div>
   <p id="cluster-setup-line" class="hint" style="font-size:12px;margin:6px 0 4px 0"></p>
+  <p id="cluster-psk-line" class="hint" style="font-size:12px;margin:0 0 4px 0"></p>
   <p id="cluster-call-warning" class="warn" style="font-size:12px;margin:0 0 12px 0" hidden></p>
 
   <h2>Networking checklist</h2>

@@ -43,6 +43,7 @@ from pathlib import Path
 
 from wims.core.bands import BAND_ORDER
 from wims.integrations.cluster.parse import valid_cluster_login, valid_login_call
+from wims.integrations.cluster.psk import clean_grid
 
 SCHEMA = 2
 DEFAULT_HOST = "k1ttt.net"
@@ -91,6 +92,9 @@ def default_settings() -> dict:
         "qsy_cost": DEFAULT_QSY_COST,
         "station_call": "",
         "cluster_login": "",
+        "station_grid": "",
+        "psk_rank": True,
+        "show_cluster": True,
     }
 
 
@@ -210,6 +214,24 @@ def effective_call(settings: dict | None, live_call: str | None = "") -> str:
     return clean_cluster_login(live_call) or clean_station_call(live_call)
 
 
+def clean_station_grid(value) -> str:
+    """A 4- or 6-character Maidenhead grid, or blank."""
+    return clean_grid(value)
+
+
+def effective_grid(settings: dict | None, live_grid: str | None = "") -> str:
+    """Setup Station grid first, otherwise a live WSJT-X Status grid.
+
+    Do not pass a grid read from a WSJT-X ini file — a loaner PC may still
+    have another station's locator on disk. The PSK Reporter query uses the
+    4-character field square.
+    """
+    setup = clean_station_grid((settings or {}).get("station_grid"))
+    if setup:
+        return setup
+    return clean_station_grid(live_grid)
+
+
 def first_live_call(*candidates) -> str:
     """First valid call from live sources, skipping blanks and junk."""
     for item in candidates:
@@ -288,6 +310,11 @@ def sanitize(data: dict | None) -> dict:
         out["qsy_cost"] = _clean_qsy(raw.get("qsy_cost"))
     out["station_call"] = clean_station_call(raw.get("station_call"))
     out["cluster_login"] = clean_cluster_login(raw.get("cluster_login"))
+    out["station_grid"] = clean_station_grid(raw.get("station_grid"))
+    if "psk_rank" in raw:
+        out["psk_rank"] = bool(raw.get("psk_rank"))
+    if "show_cluster" in raw:
+        out["show_cluster"] = bool(raw.get("show_cluster"))
     return out
 
 

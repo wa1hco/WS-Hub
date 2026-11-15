@@ -80,7 +80,11 @@ from wims.integrations.cluster.parse import (  # noqa: E402
     valid_cluster_login as _cluster_login_ok,
     valid_login_call as _login_call,
 )
-from wims.integrations.cluster.settings import effective_call as _cluster_effective_call  # noqa: E402
+from wims.integrations.cluster.settings import (  # noqa: E402
+    clean_station_grid as _clean_station_grid,
+    effective_call as _cluster_effective_call,
+    effective_grid as _cluster_effective_grid,
+)
 from wims.integrations.cluster.view import OnAir as _OnAir  # noqa: E402
 from wims.config.seat_profile import (  # noqa: E402
     default_seat_profile_path, load_seat_profile, save_seat_profile_marks,
@@ -2255,12 +2259,20 @@ class LiveFleet:
                 return call
         return ""
 
+    def _live_wsjtx_grid_locked(self) -> str:
+        """Grid from a running WSJT-X Status. Never from an ini file."""
+        return self._grid_text(self._best_station_field_locked("de_grid"))
+
     def _operator_grid_locked(self) -> str:
-        grid = self._grid_text(self._best_station_field_locked("de_grid"))
-        if grid:
-            return grid
-        _call, grid = self._agent_station_locked()
-        return self._grid_text(grid)
+        """Setup Station grid first, then a live WSJT-X Status grid.
+
+        A grid from a WSJT-X ini file is never used — the agent scan of
+        MyGrid stays out of this path.
+        """
+        setup = _clean_station_grid(self._cluster.settings().get("station_grid"))
+        if setup:
+            return setup
+        return self._live_wsjtx_grid_locked()
 
     def _live_wsjtx_calls_locked(self) -> list[str]:
         """Callsigns reported by live WSJT-X Status, newest last."""
@@ -2312,10 +2324,13 @@ class LiveFleet:
             rover_for=rover_for,
             spotter_grid=grid_for,
             entity_latlon=self._entity_latlon,
+            live_grid=self._live_wsjtx_grid_locked() or None,
+            decodes=list(self._decodes),
         )
 
     def start_cluster(self) -> None:
         self._cluster.start(self._cluster_callsign)
+        self._cluster.start_openings()
 
     def stop_cluster(self) -> None:
         self._cluster.stop()
@@ -2371,6 +2386,29 @@ class LiveFleet:
                 }
             body = dict(body)
             body["cluster_login"] = raw_login
+        if "station_grid" in body:
+            raw_grid = str(body.get("station_grid") or "").strip()
+            if raw_grid and not _clean_station_grid(raw_grid):
+                return {
+                    "ok": False,
+                    "error": "invalid_grid",
+                    "message": "That is not a valid station grid. Use a Maidenhead square such as FN41 or FN41VP.",
+                }
+            if not raw_grid:
+                with self._lock:
+                    live = self._live_wsjtx_grid_locked()
+                existing = (self._cluster.settings().get("station_grid") or "").strip()
+                body = dict(body)
+                body["station_grid"] = existing or live
+            else:
+                body = dict(body)
+                body["station_grid"] = _clean_station_grid(raw_grid)
+        else:
+            with self._lock:
+                live = self._live_wsjtx_grid_locked()
+            if live and not (self._cluster.settings().get("station_grid") or "").strip():
+                body = dict(body)
+                body["station_grid"] = live
         saved = self._cluster.update(body)
         return {
             "ok": True,
@@ -2382,6 +2420,9 @@ class LiveFleet:
             "qsy_cost": saved["qsy_cost"],
             "station_call": saved.get("station_call") or "",
             "cluster_login": saved.get("cluster_login") or "",
+            "station_grid": saved.get("station_grid") or "",
+            "psk_rank": bool(saved.get("psk_rank")),
+            "show_cluster": bool(saved.get("show_cluster", True)),
         }
 
     def select_spot(self, body: dict) -> dict:
