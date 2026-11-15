@@ -132,7 +132,10 @@ def test_saved_checkbox_checked_is_needed_and_unchecked_is_all():
 
 def test_operate_page_menu_labels_and_saved_choice():
     html = OPS.read_text(encoding="utf-8")
-    assert 'type="checkbox"' not in html
+    # The roster need filter is a menu, not a checkbox. The Cluster
+    # box lives under Spotted, after this heading.
+    roster = html.split("<h2>Spotted</h2>", 1)[0]
+    assert 'type="checkbox"' not in roster
     assert "needed only" not in html
     opts = re.findall(
         r'role="option" data-value="([^"]+)" title="([^"]+)"[^>]*>([^<]+)</button>',
