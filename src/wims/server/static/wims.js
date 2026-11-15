@@ -1869,7 +1869,7 @@ const ROS_COLS_DEFAULT = [
 // radio, so they are not on this list. Spotter fills the Source slot.
 // QSY sits just before Score: the retune mark. The points are already in Score.
 const SPOT_COL_KEYS = [
-  "call", "country", "band", "spotter", "mode", "grid",
+  "source", "call", "country", "band", "spotter", "mode", "grid",
   "freq_hz", "az", "distance_km", "age", "qsy", "score",
 ];
 // Visible Message text. Longer QSY / free text is cut here so rosFitColumns
@@ -3206,7 +3206,18 @@ function spotQsy(row) {
   return `<span class="${cls}" title="${escAttr(tip)}">${esc(word)}</span>`;
 }
 
+function spotSource(row) {
+  const tag = (row && row.source_tag) || (row && row.source === "skim" ? "SKIM" : "CLU");
+  const kind = tag === "SKIM" ? "skim" : "clu";
+  return `<span class="spot-tag ${kind}">${esc(tag)}</span>`;
+}
+
 const SPOT_EXTRA = {
+  source: {
+    key: "source", label: "", cls: "spot-src",
+    hint: "Where this spot came from. CLU is the DX cluster. SKIM is a local skimmer, later.",
+    cell: spotSource,
+  },
   spotter: {
     key: "spotter", label: "Spotter", cls: "",
     hint: "Who posted this. A plus count means more than one. Hover lists them.",
@@ -3236,6 +3247,7 @@ function spotTitle(row) {
   const reason = row.need_reason || row.why_full || "";
   const mult = row.mult_reason && row.mult_reason !== reason ? row.mult_reason : "";
   return [
+    row.open_reason || "",
     reason,
     mult,
     factors,
@@ -3325,6 +3337,24 @@ function spotSaveModes() {
   }).catch(() => {});
 }
 
+let _spotSourcesWired = false;
+function spotSyncSourceChecks(c) {
+  const box = $("spot-show-cluster");
+  if (!box) return;
+  if (c && c.show_cluster != null && document.activeElement !== box) {
+    box.checked = !!c.show_cluster;
+  }
+  if (_spotSourcesWired) return;
+  _spotSourcesWired = true;
+  box.addEventListener("change", () => {
+    fetch("/api/cluster", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({show_cluster: !!box.checked}),
+    }).catch(() => {});
+  });
+}
+
 function spotSyncModeChecks(c) {
   const wrap = $("spot-modes");
   if (!wrap) return;
@@ -3358,6 +3388,9 @@ function renderSpotted(c) {
   spotSyncModeChecks(c);
   status.textContent = c.status_line || "Cluster: off. Turn it on in Setup.";
   if (c.detail) status.title = c.detail;
+  const pskLine = $("spot-psk-line");
+  if (pskLine) pskLine.textContent = c.psk_line || "";
+  spotSyncSourceChecks(c);
   const note = $("spot-note");
   if (note && c.selected_line) note.textContent = c.selected_line;
   const table = $("spot");
@@ -3374,6 +3407,12 @@ function renderSpotted(c) {
     return (v || "").toString().toUpperCase();
   };
   rows.sort((a, b) => {
+    // Likely-workable spots stay first, even when the operator sorts by score.
+    if (_spotSort.key === "score") {
+      const ao = a.open_path === true ? 0 : a.open_path === false ? 1 : 0;
+      const bo = b.open_path === true ? 0 : b.open_path === false ? 1 : 0;
+      if (ao !== bo) return ao - bo;
+    }
     const x = val(a), y = val(b);
     return (x < y ? -1 : x > y ? 1 : 0) * _spotSort.dir;
   });
@@ -3389,6 +3428,7 @@ function renderSpotted(c) {
     if (selCall && row.call === selCall && row.band === selBand) classes.push("spot-sel");
     if (row.is_new_mult) classes.push("mult");
     if (row.chase === "unconfirmed") classes.push("unconfirmed");
+    if (row.dim || row.open_path === false) classes.push("spot-dim");
     return `<tr class="${classes.join(" ")}" data-call="${escAttr(row.call)}" ` +
       `data-grid="${escAttr(row.grid || "")}" data-band="${escAttr(row.band || "")}" ` +
       `data-mode="${escAttr(row.mode || "")}" title="${escAttr(spotTitle(row))}">` +
@@ -3414,6 +3454,12 @@ function clusterReadForm() {
     bands: (all && all.checked) ? "all" : bands,
     station_call: ($("cluster-station-call") && $("cluster-station-call").value || "").trim(),
   };
+  const grid = $("cluster-station-grid");
+  if (grid && (_clusterReady || grid.value.trim() || document.activeElement === grid)) {
+    body.station_grid = grid.value.trim();
+  }
+  const psk = $("cluster-psk-rank");
+  if (psk) body.psk_rank = !!psk.checked;
   const login = $("cluster-login");
   // Do not post a blank login until the field has been filled from
   // the saved settings, or the operator has typed in it. A Save from
@@ -3460,10 +3506,19 @@ function clusterSave() {
       if (login && j.cluster_login != null && document.activeElement !== login) {
         login.value = j.cluster_login;
       }
+      const grid = $("cluster-station-grid");
+      if (grid && j.station_grid != null && document.activeElement !== grid) {
+        grid.value = j.station_grid;
+      }
+      const psk = $("cluster-psk-rank");
+      if (psk && j.psk_rank != null && document.activeElement !== psk) {
+        psk.checked = !!j.psk_rank;
+      }
     } else {
       const msg = (j && j.message) || (
         j && j.error === "invalid_login" ? "That is not a valid cluster login. Use the station call, or a login such as WA1HCO-1." :
         j && j.error === "invalid_call" ? "That is not a valid station call. For two stations on one node, use Cluster login, such as WA1HCO-1." :
+        j && j.error === "invalid_grid" ? "That is not a valid station grid. Use a Maidenhead square such as FN41 or FN41VP." :
         "Could not save. Try again."
       );
       if (err) { err.hidden = false; err.textContent = msg; }
@@ -3511,6 +3566,10 @@ function clusterWire() {
   if (station) station.addEventListener("change", clusterSave);
   const login = $("cluster-login");
   if (login) login.addEventListener("change", clusterSave);
+  const grid = $("cluster-station-grid");
+  if (grid) grid.addEventListener("change", clusterSave);
+  const psk = $("cluster-psk-rank");
+  if (psk) psk.addEventListener("change", clusterSave);
   const node = $("cluster-node");
   if (node) node.addEventListener("change", () => {
     clusterApplyPick();
@@ -3542,6 +3601,8 @@ function renderCluster(c) {
     warn.textContent = (c && c.call_warning) || "";
     warn.hidden = !warn.textContent;
   }
+  const pskSetup = $("cluster-psk-line");
+  if (pskSetup) pskSetup.textContent = (c && c.psk_line) || "";
   if (!host) return;
   clusterWire();
   c = c || {};
@@ -3563,6 +3624,17 @@ function renderCluster(c) {
     }
     const hint = (c.station_call || "").trim();
     if (hint) loginField.placeholder = hint;
+  }
+  const gridField = $("cluster-station-grid");
+  if (gridField && document.activeElement !== gridField) {
+    const saved = (c.station_grid || "").trim();
+    if (!gridField.value.trim() && saved) {
+      gridField.value = saved;
+    }
+  }
+  const pskBox = $("cluster-psk-rank");
+  if (pskBox && document.activeElement !== pskBox && c.psk_rank != null) {
+    pskBox.checked = !!c.psk_rank;
   }
   if (_clusterReady) return;
   _clusterReady = true;
@@ -3592,6 +3664,12 @@ function renderCluster(c) {
     login.value = c.cluster_login || "";
   }
   if (login && c.station_call) login.placeholder = c.station_call;
+  const grid = $("cluster-station-grid");
+  if (grid && !grid.value.trim()) {
+    grid.value = c.station_grid || "";
+  }
+  const psk = $("cluster-psk-rank");
+  if (psk && c.psk_rank != null) psk.checked = !!c.psk_rank;
   const qsy = $("cluster-qsy");
   if (qsy && c.qsy_cost != null) qsy.value = String(c.qsy_cost);
   const all = $("cluster-all");

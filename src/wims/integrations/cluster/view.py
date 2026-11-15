@@ -335,6 +335,8 @@ def build_list(
     qsy_cost: float = 8,
     allowed_modes: set[str] | None = None,
     entity_latlon=None,
+    opening_for=None,
+    show_cluster: bool = True,
 ) -> tuple[list[dict], dict]:
     """Rows for the Spotted list, and counts of why others were left off.
 
@@ -357,6 +359,8 @@ def build_list(
         if allowed is not None and group.band not in allowed:
             continue
         if allowed_modes is not None and mode_bucket(group.mode) not in allowed_modes:
+            continue
+        if not show_cluster:
             continue
         drops["spot_count"] += 1
         grid = (group.grid or "").strip().upper() or None
@@ -461,6 +465,26 @@ def build_list(
             if factor.name == "qsy":
                 qsy_points = factor.contribution
         where = "QSY" if needs_qsy else "on band"
+        open_path = None
+        open_reason = ""
+        psk_count = 0
+        local_count = 0
+        if opening_for is not None:
+            try:
+                found = opening_for(group.band, az_dx)
+            except Exception:
+                found = None
+            if found is not None:
+                open_path = getattr(found, "likely", None)
+                if isinstance(found, dict):
+                    open_path = found.get("likely")
+                    open_reason = found.get("reason") or ""
+                    psk_count = int(found.get("psk_count") or 0)
+                    local_count = int(found.get("local_count") or 0)
+                else:
+                    open_reason = getattr(found, "reason", "") or ""
+                    psk_count = int(getattr(found, "psk_count", 0) or 0)
+                    local_count = int(getattr(found, "local_count", 0) or 0)
         rows.append({
             "call": group.call,
             "country": place["country"],
@@ -503,8 +527,21 @@ def build_list(
                 {"name": f.name, "contribution": f.contribution, "detail": f.detail}
                 for f in scored.factors
             ],
+            "source": "cluster",
+            "source_tag": "CLU",
+            "open_path": open_path,
+            "open_reason": open_reason,
+            "psk_count": psk_count,
+            "local_count": local_count,
+            "dim": open_path is False,
         })
-    rows.sort(key=lambda row: (-row["score"], row["age_s"], row["call"]))
+    # Likely-workable spots first, then score. Unlikely spots stay listed.
+    rows.sort(key=lambda row: (
+        0 if row.get("open_path") is True else 1 if row.get("open_path") is False else 0,
+        -row["score"],
+        row["age_s"],
+        row["call"],
+    ))
     return rows, drops
 
 

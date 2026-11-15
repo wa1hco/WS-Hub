@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<receptionReports>
+  <lastSequenceNumber value="1001"/>
+  <maxFlowStartSeconds value="1700000000"/>
+  <receptionReport receiverCallsign="KL7EX" receiverLocator="BP51IP" senderCallsign="K1HOME" senderLocator="FN41nt" frequency="28075545" flowStartSeconds="1699999940" mode="FT8" isSender="1" isReceiver="0" sNR="-4" />
+  <receptionReport receiverCallsign="W0DX" receiverLocator="DM78OW" senderCallsign="K1HOME" senderLocator="FN41nt" frequency="28075544" flowStartSeconds="1699999880" mode="FT8" isSender="1" isReceiver="0" sNR="-6" />
+  <receptionReport receiverCallsign="N1RX" receiverLocator="FN41fp44tt" senderCallsign="PY2DX" senderLocator="GG54RK" frequency="28074909" flowStartSeconds="1699999820" mode="FT8" isSender="0" isReceiver="1" sNR="-3" />
+  <receptionReport receiverCallsign="N1LOCAL" receiverLocator="FN41aa" senderCallsign="W1LOCAL" senderLocator="FN41zz" frequency="14074000" flowStartSeconds="1699999910" mode="FT8" isSender="1" isReceiver="1" sNR="10" />
+  <receptionReport receiverCallsign="N1EU" receiverLocator="FN41iv" senderCallsign="DL1DX" senderLocator="JO31aa" frequency="14074000" flowStartSeconds="1699999760" mode="FT8" isSender="0" isReceiver="1" sNR="-8" />
+  <receptionReport receiverCallsign="N1MISS" receiverLocator="FN41iv" senderCallsign="NOGRID" frequency="14074000" flowStartSeconds="1699999900" mode="FT8" isSender="0" isReceiver="1" />
+  <receptionReport receiverCallsign="N1OLD" receiverLocator="FN41iv" senderCallsign="DL1OLD" senderLocator="JO31aa" frequency="14074000" flowStartSeconds="1699998000" mode="FT8" isSender="0" isReceiver="1" sNR="0" />
+  <receptionReport receiverCallsign="N5TX" receiverLocator="EM13ka" senderCallsign="K1HOME" senderLocator="FN41pw" frequency="7074000" flowStartSeconds="1699999700" mode="FT8" isSender="1" isReceiver="0" sNR="2" />
+</receptionReports>

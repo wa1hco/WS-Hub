@@ -42,10 +42,12 @@ from wims.integrations.cluster.modes import infer_mode  # noqa: E402
 from wims.integrations.cluster.parse import (  # noqa: E402
     parse_spot, valid_cluster_login, valid_login_call,
 )
+from wims.integrations.cluster.psk import PskOpenings  # noqa: E402
 from wims.integrations.cluster.ranges import in_range  # noqa: E402
 from wims.integrations.cluster.settings import (  # noqa: E402
     DEFAULT_HOST, DEFAULT_PORT, MODE_FILTERS, all_bands,
-    call_mismatch_warning, clean_cluster_login, effective_call, first_live_call, load, save, sanitize,
+    call_mismatch_warning, clean_cluster_login, clean_station_grid, effective_call, effective_grid,
+    first_live_call, load, save, sanitize,
 )
 from wims.integrations.cluster.telnet import strip_telnet  # noqa: E402
 from wims.integrations.cluster.view import (  # noqa: E402
@@ -79,7 +81,8 @@ def _book(lines, now=NOW):
 
 
 def _rows(lines, *, operations=None, allowed=None, allowed_modes=None,
-          grid=HOME, heard=None, qsy_cost=8, now=NOW, received=None, log=None):
+          grid=HOME, heard=None, qsy_cost=8, now=NOW, received=None, log=None,
+          opening_for=None, show_cluster=True):
     store = log if log is not None else _log()
     memory = heard
 
@@ -96,6 +99,7 @@ def _rows(lines, *, operations=None, allowed=None, allowed_modes=None,
         now=now, ttl_s=15 * 60, our_grid=grid,
         allowed=allowed, operations=operations or [], classify=classify,
         grid_for=grid_for, qsy_cost=qsy_cost, allowed_modes=allowed_modes,
+        opening_for=opening_for, show_cluster=show_cluster,
     )
     return rows, drops
 
@@ -411,6 +415,9 @@ def test_settings_default_all_bands_and_node():
         assert fresh["modes"] == "all"
         assert fresh["qsy_cost"] == 8
         assert fresh["station_call"] == ""
+        assert fresh["station_grid"] == ""
+        assert fresh["psk_rank"] is True
+        assert fresh["show_cluster"] is True
         save({"enabled": True, "host": "bad host", "port": 23,
               "bands": ["10m", "nope", "6m"], "qsy_cost": 12,
               "station_call": "wa1hco"}, path)
@@ -1123,6 +1130,17 @@ def test_spot_columns_match_the_roster():
     assert 'id="spot-head"' in html
     assert 'id="spot-modes"' in html
     assert 'class="band-checks"' in html.split('id="spot-modes"', 1)[1]
+    assert 'id="spot-show-cluster"' in html
+    assert "Cluster" in html.split('id="spot-sources"', 1)[1]
+    assert 'id="spot-psk-line"' in html
+    assert spot_keys[0] == "source"
+    assert "function spotSource" in js
+    assert "spot-tag" in js
+    assert "open_reason" in js
+    assert "spot-dim" in js
+    assert "psk_rank" in js
+    assert "invalid_grid" in js
+    assert "document.activeElement !== gridField" in js
     spot_html = html.split('id="spot"', 1)[1].split("</table>", 1)[0]
     assert "Why" not in spot_html
     assert "MHz" not in spot_html
@@ -1246,6 +1264,12 @@ def test_setup_page_has_station_call_and_warning():
     assert 'id="cluster-login"' in html
     assert "Cluster login" in html
     assert "Use WA1HCO-1, -2" in html
+    assert 'id="cluster-station-grid"' in html
+    assert "Station grid" in html
+    assert 'id="cluster-psk-rank"' in html
+    assert "Use PSK Reporter to rank spots" in html
+    assert 'id="cluster-psk-line"' in html
+    assert "PSK Reporter" in html
     assert 'id="cluster-save-error"' in html
     assert "cluster_login" in js
     assert "invalid_login" in js
@@ -1357,6 +1381,7 @@ def test_set_cluster_rejects_bad_values_without_writing():
         stub._lock = threading.Lock()
         stub._cluster = svc
         stub._operator_call_locked = lambda: "WA1HCO"
+        stub._live_wsjtx_grid_locked = lambda: ""
         rejected = LiveFleet.set_cluster(
             stub, {"station_call": "WA1HCO-1", "cluster_login": "WA1HCO-1"},
         )
@@ -1457,6 +1482,130 @@ def test_connect_failure_status_names_the_host_and_port():
         assert view["status_line"] == "Cluster: can't reach k1ttt.net:7373, retrying in 5 s."
         assert "Logged in." not in view["detail"]
 
+
+
+
+PSK_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "psk_reporter_fn41.xml"
+PSK_HOME = "FN41vp"
+
+
+def _psk_openings(now=NOW):
+    src = PskOpenings(
+        fetch=lambda url: (200, PSK_FIXTURE.read_bytes(), ""),
+        min_poll_s=300, clock=lambda: now,
+    )
+    src.configure(grid=PSK_HOME, enabled=True)
+    assert src.maybe_fetch() is True
+    return src
+
+
+def test_effective_grid_prefers_setup_and_ignores_junk():
+    assert effective_grid({"station_grid": "fn41vp"}, "FN42ev") == "FN41VP"
+    assert effective_grid({"station_grid": ""}, "FN42ev") == "FN42EV"
+    assert effective_grid({"station_grid": "nope"}, "FN42ev") == "FN42EV"
+    assert effective_grid({"station_grid": ""}, "") == ""
+    assert clean_station_grid("FN41fp44tt") == "FN41FP"
+
+
+def test_cluster_spots_rank_open_paths_first_and_dim_the_rest():
+    src = _psk_openings()
+
+    def opening_for(band, az):
+        return src.opening(band=band, az=az, now=NOW)
+
+    rows, drops = _rows(
+        [
+            "DX de K1TTT: 28074.0 KL7EX BP51 FT8 1734Z",
+            "DX de K1TTT: 28074.0 DL1DX JO31 FT8 1734Z",
+            "DX de K1TTT: 14074.0 DL1EU JO31 FT8 1734Z",
+        ],
+        grid=PSK_HOME,
+        opening_for=opening_for,
+    )
+    assert drops["spot_count"] == 3
+    by = {row["call"]: row for row in rows}
+    assert by["KL7EX"]["source_tag"] == "CLU"
+    assert by["KL7EX"]["source"] == "cluster"
+    assert by["KL7EX"]["open_path"] is True
+    assert by["KL7EX"]["dim"] is False
+    assert "Open:" in by["KL7EX"]["open_reason"]
+    assert "10m" in by["KL7EX"]["open_reason"]
+    assert by["DL1EU"]["open_path"] is True
+    assert "20m" in by["DL1EU"]["open_reason"]
+    # 10m toward Europe is not in the recorded FN41 map.
+    assert by["DL1DX"]["open_path"] is False
+    assert by["DL1DX"]["dim"] is True
+    assert by["DL1DX"]["open_reason"].startswith("No FN41 reports toward")
+    # Likely rows sort first; the closed 10m row is last.
+    assert rows[-1]["call"] == "DL1DX"
+    assert all(row["call"] != "DL1DX" for row in rows[:-1])
+
+
+def test_cluster_filter_and_psk_toggle_and_no_network():
+    rows, drops = _rows(
+        ["DX de K1TTT: 28074.0 KL7EX BP51 FT8 1734Z"],
+        grid=PSK_HOME, show_cluster=False,
+    )
+    assert rows == []
+    assert drops["spot_count"] == 0
+    # With ranking off, a closed path is not dimmed.
+    rows, _ = _rows(
+        ["DX de K1TTT: 28074.0 DL1DX JO31 FT8 1734Z"],
+        grid=PSK_HOME, opening_for=None,
+    )
+    assert len(rows) == 1
+    assert rows[0]["open_path"] is None
+    assert rows[0]["dim"] is False
+    assert rows[0]["source_tag"] == "CLU"
+
+
+def test_set_cluster_keeps_station_grid_and_rejects_a_bad_one():
+    from wims.server.app import LiveFleet
+
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({"enabled": True, "station_call": "WA1HCO", "station_grid": "FN41"})
+        # Replace the poller so a later public() cannot be tempted to fetch.
+        svc._openings = PskOpenings(fetch=lambda url: (0, b"", "no"), min_poll_s=300)
+        stub = type("Fleet", (), {})()
+        stub._lock = threading.Lock()
+        stub._cluster = svc
+        stub._operator_call_locked = lambda: "WA1HCO"
+        stub._live_wsjtx_grid_locked = lambda: "FN42EV"
+        rejected = LiveFleet.set_cluster(
+            stub, {"station_call": "WA1HCO", "station_grid": "NOPE"},
+        )
+        assert rejected["ok"] is False
+        assert rejected["error"] == "invalid_grid"
+        assert "Maidenhead" in rejected["message"]
+        assert svc.settings()["station_grid"] == "FN41"
+        saved = LiveFleet.set_cluster(
+            stub, {"station_call": "WA1HCO", "station_grid": "fn41vp", "psk_rank": True},
+        )
+        assert saved["ok"] is True
+        assert saved["station_grid"] == "FN41VP"
+        assert saved["psk_rank"] is True
+        assert svc.settings()["station_call"] == "WA1HCO"
+        # A PSK-only change must not be rejected, and the telnet generation
+        # stays put (no reconnect).
+        gen = svc._gen
+        again = LiveFleet.set_cluster(stub, {"psk_rank": False, "show_cluster": False})
+        assert again["ok"] is True
+        assert again["psk_rank"] is False
+        assert again["show_cluster"] is False
+        assert svc._gen == gen
+        assert svc.settings()["station_grid"] == "FN41VP"
+
+
+def test_remember_grid_does_not_overwrite_or_take_ini_junk():
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = ClusterService(path=Path(tmp) / "cluster.json")
+        svc.update({"enabled": True, "station_grid": "FN41"})
+        assert svc.remember_grid_if_unset("FN42ev") == "FN41"
+        empty = ClusterService(path=Path(tmp) / "empty.json")
+        empty.update({"enabled": True, "station_grid": ""})
+        assert empty.remember_grid_if_unset("not a grid") == ""
+        assert empty.remember_grid_if_unset("FN41vp") == "FN41VP"
 
 
 

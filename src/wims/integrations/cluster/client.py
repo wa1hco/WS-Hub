@@ -44,10 +44,12 @@ from collections.abc import Callable
 
 from wims.engine import scoring as S
 from wims.integrations.cluster.parse import parse_spot, valid_cluster_login
+from wims.integrations.cluster.psk import PskOpenings, hearings_from_decodes
 from wims.integrations.cluster.settings import (
     DEFAULT_TTL_S, MODE_FILTERS, allowed_bands, allowed_modes, known_nodes,
     load, save, sanitize,
-    call_mismatch_warning, effective_call, clean_station_call,
+    call_mismatch_warning, effective_call, effective_grid,
+    clean_station_call, clean_station_grid,
 )
 from wims.integrations.cluster.telnet import plaintext, strip_telnet
 from wims.integrations.cluster.view import (
@@ -234,6 +236,7 @@ class ClusterService:
         self._callsign_fn: Callable[[], str] | None = None
         self._book = SpotBook()
         self._settings = load(path)
+        self._openings = PskOpenings()
         self._gen = 0
         self._sock = None
         self.phase = "off"
@@ -258,10 +261,15 @@ class ClusterService:
         )
         self._thread.start()
 
+    def start_openings(self) -> None:
+        """Site server only. Seats must not start a second poller."""
+        self._openings.start()
+
     def stop(self) -> None:
         self._stop.set()
         self._wake.set()
         self._close_socket()
+        self._openings.stop()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2.0)
@@ -270,14 +278,26 @@ class ClusterService:
         current = self.settings()
         merged = dict(current)
         if isinstance(body, dict):
-            for key in ("enabled", "node", "host", "port", "bands", "modes", "qsy_cost", "station_call", "cluster_login"):
+            for key in (
+                "enabled", "node", "host", "port", "bands", "modes",
+                "qsy_cost", "station_call", "cluster_login", "station_grid",
+                "psk_rank", "show_cluster",
+            ):
                 if key in body:
                     merged[key] = body[key]
         cleaned = sanitize(merged)
         save(cleaned, self.path)
+        reconnect = any(
+            cleaned.get(k) != current.get(k)
+            for k in ("enabled", "node", "host", "port", "station_call", "cluster_login")
+        ) or any(
+            cleaned.get(k) != current.get(k)
+            for k in ("bands", "modes", "qsy_cost")
+        )
         with self._lock:
             self._settings = cleaned
-            self._gen += 1
+            if reconnect:
+                self._gen += 1
             if not cleaned["enabled"]:
                 self.phase = "off"
                 self.reason = ""
@@ -286,8 +306,9 @@ class ClusterService:
                 self.saw_lines = False
                 self.last_spot_at = None
                 self._book.clear()
-        self._close_socket()
-        self._wake.set()
+        if reconnect:
+            self._close_socket()
+            self._wake.set()
         return cleaned
 
     def settings(self) -> dict:
@@ -313,6 +334,26 @@ class ClusterService:
         save(settings, self.path)
         return call
 
+    def remember_grid_if_unset(self, grid: str) -> str:
+        """Fill a blank Setup Station grid from a live WSJT-X grid.
+
+        Does not overwrite a grid the operator already saved, and does
+        not accept a value that is not a Maidenhead grid. Returns the
+        grid now stored, which may still be blank.
+        """
+        grid = clean_station_grid(grid)
+        with self._lock:
+            current = clean_station_grid(self._settings.get("station_grid"))
+            if current:
+                return current
+            if not grid:
+                return ""
+            settings = dict(self._settings)
+            settings["station_grid"] = grid
+            self._settings = settings
+        save(settings, self.path)
+        return grid
+
     def set_selected(self, selected: dict | None) -> None:
         with self._lock:
             self._selected = dict(selected) if selected else None
@@ -332,7 +373,8 @@ class ClusterService:
 
     def public(self, *, now: float, callsign: str, our_grid: str | None,
                operations, classify, grid_for=None, rover_for=None,
-               spotter_grid=None, entity_latlon=None, live_calls=None) -> dict:
+               spotter_grid=None, entity_latlon=None, live_calls=None,
+               live_grid: str | None = None, decodes=None) -> dict:
         with self._lock:
             settings = dict(self._settings)
             self._book.prune(now, DEFAULT_TTL_S)
@@ -353,6 +395,18 @@ class ClusterService:
                 settings["station_call"] = remembered
                 wanted = remembered
                 login = login or remembered
+        home = effective_grid(settings, live_grid or our_grid)
+        if not clean_station_grid(settings.get("station_grid")) and home:
+            remembered_grid = self.remember_grid_if_unset(home)
+            if remembered_grid:
+                settings["station_grid"] = remembered_grid
+                home = remembered_grid
+        if home:
+            our_grid = home
+        self._openings.configure(
+            grid=home,
+            enabled=bool(settings.get("enabled")) and bool(settings.get("psk_rank")),
+        )
         allowed = allowed_bands(settings)
         modes = allowed_modes(settings)
         bands_empty = allowed is not None and not allowed
@@ -361,6 +415,19 @@ class ClusterService:
             phase = "off"
         elif phase == "off":
             phase = "need_call" if not valid_cluster_login(wanted) else "connecting"
+        local = []
+        if settings.get("psk_rank") and home:
+            local = hearings_from_decodes(
+                decodes or [], home_grid=home, now=now, grid_for=grid_for,
+            )
+
+        def opening_for(band, az):
+            if not settings.get("psk_rank"):
+                return None
+            return self._openings.opening(
+                band=band, az=az, now=now, local=local,
+            )
+
         rows, drops = ([], {"spot_count": 0})
         can_list = (
             settings.get("enabled") and not bands_empty and not modes_empty
@@ -373,6 +440,8 @@ class ClusterService:
                 qsy_cost=settings.get("qsy_cost", 8),
                 allowed_modes=modes,
                 entity_latlon=entity_latlon,
+                opening_for=opening_for if settings.get("psk_rank") else None,
+                show_cluster=bool(settings.get("show_cluster", True)),
             )
         elif can_list and groups:
             # Still show spots we already have while reconnecting.
@@ -383,6 +452,8 @@ class ClusterService:
                 qsy_cost=settings.get("qsy_cost", 8),
                 allowed_modes=modes,
                 entity_latlon=entity_latlon,
+                opening_for=opening_for if settings.get("psk_rank") else None,
+                show_cluster=bool(settings.get("show_cluster", True)),
             )
         spot_count = int(drops.get("spot_count") or 0)
         have_grid = bool((our_grid or "").strip())
@@ -412,6 +483,10 @@ class ClusterService:
         selected_line = ""
         if selected and selected.get("call"):
             selected_line = selected.get("line") or ""
+        psk_snap = self._openings.snapshot(now)
+        if not settings.get("psk_rank"):
+            psk_snap = dict(psk_snap)
+            psk_snap["status_line"] = "PSK Reporter: off"
         return {
             "enabled": bool(settings.get("enabled")),
             "node": settings.get("node") or "custom",
@@ -429,6 +504,10 @@ class ClusterService:
             "qsy_cost": int(settings.get("qsy_cost") or 0),
             "station_call": settings.get("station_call") or "",
             "cluster_login": settings.get("cluster_login") or "",
+            "station_grid": settings.get("station_grid") or "",
+            "psk_rank": bool(settings.get("psk_rank")),
+            "show_cluster": bool(settings.get("show_cluster", True)),
+            "psk_line": psk_snap["status_line"],
             "callsign": login,
             "call_warning": call_mismatch_warning(
                 settings.get("station_call") or "", live_calls,
