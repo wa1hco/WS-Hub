@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -6,7 +6,7 @@
 """Detect running apps and remember seat **intent** (what this PC will run).
 
 Running list = observational. Intent checkboxes = operator desire (remembered);
-WIMS starts the matching agents.
+WS Hub starts the matching agents.
 """
 
 from __future__ import annotations

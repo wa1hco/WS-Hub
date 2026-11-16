@@ -19,7 +19,7 @@ RadioInfo / WSJT-X Status may report IF when the transverter offset is off.
 | MGEF-10-UP | **10000** | **10368090.00** | **10368.090 MHz (3cm)** |
 
 N1MM **RadioInfo `<Freq>`** is 10 Hz units (14417400 → 144.174 MHz). **Network
-Status / DXLOG Freq** is kHz. WIMS must accept both (`n1mm_raw_to_hz`).
+Status / DXLOG Freq** is kHz. WS Hub must accept both (`n1mm_raw_to_hz`).
 
 ## Rules
 

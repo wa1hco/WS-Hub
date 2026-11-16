@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -54,7 +54,7 @@ if defined SILENT (
 )
 
 echo.
-echo  WIMS seat pack — pick radio
+echo  WS Hub seat pack — pick radio
 echo  ===========================
 echo.
 echo    1.  Flex 50 MHz     ^(SmartSDR + CAT + DAX + N1MM + WSJT-X-50^)

@@ -1,7 +1,7 @@
 [project]
 name = "wims"
 version = "1.0.29"
-description = "WSJT-X Instance Management System"
+description = "One console for several WSJT-X instances"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 authors = [{ name = "Jeff Millar, WA1HCO", email = "wa1hco@gmail.com" }]

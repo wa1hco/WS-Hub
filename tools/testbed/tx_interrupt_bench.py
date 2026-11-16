@@ -1,6 +1,6 @@
 """TX-interrupt bench: how much does a brief mid-transmission mute hurt FT8 decode?
 
-Supports the WIMS SSB/CW-priority design (wims_design.md §3.4.1): when a priority
+Supports the WS Hub SSB/CW-priority design (wims_design.md §3.4.1): when a priority
 phone/CW transmission needs the antenna, the FT8 TX audio is muted with a short
 raised-cosine ramp (2-5 ms) and later restored. This bench measures the decode
 cost of that gap at the far end:

@@ -1,4 +1,4 @@
-' WIMS — logon entry (no cmd window). Starts WSJT-X / WIMS from seat intent.
+' WS Hub — logon entry (no cmd window). Starts WSJT-X / WS Hub from seat intent.
 Option Explicit
 Dim sh, fso, here
 Set sh = CreateObject("WScript.Shell")

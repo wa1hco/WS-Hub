@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -56,7 +56,7 @@ def test_forward_and_control_roundtrip():
     ctrl_port = wsjt_ctrl.getsockname()[1]
 
     logs: list[str] = []
-    # Bind bridge on ephemeral local port to avoid colliding with a live WIMS.
+    # Bind bridge on ephemeral local port to avoid colliding with a live WS Hub.
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     probe.bind(("127.0.0.1", 0))
     bind_port = probe.getsockname()[1]

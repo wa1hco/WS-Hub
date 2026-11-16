@@ -1,18 +1,18 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
 REM
-REM Put "WIMS at logon" in this user's Startup folder (no admin).
-REM At logon: read seat intent, start WSJT-X if this is a WSJT seat, start WIMS.
+REM Put "WS Hub at logon" in this user's Startup folder (no admin).
+REM At logon: read seat intent, start WSJT-X if this is a WSJT seat, start WS Hub.
 
 setlocal EnableExtensions
 cd /d "%~dp0"
 set "HERE=%~dp0"
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "LNK=%STARTUP%\WIMS at logon.lnk"
+set "LNK=%STARTUP%\WS Hub at logon.lnk"
 set "VBS=%HERE%Start-WimsAtLogon.vbs"
 set "WSCRIPT=%SystemRoot%\System32\wscript.exe"
 set "ICO=%HERE%assets\wims.ico"
@@ -25,18 +25,18 @@ if not exist "%VBS%" (
 if not exist "%STARTUP%" mkdir "%STARTUP%" 2>nul
 
 echo.
-echo  Install WIMS logon auto-start
+echo  Install WS Hub logon auto-start
 echo  =============================
 echo  Uses this PC's launcher checkboxes:
 echo    %%APPDATA%%\wims\seat_intent.json
 echo  WSJT-X intent  -^> start WSJT-X ^(named --rig-name^)
 echo  N1MM intent    -^> start N1MM
-echo  Always         -^> WIMS launcher ^(agents / site server from intent^)
+echo  Always         -^> WS Hub launcher ^(agents / site server from intent^)
 echo  Startup:  %LNK%
 echo.
 
-if exist "%STARTUP%\WIMS Seat.lnk" (
-  echo  NOTE: "WIMS Seat.lnk" is also in Startup ^(radio pack^).
+if exist "%STARTUP%\WS Hub Seat.lnk" (
+  echo  NOTE: "WS Hub Seat.lnk" is also in Startup ^(radio pack^).
   echo  Remove it with Remove-WimsSeatStartup.cmd if you only want this script.
   echo.
 )

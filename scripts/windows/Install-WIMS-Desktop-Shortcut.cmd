@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-REM Desktop "WIMS" shortcut with sticky custom icon (wscript + VBS + wims.ico).
+REM Desktop "WS Hub" shortcut with sticky custom icon (wscript + VBS + wims.ico).
 REM Prefer Install-WimsDesktopShortcut.ps1 — .cmd targets lose custom icons on Windows.
 
 cd /d "%~dp0"

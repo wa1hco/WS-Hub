@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -208,14 +208,14 @@ class ReplaceReport:
         for p in self.skipped_server:
             out.append(f"Left site server running pid={p.pid} (not auto-killed)")
         if not self.found:
-            out.append("No leftover WIMS seat agents on this PC.")
+            out.append("No leftover WS Hub seat agents on this PC.")
         elif not self.stopped and not self.failed and self.skipped_server:
             out.append("Seat agents clear; site server left alone.")
         return out
 
 
 def classify_argv(argv: Iterable[str]) -> Kind:
-    """Classify a process argv as a WIMS long-running role (or other)."""
+    """Classify a process argv as a WS Hub long-running role (or other)."""
     args = [a for a in argv if a]
     if not args:
         return "other"
@@ -464,7 +464,7 @@ def iter_wims_procs(
     *,
     exclude_pids: Iterable[int] | None = None,
 ) -> list[ProcInfo]:
-    """All classifiable WIMS-related python processes (including server)."""
+    """All classifiable WS Hub-related python processes (including server)."""
     excl = {os.getpid(), *(exclude_pids or ())}
     # Also exclude parent if we are a child (rare for launcher).
     try:

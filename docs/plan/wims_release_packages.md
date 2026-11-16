@@ -1,11 +1,11 @@
-# Design: Contest-seat release packages (WIMS primary)
+# Design: Contest-seat release packages (WS Hub primary)
 
 | Field | Value |
 |-------|-------|
 | **Author** | (draft for Jeff Millar, WA1HCO) |
 | **Date** | 2026-09-07 |
 | **Status** | Draft (rev 4 — open questions resolved by operator 2026-09-07) |
-| **Primary product** | WIMS (`/home/jeff/ham/wims`) |
+| **Primary product** | WS Hub (`/home/jeff/ham/wims`) |
 | **Adjacent (out of v1 scope)** | map144; Keyline EEPROM/flash/udev tools |
 | **Process prior art** | wsjtx-inhibit tag → CI → GitHub Releases |
 
@@ -13,9 +13,9 @@
 
 ## Overview
 
-Contest PCs at W2SZ already run WSJT-X (or wsjtx-inhibit) and N1MM+. Operators need a **versioned, offline-capable WIMS install** that does not break those apps. Today WIMS is a source tree plus `Install-Wims.ps1` (system Python via winget/download, `git pull` updates). CI validates only; there are no release artifacts.
+Contest PCs at W2SZ already run WSJT-X (or wsjtx-inhibit) and N1MM+. Operators need a **versioned, offline-capable WS Hub install** that does not break those apps. Today WS Hub is a source tree plus `Install-Wims.ps1` (system Python via winget/download, `git pull` updates). CI validates only; there are no release artifacts.
 
-This design defines **release packages** for Windows (primary) and Linux (secondary). The installer story centers on **dependency policy**: what is bundled, what is assumed present, and what is detected but never installed. Packaging reuses the **wsjtx-inhibit release process** (tag → CI gate → GitHub Releases). It does **not** reuse CMake/CPack/NSIS as the WIMS toolchain.
+This design defines **release packages** for Windows (primary) and Linux (secondary). The installer story centers on **dependency policy**: what is bundled, what is assumed present, and what is detected but never installed. Packaging reuses the **wsjtx-inhibit release process** (tag → CI gate → GitHub Releases). It does **not** reuse CMake/CPack/NSIS as the WS Hub toolchain.
 
 **Contest Windows default install root:** `C:\WIMS`.  
 **Release zips hard-omit** the entire `hardware/` tree (in the repo since 1.0.20: `tools/hardware/`; nothing under `tools/` ships).  
@@ -35,7 +35,7 @@ This design defines **release packages** for Windows (primary) and Linux (second
 | Python pin consume | All `.cmd` launchers (including `Start-WimsServer.cmd`) call `_resolve-python.cmd`, which reads `python-path.txt` then falls back to common paths / `py` / `python`. A pin that is a directory or vendor embed is ignored. Install must not rewrite the tracked `.cmd`. |
 | Windows update | `Update-Wims.ps1`: `git pull --ff-only origin/main` when `.git` exists. Startup (`check_for_update`) also queries **GitHub Releases**; ZIP / no-git trees get the banner and open the release URL. Tag `v*` publishes; push to `main` does not. |
 | Local seat configs (gitignored) | `scripts/windows/seat-common.cmd`, `seat-local.cmd`, `radio-flex50.cmd`, `radio-ic9700-144.cmd`, `python-path.txt` |
-| Linux | Double-click `scripts/Add WIMS to Desktop.desktop`. System `python3` + `python3-tk` (the dialog names the package if it is missing). The release tarball keeps the executable bit. |
+| Linux | Double-click `scripts/Add WS Hub to Desktop.desktop`. System `python3` + `python3-tk` (the dialog names the package if it is missing). The release tarball keeps the executable bit. |
 | CI | `.github/workflows/ci.yml` → `tools/dev/validate.sh` on 3.10/3.12/3.14; version pin `pyproject.toml` ↔ `wims.__version__` |
 | Releases | [`v1.0.0`](https://github.com/wa1hco/WS-Hub/releases/tag/v1.0.0); Windows bundled runtime still later |
 | KEY software | IN product: `wims.seat --key` (N1MM agent KEY section) |
@@ -53,12 +53,12 @@ This design defines **release packages** for Windows (primary) and Linux (second
 
 Reusable **process**, not toolchain:
 
-- Tag-driven publish (`build/v*` there; WIMS uses `v*` — see Tag scheme).
+- Tag-driven publish (`build/v*` there; WS Hub uses `v*` — see Tag scheme).
 - CI builds artifacts; **all-platforms-ready gate** before GitHub Release upload via **`gh release create`** (or equivalent upload; gate policy is the reused idea).
 - Side-by-side install relative to official apps.
 - Operator docs that name exact asset filenames.
 
-Not a fit for WIMS: CMake, CPack, NSIS, AppImage of a C++ binary, hamlib bundling.
+Not a fit for WS Hub: CMake, CPack, NSIS, AppImage of a C++ binary, hamlib bundling.
 
 ---
 
@@ -70,7 +70,7 @@ Not a fit for WIMS: CMake, CPack, NSIS, AppImage of a C++ binary, hamlib bundlin
 2. Windows install works **offline after one download** (USB/sneakernet OK).
 3. Clear **dependency policy**: bundled vs assume-present vs detect-only.
 4. Preserve coexistence with WSJT-X / wsjtx-inhibit / N1MM / GridTracker.
-5. Include **WIMS KEY agent software** (`wims.seat` KEY path); **omit all of `hardware/`** from release artifacts.
+5. Include **WS Hub KEY agent software** (`wims.seat` KEY path); **omit all of `hardware/`** from release artifacts.
 6. Support site roles: site server, N1MM+KEY seat, digi seat, browser-only console.
 7. Document failure modes on old PCs and plain-language recovery.
 
@@ -95,7 +95,7 @@ Not a fit for WIMS: CMake, CPack, NSIS, AppImage of a C++ binary, hamlib bundlin
 
 ```mermaid
 flowchart TB
-  subgraph WIMS_PKG["WIMS release package"]
+  subgraph WIMS_PKG["WS Hub release package"]
     TREE["src/wims + scripts + docs"]
     STATIC["server/static HTML/CSS/JS"]
     KEYSW["KEY agent: wims.seat --key"]
@@ -103,7 +103,7 @@ flowchart TB
     INST["Install / Update scripts"]
   end
 
-  subgraph OUT["Out of WIMS package"]
+  subgraph OUT["Out of WS Hub package"]
     KLHW["entire hardware/ tree"]
     WSJT["WSJT-X / wsjtx-inhibit"]
     N1MM["N1MM Logger+"]
@@ -129,10 +129,10 @@ flowchart TB
 | **Linux `.deb`** | — | **Deferred** post–first contest weekend / until requested | — | — |
 | **macOS** | — | Non-goal v1 | — | — |
 
-**Primary operator path on Windows (tired-op):** download **`-setup.exe`** → double-click → extracts to **`C:\WIMS`** → runs Install → Desktop **WIMS**.  
+**Primary operator path on Windows (tired-op):** download **`-setup.exe`** → double-click → extracts to **`C:\WIMS`** → runs Install → Desktop **WS Hub**.  
 **USB / advanced:** use the `.zip` the same way (manual extract to `C:\WIMS`, then Install).
 
-**Primary operator path on Linux (personal laptop):** unpack the tar.gz → open `scripts` → double-click **Add WIMS to Desktop** → double-click **WIMS**. A ZIP of `main` uses the same file. GNOME may ask for **Allow Launching** once. KDE, XFCE, and Cinnamon may ask for **Execute** or **Run**. The dialog names `python3` / `python3-tk` when either is missing.
+**Primary operator path on Linux (personal laptop):** unpack the tar.gz → open `scripts` → double-click **Add WS Hub to Desktop** → double-click **WS Hub**. A ZIP of `main` uses the same file. GNOME may ask for **Allow Launching** once. KDE, XFCE, and Cinnamon may ask for **Execute** or **Run**. The dialog names `python3` / `python3-tk` when either is missing.
 
 ### Default Windows install path (locked)
 
@@ -159,7 +159,7 @@ flowchart TB
 | **Windows primary payload** | Versioned **zip + evolved `Install-Wims.cmd/.ps1`** | USB / FromZip / CI source of truth |
 | **Windows Python** | **Ship embeddable CPython 3.12.x + Tcl/Tk overlay** under `runtime\python\` (locked; notices required) | Offline; no winget; avoids Store stub; pins via `python-path.txt` |
 | **Windows setup.exe (v1)** | Thin Inno/SFX: extract to `C:\WIMS` + run Install; **Authenticode** (lab self-signed → real cert) | One double-click for tired ops; after PR 5 |
-| **Linux primary** | **tar.gz + double-click desktop file** using system `python3` + `python3-tk`. The tarball keeps the executable bit on `scripts/Add WIMS to Desktop.desktop`. | Personal laptops; stays in all-platforms gate |
+| **Linux primary** | **tar.gz + double-click desktop file** using system `python3` + `python3-tk`. The tarball keeps the executable bit on `scripts/Add WS Hub to Desktop.desktop`. | Personal laptops; stays in all-platforms gate |
 | **Linux `.deb`** | Deferred post-contest | No contest Linux seats today |
 | **Avoid for v1** | PyInstaller / Nuitka; CMake/CPack; conda | AV / rebuild / poor fit |
 | **Hard omit** | Entire `hardware/` from every release artifact | Agreed; CI deny-list |
@@ -205,20 +205,20 @@ Official **Windows embeddable** package has no Tk. Release packaging **must** bu
 
 Create `DLLs\` if the embed zip did not already materialize it as a real directory for these files.
 
-**`python312._pth` (exact intent):** replace the stock file so the private runtime finds stdlib + Tk + (via env) WIMS `src`:
+**`python312._pth` (exact intent):** replace the stock file so the private runtime finds stdlib + Tk + (via env) WS Hub `src`:
 
 ```text
 python312.zip
 .
 .\DLLs
 # Do not enable import site for v1 (keeps isolation; no user site-packages).
-# WIMS sets PYTHONPATH=<tree>\src from start scripts / Install — not via ._pth.
+# WS Hub sets PYTHONPATH=<tree>\src from start scripts / Install — not via ._pth.
 ```
 
 Notes:
 
-- Leading `#` on `import site` stays commented (stock embed style). WIMS does **not** need `site` for stdlib-only code.
-- Do **not** put the WIMS tree path into `._pth` (breaks portable `C:\WIMS` moves). Keep `PYTHONPATH` in `.cmd` / Install-generated server cmd as today.
+- Leading `#` on `import site` stays commented (stock embed style). WS Hub does **not** need `site` for stdlib-only code.
+- Do **not** put the WS Hub tree path into `._pth` (breaks portable `C:\WIMS` moves). Keep `PYTHONPATH` in `.cmd` / Install-generated server cmd as today.
 - After overlay, `runtime\python\python.exe` must be fully private: Install writes its absolute path into `scripts\windows\python-path.txt`. `_resolve-python.cmd` reads that pin. Do not prepend `runtime\python` onto the machine PATH.
 
 **Smoke / acceptance (Install + CI + spike checklist):**
@@ -311,10 +311,10 @@ wims-<ver>-windows-x86_64/
 | **N1MM Logger+** | **Detect only** | Never install; never rewrite config | Rare | Same |
 | **GridTracker** | **Optional / detect** | Firewall helper skips if missing | — | Never install |
 | **Keyline hardware / flash** | **Out of artifact** | Detect COM if present | Detect by-id | Flash = builder workflow via git repo |
-| **WIMS KEY agent code** | **In package** | `wims.seat --key` | Same | Software only |
+| **WS Hub KEY agent code** | **In package** | `wims.seat --key` | Same | Software only |
 | **VC++ / UCRT** | **Usually included** with official embed | Document Redist if `python.exe` fails to start | N/A | Failure-mode row |
 | **Browser** | **Assume-present** | Edge/Chrome/Firefox | Any | No embedded browser |
-| **map144** | **Separate product** | Not in WIMS zip | Not in WIMS zip | Separate runtime/venv |
+| **map144** | **Separate product** | Not in WS Hub zip | Not in WS Hub zip | Separate runtime/venv |
 
 ### Dependency handling by package type (explicit)
 
@@ -367,7 +367,7 @@ wims-<ver>-windows-x86_64/
 
 There is **no** `seat-*.cmd` glob for operator state. Example files (`seat-common.example.cmd`, …) ship in the zip and may be replaced; local non-example configs are the preserve set.
 
-**Stop / restart (WIMS-only):**
+**Stop / restart (WS Hub-only):**
 
 Do **not** call `process_replace.replace_seat_agents()` alone for FromZip. That helper
 **never** stops the site server and classifies the desktop launcher as `other` (left running).
@@ -385,29 +385,29 @@ Tree replace on Windows needs those processes stopped so files are not locked.
 4. Apply tree replace with preserve set.
 5. Re-run Install pin path: write `python-path.txt` → bundled runtime; refresh Desktop shortcuts;
    smoke standard command.
-6. Do **not** auto-restart N1MM/WSJT-X. Optionally offer “Start WIMS launcher” only.
+6. Do **not** auto-restart N1MM/WSJT-X. Optionally offer “Start WS Hub launcher” only.
 
 ### Coexistence rules (must not break seat apps)
 
-1. **Install prefix:** WIMS owns only its directory (canonical `C:\WIMS`). Never install into `C:\WSJT\wsjtx` or `C:\WSJT\wsjtx-inhibit`.
+1. **Install prefix:** WS Hub owns only its directory (canonical `C:\WIMS`). Never install into `C:\WSJT\wsjtx` or `C:\WSJT\wsjtx-inhibit`.
 2. **No file association hijack** for `.wav`, ADIF, or N1MM.
 3. **No forced kill** of N1MM/WSJT-X on install or FromZip update.
 4. **UDP:** Document plane A `224.0.0.73:2237`; do not rebind N1MM 12070. Firewall helpers **allow** apps; packaging does not rewrite WSJT-X.ini.
 5. **Python:** Bundled runtime is private. Pin via `python-path.txt` + `_resolve-python.cmd` only — no machine PATH prepend of `runtime\python`.
-6. **Shortcuts:** Desktop **WIMS** / **Update WIMS** only. Never create **WIMS Server** or **WIMS Agent** desktop icons; remove leftovers on install/refresh. Do not replace WSJT-X Start Menu entries by default.
-7. **LAN profile:** Install **does** set Ethernet to Private when elevated (locked). Document as machine-wide and required for Private-profile firewall behavior on contest seats. Not a silent “WIMS-only” tweak.
+6. **Shortcuts:** Desktop **WS Hub** / **Update WS Hub** only. Never create **WS Hub Server** or **WS Hub Agent** desktop icons; remove leftovers on install/refresh. Do not replace WSJT-X Start Menu entries by default.
+7. **LAN profile:** Install **does** set Ethernet to Private when elevated (locked). Document as machine-wide and required for Private-profile firewall behavior on contest seats. Not a silent “WS Hub-only” tweak.
 8. **Full contest app firewall:** never silent from Install; optional prompt only.
 9. **Acceptance (PR 8):** packaging docs + scripts never rewrite WSJT-X/N1MM settings files; Release notes + INSTALL / tester_roles / operator_setup point at **wsjtx-inhibit** sibling Releases.
 
 ### Role × package matrix
 
-| Seat role | Needs WIMS package? | What runs |
+| Seat role | Needs WS Hub package? | What runs |
 |-----------|---------------------|-----------|
 | Site server | Yes | Site server intent; firewall 8787 |
 | N1MM + KEY PC | Yes | Launcher → N1MM + SSB/CW KEY → `wims.seat --log --key` |
 | Digi WSJT-X PC | Optional | Browser; optional WSJT monitor |
 | Operator laptop | No | Browser → `http://<server>:8787/` |
-| map144 digi SDR PC | WIMS optional; map144 separate | Do not merge runtimes |
+| map144 digi SDR PC | WS Hub optional; map144 separate | Do not merge runtimes |
 
 ```mermaid
 sequenceDiagram
@@ -415,7 +415,7 @@ sequenceDiagram
   participant Zip as wims-ver-windows.zip
   participant Inst as Install-Wims.cmd
   participant RT as runtime/python
-  participant Desk as Desktop WIMS
+  participant Desk as Desktop WS Hub
   participant Ext as WSJT-X / N1MM
 
   Op->>Zip: Copy from USB / Releases to C:\WIMS
@@ -441,10 +441,10 @@ No wire-protocol or HTTP API changes for packaging.
 | `Install-Wims.ps1` | Prefer `runtime\python\python.exe`; write `python-path.txt`; do **not** rewrite tracked `Start-WimsServer.cmd`; **auto LAN→Private**; 8787 best-effort; optional prompt for full firewall helper (never silent); smoke = `import wims.server.app` + `import tkinter` |
 | `_resolve-python.cmd` | After reading `python-path.txt`, if missing/stale try `%~dp0..\..\runtime\python\python.exe`, then existing fallbacks |
 | `Update-Wims.ps1` | If `.git` present: keep git ff-only. If absent: print zip-update instructions and exit non-zero for “pull”, or delegate to FromZip when invoked with a zip path |
-| `Update-Wims-FromZip.cmd/.ps1` | New; preserve set + WIMS-only stop + re-pin runtime |
-| Desktop **Update WIMS** | If `.git` present → `Update-Wims.cmd`. If release/`manifest.json` and no `.git` → chooser: **(1) file picker** for new zip/setup **and (2) “Open GitHub Releases in browser”** secondary control. **Never** leave a non-git seat pointed at git-only Update |
+| `Update-Wims-FromZip.cmd/.ps1` | New; preserve set + WS Hub-only stop + re-pin runtime |
+| Desktop **Update WS Hub** | If `.git` present → `Update-Wims.cmd`. If release/`manifest.json` and no `.git` → chooser: **(1) file picker** for new zip/setup **and (2) “Open GitHub Releases in browser”** secondary control. **Never** leave a non-git seat pointed at git-only Update |
 | Launcher update banner (non-git) | If `manifest.json` present: show `Installed release <version> — update from USB or GitHub Releases; do not use git pull.` Hide git-pull button (already soft-fails). No in-app download in v1 |
-| Release notes + docs | Always mention **wsjtx-inhibit** sibling download (Releases URL) alongside WIMS assets |
+| Release notes + docs | Always mention **wsjtx-inhibit** sibling download (Releases URL) alongside WS Hub assets |
 | `manifest.json` | `{ "name","version","git_sha","channel","python_bundled","created_utc" }` |
 | `python -m wims version` | Prints `wims.__version__` (numeric base; see Tag scheme) |
 
@@ -528,7 +528,7 @@ flowchart LR
 | No Git on ZIP install | Low | Expected | FromZip / USB path |
 | Offline and no bundle | High | — | Fixed by shipping `runtime\` |
 | `hardware/` flash confusion | Med if shipped | — | Hard omit + CI deny-list |
-| `python3-tk` missing (Linux) | Medium | Double-click installer and the WIMS icon | Dialog names `python3-tk` (Fedora: `python3-tkinter`) |
+| `python3-tk` missing (Linux) | Medium | Double-click installer and the WS Hub icon | Dialog names `python3-tk` (Fedora: `python3-tkinter`) |
 | WSJT-X / N1MM missing | Info | Detect | WARN only |
 | Two site servers | Medium | Plane E refuse | Existing presence logic |
 
@@ -585,7 +585,7 @@ flowchart LR
 7. **Phase 6 — Contest pin**  
    Later GA `vX.Y.Z`; USB clones; freeze mid-contest updates. `.deb` still deferred unless requested.
 
-**Rollback:** keep previous zip on USB; stop WIMS-only processes; rename `C:\WIMS` → `C:\WIMS.bak`; unpack prior version; prefs in `%APPDATA%\wims` remain.
+**Rollback:** keep previous zip on USB; stop WS Hub-only processes; rename `C:\WIMS` → `C:\WIMS.bak`; unpack prior version; prefs in `%APPDATA%\wims` remain.
 
 ---
 
@@ -646,10 +646,10 @@ Operator answers **2026-09-07** (final for this design):
 ### 1. Bundled CPython + Tcl/Tk redistribution
 - **Jeff:** did not know tradeoffs.
 - **Tradeoffs (brief):**
-  - *Ship bundle:* offline contest install works; pins interpreter; larger zip (~20–30 MB+); must ship PSF + Tcl/Tk notices beside GPL-3 WIMS; usual practice for embeddable CPython (PSF license is GPL-compatible for *bundling*; WIMS remains GPL-3 — no copyleft conflict from shipping CPython/Tcl/Tk binaries with notices).
+  - *Ship bundle:* offline contest install works; pins interpreter; larger zip (~20–30 MB+); must ship PSF + Tcl/Tk notices beside GPL-3 WS Hub; usual practice for embeddable CPython (PSF license is GPL-compatible for *bundling*; WS Hub remains GPL-3 — no copyleft conflict from shipping CPython/Tcl/Tk binaries with notices).
   - *Do not ship:* smaller artifact; Install depends on winget/download or preinstalled Python — fails offline; Store-stub risk returns.
   - *Legal later objects:* fall back to Alternative F (portable full CPython with notices) or system-Python-only Install — pin contract unchanged.
-- **Locked:** **YES — ship embeddable CPython 3.12 + Tcl/Tk in the GPL-3 WIMS zip**, with PSF + Tcl/Tk texts in `runtime/THIRD_PARTY_NOTICES.txt` (and/or `runtime/licenses/`).
+- **Locked:** **YES — ship embeddable CPython 3.12 + Tcl/Tk in the GPL-3 WS Hub zip**, with PSF + Tcl/Tk texts in `runtime/THIRD_PARTY_NOTICES.txt` (and/or `runtime/licenses/`).
 
 ### 2. Optional `.exe` wrapper in v1
 - **Jeff:** yes.
@@ -677,7 +677,7 @@ Operator answers **2026-09-07** (final for this design):
 
 ### 8. wsjtx-inhibit pointer
 - **Jeff:** both.
-- **Locked:** mention sibling **wsjtx-inhibit** download in **WIMS GitHub Release notes AND** operator docs (`INSTALL.md`, `tester_roles.md`, `operator_setup.md` as appropriate).
+- **Locked:** mention sibling **wsjtx-inhibit** download in **WS Hub GitHub Release notes AND** operator docs (`INSTALL.md`, `tester_roles.md`, `operator_setup.md` as appropriate).
 
 **No open product questions remain for this packaging design.**
 
@@ -685,7 +685,7 @@ Operator answers **2026-09-07** (final for this design):
 
 ## Key Decisions
 
-1. **WIMS is the primary packaged product; map144 is out of this design.**  
+1. **WS Hub is the primary packaged product; map144 is out of this design.**  
    Keeps dependency surface at stdlib + Tk.
 
 2. **Reuse wsjtx-inhibit *release process* (tag → CI → gated GitHub Releases via `gh release create` or equivalent), not CMake/CPack/NSIS.**  
@@ -695,9 +695,9 @@ Operator answers **2026-09-07** (final for this design):
    Recipe and smoke tests are normative. Alternative F / system Python only if spike or later legal review forces a change.
 
 4. **Linux primary artifact = tar.gz using system `python3` + `python3-tk` (personal laptops; stays in release gate). `.deb` deferred post-contest.**  
-   The operator opens `scripts/Add WIMS to Desktop.desktop`. The tarball keeps its executable bit. No contest Linux seats today.
+   The operator opens `scripts/Add WS Hub to Desktop.desktop`. The tarball keeps its executable bit. No contest Linux seats today.
 
-5. **Release artifacts hard-omit the entire `hardware/` tree; WIMS KEY agent software stays in.**  
+5. **Release artifacts hard-omit the entire `hardware/` tree; WS Hub KEY agent software stays in.**  
    CI deny-list: `hardware/`, `flash_keyline.py`, `99-keyline.rules`, eeprom `*.bin`. Builders use the git repo for flash.
 
 6. **Never install WSJT-X, N1MM, GridTracker, or radio drivers; never rewrite their settings from packaging.**  
@@ -776,7 +776,7 @@ Ordered, independently reviewable PRs. Each should leave `main` green.
 - **Title:** `windows: FromZip update with real preserve set; launcher non-git banner`
 - **Files/components:** `Update-Wims.ps1`, new `Update-Wims-FromZip.ps1` / `.cmd`, Desktop shortcut logic in Install, `src/wims/launcher/` banner copy when `manifest.json` and not git
 - **Dependencies:** PR 1; soft-dep PR 2
-- **Description:** Explicit preserve set (`seat-common.cmd`, `seat-local.cmd`, `radio-flex50.cmd`, `radio-ic9700-144.cmd`, optional logs). New stop helper using `classify_argv` rules but stop set = seats + **server** + **launcher** (not `replace_seat_agents()` alone; never N1MM/WSJT-X). Always re-pin `python-path.txt` to new runtime. Non-git Desktop **Update WIMS** → chooser with **file picker + Open GitHub Releases**. Banner text per API section.
+- **Description:** Explicit preserve set (`seat-common.cmd`, `seat-local.cmd`, `radio-flex50.cmd`, `radio-ic9700-144.cmd`, optional logs). New stop helper using `classify_argv` rules but stop set = seats + **server** + **launcher** (not `replace_seat_agents()` alone; never N1MM/WSJT-X). Always re-pin `python-path.txt` to new runtime. Non-git Desktop **Update WS Hub** → chooser with **file picker + Open GitHub Releases**. Banner text per API section.
 
 ### PR 4 — Linux install script + tarball layout checklist
 

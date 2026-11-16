@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,9 +19,9 @@
 """Just enough telnet to read a cluster.
 
 ``telnetlib`` is not in Python 3.13. Nodes send option bytes before the
-text. WIMS refuses every option (WONT / DONT) so the session stays plain
+text. WS Hub refuses every option (WONT / DONT) so the session stays plain
 text. Those refusals are the telnet handshake, not cluster commands.
-The only text WIMS sends is the callsign, and only as the login.
+The only text WS Hub sends is the callsign, and only as the login.
 """
 
 from __future__ import annotations

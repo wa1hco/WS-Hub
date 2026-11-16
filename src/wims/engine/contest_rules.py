@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -229,7 +229,7 @@ class FileRules:
         mults = [m for m in (self.data.get("multipliers") or []) if isinstance(m, dict)]
         if any(m.get("per") == "unverified" for m in mults):
             return False, (
-                "Multiplier scope is not confirmed yet, so WIMS is not marking new multipliers."
+                "Multiplier scope is not confirmed yet, so WS Hub is not marking new multipliers."
             )
         for mult in mults:
             if mult.get("type") == "grid" and mult.get("per") == "band":
@@ -245,7 +245,7 @@ class FileRules:
                     + _window_clause(store)
                 )
         if exchange:
-            return False, "This rules file has no multiplier WIMS can mark yet."
+            return False, "This rules file has no multiplier WS Hub can mark yet."
         return False, ""
 
     def classify(self, store, call: str, band: str, mode: str | None, grid: str | None,
@@ -638,7 +638,7 @@ def resolve(
     if getattr(rules_obj, "id", "") == "nyqp" and not (choice.get("station_state") or "").strip():
         public["summary"] = (
             public["summary"].rstrip()
-            + " WIMS does not know if this station is in NY, so only NY counties would count."
+            + " WS Hub does not know if this station is in NY, so only NY counties would count."
         )
     if suggested and not explicit and contest:
         public["source_label"] = rules_obj.title

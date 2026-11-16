@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -41,7 +41,7 @@ if not exist "%PYTHON_EXE%" if /I not "%PYTHON_EXE%"=="py" if /I not "%PYTHON_EX
 if "%WIMS_KEY_TARGETS%"=="" set "WIMS_KEY_TARGETS=127.0.0.1:22372"
 
 echo.
-echo  WIMS home Inhibit (H1): %ROOT%
+echo  WS Hub home Inhibit (H1): %ROOT%
 echo  Targets: %WIMS_KEY_TARGETS%
 if defined WIMS_KEY_DEVICE (
   echo  Device:  %WIMS_KEY_DEVICE%

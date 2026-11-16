@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS - WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -41,7 +41,7 @@ if not defined WIMS_SEED_DB_DIR (
 )
 
 REM Optional GridTracker merge: set WIMS_GT_FORWARD=host:22370
-REM GT Receive UDP = 22370; WIMS reverse defaults to 22371. See --gt-forward help.
+REM GT Receive UDP = 22370; WS Hub reverse defaults to 22371. See --gt-forward help.
 
 REM Server picks the contest LAN for multicast joins; pass --iface if needed.
 REM Extra args (lab only): %*

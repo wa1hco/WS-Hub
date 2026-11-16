@@ -1,4 +1,4 @@
-# WIMS Key Agent — design (WIMS only)
+# WS Hub Key Agent — design (WS Hub only)
 
 **Status:** product path via **`wims.seat`** (2026-09-03).  
 **Not** the same program as **inhibit-agent** (that design lives for the **wsjtx-inhibit**
@@ -6,9 +6,9 @@ project in [inhibit_agent.md](inhibit_agent.md)).
 
 | Program | Project | Typical use |
 |---------|---------|-------------|
-| **inhibit-test** / inhibit bench | wsjtx-inhibit / WIMS testbed | Lab / protocol / gate bring-up |
+| **inhibit-test** / inhibit bench | wsjtx-inhibit / WS Hub testbed | Lab / protocol / gate bring-up |
 | **inhibit-agent** | wsjtx-inhibit | Dual-radio seat: CTS → **localhost** gate; no other apps required |
-| **WIMS seat (`--key`)** | **WIMS** | N1MM / SSB-CW PC: KEY sense + **same-band** digi targets |
+| **WS Hub seat (`--key`)** | **WS Hub** | N1MM / SSB-CW PC: KEY sense + **same-band** digi targets |
 
 ---
 
@@ -51,7 +51,7 @@ Modules stay separate; they share **one live band**. Not N1MM networking **:1207
 
 **Wire:** type-18 `TxInhibit` with stable **Controller ID**  
 ([`docs/protocols/wsjtx_tx_inhibit.md`](../protocols/wsjtx_tx_inhibit.md)).  
-Holds never go through the WIMS server.
+Holds never go through the WS Hub server.
 
 **Overrides:** `WIMS_KEY_DEVICE`, `WIMS_KEY_TARGETS=host:port,…`,  
 `WIMS_KEY_CONTROLLER_ID`. Lab: `--device sim:up`.
@@ -65,7 +65,7 @@ No software PTT debounce.
 
 | Doc | Role |
 |-----|------|
-| [inhibit_agent.md](inhibit_agent.md) | **inhibit-agent** (wsjtx-inhibit; no WIMS content) |
+| [inhibit_agent.md](inhibit_agent.md) | **inhibit-agent** (wsjtx-inhibit; no WS Hub content) |
 | [../protocols/wsjtx_tx_inhibit.md](../protocols/wsjtx_tx_inhibit.md) | **Current wire** (type 18 + leases) |
 | [wims_tx_inhibit.md](wims_tx_inhibit.md) | Gate + product / latency design |
 | [wims_design.md](wims_design.md) §2.14 | Band policy interlock vs coordinated |

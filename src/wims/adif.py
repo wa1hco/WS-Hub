@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@
 
 """Length-aware ADIF reader.
 
-WIMS only reads logs. This module never writes an ADIF file. The parser is
+WS Hub only reads logs. This module never writes an ADIF file. The parser is
 independent of ``wims.log`` (that package inserts into N1MM).
 """
 
@@ -34,7 +34,7 @@ from wims.integrations.n1mm.qso import LoggedQso
 # A logged contact is confirmed when any of these ADIF fields is Y.
 # Card (QSL_RCVD) and LoTW (LOTW_QSL_RCVD) are the default. eQSL
 # (EQSL_QSL_RCVD) counts when that field is in the log. A GridTracker
-# LoTW download is a separate source (``wims.lotw``). WIMS does not
+# LoTW download is a separate source (``wims.lotw``). WS Hub does not
 # download LoTW.
 CONFIRMED_QSL_FIELDS = ("qsl_rcvd", "lotw_qsl_rcvd", "eqsl_qsl_rcvd")
 
@@ -135,7 +135,7 @@ def mode_of(fields: dict[str, str]) -> str:
 
 
 def band_of(fields: dict[str, str]) -> str:
-    """ADIF ``BAND`` when it already looks like a WIMS label, else ``FREQ`` MHz."""
+    """ADIF ``BAND`` when it already looks like a WS Hub label, else ``FREQ`` MHz."""
     raw = (fields.get("band") or "").strip()
     if raw:
         label = raw.lower().replace(" ", "")

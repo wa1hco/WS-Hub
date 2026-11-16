@@ -1,14 +1,14 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
 REM
 REM Icom IC-9700 144 MHz seat pack:
-REM   wfview → N1MM → WSJT-X (--rig-name for 2 m) → WIMS agent
+REM   wfview → N1MM → WSJT-X (--rig-name for 2 m) → WS Hub agent
 REM
-REM Does NOT start the site WIMS server. N1MM is shared with the Flex pack.
+REM Does NOT start the site WS Hub server. N1MM is shared with the Flex pack.
 REM WSJT-X uses a separate named config from the 50 MHz instance.
 REM
 REM Config load order:

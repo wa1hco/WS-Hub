@@ -54,7 +54,7 @@ One-command smoke: `tools/dev/validate.sh`.
   (reader OFF). Presence/contacts: Broadcast Data → `127.0.0.1:12060` → agent → site.
   Map: **[wims_networking.md](wims_networking.md)** + **[operator_setup.md](../operator_setup.md)**.
 - **Seat CAT stack (design):** preferred **Icom + wfview** path in networking **§3.2–§3.3**
-  (WIMS never owns radio COM; RigCtld must be explicitly enabled in wfview).
+  (WS Hub never owns radio COM; RigCtld must be explicitly enabled in wfview).
 - **No-RF test bed:** `python tools/testbed/simulators/emulator.py --iface 127.0.0.1 --instances ROY-6M:50313000,CHIP-2M:144174000,TRL-432:432174000`
 - **Interlock bench:** `python tools/testbed/interlock_bench.py`
 
@@ -88,7 +88,7 @@ and launchers mean (solo / server / seat agent; KEY agent out of R0).
 
 ## Milestones (design intent: §4 / §4.5)
 
-- [~] **R0 — Solo FT8 tester release.** One PC (N1MM + WSJT-X + WIMS server), single FT8
+- [~] **R0 — Solo FT8 tester release.** One PC (N1MM + WSJT-X + WS Hub server), single FT8
   frequency (any band, HF included): watch the ranked roster, verify needed↔dupe by editing
   the N1MM log and **click a roster line** to Work (Reply). `python -m wims.solo` + Windows/Linux
   wrappers. **Done:** roster-line **Work** (GT2, no global arm) + Halt, arbiter grant/release,
@@ -113,16 +113,16 @@ and launchers mean (solo / server / seat agent; KEY agent out of R0).
 - [ ] **M4 — multi-instance + rotator + safety.** The antenna agent on the seat
   (design §2.10, brief [wims_antenna.md](wims_antenna.md)) reads rotator headings
   now. Tuner (SteppIR, USB serial owned on that PC) and switches are not built.
-  The earlier Yaesu/K3NG-in-WIMS wording is superseded. Build order:
+  The earlier Yaesu/K3NG-in-WS Hub wording is superseded. Build order:
   - [x] **Read-only heading** — antenna name, rotator device, heading, connected/stale on Operate. Launcher **Antennas** checkbox, rotctld `p` only. No turn command.
   - [ ] **Manual turn** — operator enters a bearing; claim-gated; stop
   - [ ] **Auto-association** — agent proposes the instance; operator confirms once; site profile
   - [ ] **Point at a spot** — spot click prepares (QSY, rotate, Tuning/Ready); roster click starts
     the QSO; score by estimated retune time. Never unattended transmit
-- [ ] **M5 — WIMS op works one band on-air (S&P + tailend)** via roster + click-to-work → Reply
+- [ ] **M5 — WS Hub op works one band on-air (S&P + tailend)** via roster + click-to-work → Reply
   echoing retained decode (CQ or **73**; GT2 pattern) on one empty seat; Free Text + optional
   closing QSY (G4 / §2.8). **Not** Call CQ — run/autorespond is WSJT-X UI (§2.12).
-- [ ] **M6 — WIMS op covers multiple empty-seat bands (S&P + tailend)**, smooth local⇄WIMS handoff
+- [ ] **M6 — WS Hub op covers multiple empty-seat bands (S&P + tailend)**, smooth local⇄WS Hub handoff
   (§4.2); local run remains seat/RDP WSJT-X (§2.12).
 - [ ] **M7 — remote + multi-operator** over the internet; non-cooperative lease handoff (§4.5).
 
@@ -136,7 +136,7 @@ and launchers mean (solo / server / seat agent; KEY agent out of R0).
 | 3.2 | UDP controller/sender | `[~]` | `udp/controller.py` + `udp/encode.py`: `reply()` / `halt()` / grid-only `configure_grid()`. Server: `/api/tx/work\|halt` — **no global arm**; roster line click = Work (GT2). Arbiter grant/release; `test_server_tx`. Reply = echo retained Decode (CQ **or 73 tailend**). A remembered square with no grid in that decode is a following Configure (DX Grid only). Reply socket is unbound (OS picks the route; no path → plain sentence). **No product Call CQ**. Remaining: real-WSJT-X bring-up, Free Text (QSY §2.8), Replay. |
 | 3.3 | Multi-instance manager | `[~]` | **Seat agent** (§3.3.1): config/setup test + report + discovery **built**; antenna side with read-only rotator heading (rotctld `p`) **built**. Remaining matrix: **interlock mute**, rotator turn, tuner (SteppIR serial), switch, thumbnails, process lifecycle, readiness, watchdog fail-safe. |
 | 3.4 | Interlock / TX arbiter | `[~]` | `interlock/arbiter.py`: `TxArbiter` (≤1/group) + `OverlapDetector`; 5000-step stress + live bench, 0 overlap. **Arbiter now gates real TX** in the server: Work does `request()`, released on Halt and on the WSJT-X `Status` TX→RX edge; `holders()` on the `tx` state block. Remaining: fast-mute path, per-group config from profiles. |
-| 3.5 | Decision / recommendation engine | `[~]` | Scoring built (`engine/scoring.py`). Contest rules are a separate object (`engine/contest_rules.py`): ARRL VHF and NY QSO Party JSON files. Setup **Goal** menu: contest, award (DXCC, WAS, VUCC), just operating (Checklist), or custom. Checklist adds continent, CQ zone, and ITU zone (overall, per band, or per mode) when `cty.dat` is present; a missing file leaves those three off with a tip. County and callsign prefix stay off (no list shipped). Logged contacts are the already-have list. A worked place that is not confirmed still shows as unconfirmed for a new station, per the line's scope (overall is any band or mode), until the log or a GridTracker LoTW file on this PC says it is confirmed. A station with no confirmed contact is not marked unconfirmed. That file confirms a matching contact (call, band, LoTW mode group, within 30 minutes) and the grid, state, and DXCC on the record. Setup names when the file was updated, or says it was not found. WIMS does not download LoTW and does not write the file. Log to use is the only log. A saved WSJT-X Colors choice is rewritten once as checklist lines. Heard grids persist, and Work sends a remembered square to that WSJT-X (10-minute rover window; roster says grid assumed only for a rover square from an earlier hearing). DX cluster spots are a separate Operate list (§2.15): any selected amateur band, mode from the comment or the frequency, needed on that spot’s band and mode, a small QSY cost when no live instance is on that band and mode, click selects only. The needed badge names one place (grid, then state, then DXCC, then CQ zone, then ITU zone, then continent, then call). On the call roster and the Spotted list the generic mult badge is hidden when that place word is shown; a contest row keeps mult. Operate has mode checkboxes (SSB, CW, FT8, FT4, Other), saved in cluster.json, all on by default. Other is MSK144, Q65, FM, data, and unknown modes. Remaining: **advisory** run/S&P (run ≠ actuator — §2.12), give-up, geometry, **`cross_band` factor (C7)** + prior-contest station history. NYQP new-mult stays off (`per: unverified`). |
+| 3.5 | Decision / recommendation engine | `[~]` | Scoring built (`engine/scoring.py`). Contest rules are a separate object (`engine/contest_rules.py`): ARRL VHF and NY QSO Party JSON files. Setup **Goal** menu: contest, award (DXCC, WAS, VUCC), just operating (Checklist), or custom. Checklist adds continent, CQ zone, and ITU zone (overall, per band, or per mode) when `cty.dat` is present; a missing file leaves those three off with a tip. County and callsign prefix stay off (no list shipped). Logged contacts are the already-have list. A worked place that is not confirmed still shows as unconfirmed for a new station, per the line's scope (overall is any band or mode), until the log or a GridTracker LoTW file on this PC says it is confirmed. A station with no confirmed contact is not marked unconfirmed. That file confirms a matching contact (call, band, LoTW mode group, within 30 minutes) and the grid, state, and DXCC on the record. Setup names when the file was updated, or says it was not found. WS Hub does not download LoTW and does not write the file. Log to use is the only log. A saved WSJT-X Colors choice is rewritten once as checklist lines. Heard grids persist, and Work sends a remembered square to that WSJT-X (10-minute rover window; roster says grid assumed only for a rover square from an earlier hearing). DX cluster spots are a separate Operate list (§2.15): any selected amateur band, mode from the comment or the frequency, needed on that spot’s band and mode, a small QSY cost when no live instance is on that band and mode, click selects only. The needed badge names one place (grid, then state, then DXCC, then CQ zone, then ITU zone, then continent, then call). On the call roster and the Spotted list the generic mult badge is hidden when that place word is shown; a contest row keeps mult. Operate has mode checkboxes (SSB, CW, FT8, FT4, Other), saved in cluster.json, all on by default. Other is MSK144, Q65, FM, data, and unknown modes. Remaining: **advisory** run/S&P (run ≠ actuator — §2.12), give-up, geometry, **`cross_band` factor (C7)** + prior-contest station history. NYQP new-mult stays off (`per: unverified`). |
 | 3.6 | Logger interface (N1MM) | `[~]` | Log to use on the Log page: the operator’s log, or a Goal suggestion (contest → newest matching N1MM; otherwise WSJT-X). Count-since / count-until change the needed/dupe lookup. N1MM seed + live contact UDP + resync when that contest file is the log. The selected file is re-read about once a second, before the roster is scored, and a locked read does not wipe the copy. A logged contact clears needed and Mult on the next push. The mult badge names the square, the band, and the log. Per-instance `wsjtx_log.adi` discovery and Log-page warnings. **Check logs** is on the Log page (summary first; shared files count once). The N1MM tab lists several stations and stays hidden when fewer than two are heard. Remaining: native Log4OM/CQRLOG, GridTracker roster filters (L9), challenge pace UI, **prior-contest band-history seed for C7**. |
 | 3.7 | GridTracker interface | `[ ]` | — |
 | 3.8 | Rotator controller | `[~]` | **Started:** `integrations/rotator/` (GS-232 dialect, SimRotator, RotatorRegistry); server `--sim-rotator`, agent `WIMS_ROTATOR_*` / report `rotators[]`; state `rotators` + roster `az_ant`/`delta_az`/`rotator_moving`; API `POST /api/rotator/point|stop`; UI Az ant (italic while slewing) + click Az DX. That GS-232 client and `WIMS_ROTATOR_*` are a lab stand-in. Product path step 1 is built: the **Antennas** checkbox starts the antenna side of the seat agent. An antenna has devices (`rotator` / `tuner` / `switch`). Only `rotator` is read (rotctld `p`: heading and connected/stale). SteppIR would be a `tuner` whose USB serial port the agent on that PC owns; that is not built. Manual turn, confirmed link, and point-at-spot are not built. No position command is sent. See [wims_antenna.md](wims_antenna.md). |
@@ -163,7 +163,7 @@ stub, rotator stub, fast-mute harness.
 partial; everything else missing — see the backlog table in wims_design.md §2.6 for priorities.
 **New (design only):** **C7** / §2.9 cross-band evidence; **G4** / §2.8 QSY free text; **G5** /
 **§2.10** rotator Az ant/Az DX + rotating font; **E1b** / **§2.11** band subscribe → roster;
-**G6** / **§2.12** run vs S&P/tailend (Reply = WIMS incl. 73; run = WSJT-X UI).
+**G6** / **§2.12** run vs S&P/tailend (Reply = WS Hub incl. 73; run = WSJT-X UI).
 
 ### Design / feature todos (not yet coded)
 
@@ -199,7 +199,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   built. Manual turn, link confirm, and point-at-spot are not.
   Design: wims_design.md §1.4 / §2.10 / §3.8 / §3.3.1 and [wims_antenna.md](wims_antenna.md).
 - [ ] **G6 / §2.12 — Run vs S&P + tailend boundary** — design **done** (2026-07-20, revised same
-  day): S&P/tailend = WIMS Reply on retained decode (CQ **and** **73**, GT2 `initiateQso`);
+  day): S&P/tailend = WS Hub Reply on retained decode (CQ **and** **73**, GT2 `initiateQso`);
   run/CQ + pile autorespond = WSJT-X UI only; no product Call CQ. Remaining code/UI: observe
   `tx_role` / run banner, click-to-work on CQ/73, Tailend label, help text for empty-seat run via
   seat/RDP. Design: wims_design.md §2.12 / §1.1 / §4.2.
@@ -241,7 +241,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   WSJT-X). Start now and This year change the needed/dupe lookup. A saved
   choice reloads immediately and stays across Goal changes. Setup no longer
   holds log controls. The N1MM tab is the multi-station list.
-- [x] **L6 — Check logs.** ADIF, the N1MM log chosen in WIMS, optional LoTW.
+- [x] **L6 — Check logs.** ADIF, the N1MM log chosen in WS Hub, optional LoTW.
   Summary first. Text + JSON. Read-only. Several instances on one file (same
   path, same inode, or the same bytes) are one log.
 - [x] **L7 — Check logs window.** GridTracker `*.adi` under the GridTracker
@@ -274,7 +274,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
 - **2026-10-29** — **Needed badge names one place.** On an award or a checklist, the Operate callsign badge that said needed now says why: grid, state, DXCC, CQ zone, ITU zone, continent, or call. Each line is still judged in its own scope (overall, that band, or that mode). When more than one is new, the badge shows one. The order is the more specific place first: grid, state, DXCC, CQ zone, ITU zone, continent, then call. A new call is last because it is not a multiplier. The score adds the new-multiplier weight once when any of those places is new. It does not add that weight again for each extra place, so the badge names one place. Hover still has the one sentence for the place that won. The mult badge stays the word mult. Unconfirmed stays the word unconfirmed. County and callsign prefix are not computed, so they are not labels. A contest row leaves this badge off. Tests: `tests/unit/test_need_label.py`.
 - **2026-10-29** — **Antenna agent, read-only rotator heading.** The launcher **This seat will run** row gains **Antennas**. Checking it starts the antenna side of the seat agent (the same agent as WSJT-X; a PC with antennas and no WSJT-X still gets that agent). An antenna has a name and a list of devices. The kind is `rotator`, `tuner`, or `switch`. This step reads only `rotator`: the window remembers host and port, the agent polls hamlib rotctld `p` about once a second, and the report carries the antenna, the device kind, the heading, and connected or stale. Three missed polls, or a stopped rotctld, clear the heading. Operate and Status show one compact row. A remote browser sees it on the existing live update. No turn, no set-position, and no stop is sent. Port 4533 is left to the radio. A `tuner` is where SteppIR will go: the controller is USB serial, and the antenna agent on that PC would own the port. A `switch` is antenna selection. Neither is built, and neither opens a port. Tests: `tests/unit/test_rotctld.py` with a fake rotctld. Design: [wims_antenna.md](wims_antenna.md), [wims_design.md](wims_design.md) §2.10.
 - **2026-10-28** — **Design only: rotator control is rotctld on the seat agent.**
-  Jeff (WA1HCO): WIMS turns rotators itself, through hamlib rotctld. WSJT-X has
+  Jeff (WA1HCO): WS Hub turns rotators itself, through hamlib rotctld. WSJT-X has
   no rotator control, and the Flex is not the path. The per-PC agent finds each
   rotor, reads name and heading, announces them with the WSJT-X instances
   (`6m beam, 212 deg, linked to instance flexA-6M`), and runs turns. The console
@@ -287,24 +287,24 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   controller firmware is not written; the brief proposes a name-and-announce
   feature. No code. Design: [wims_design.md](wims_design.md) §2.10,
   [wims_rotator.md](wims_rotator.md), networking §3.4.
-- **2026-10-28** — **DX cluster node list, and a silent node is not "connected".** Field check at FN42: `dxc.ve7cc.net` port 23 completed TCP and sent no bytes, so the Spotted list stayed empty with no hint. The usual node is now K1TTT, `k1ttt.net` port 7373. Setup also lists NC7J (`dxc.nc7j.com` port 7373), W3LPL (`w3lpl.net` port 7373), VE7CC, or another host and port. A saved schema-1 VE7CC default moves to K1TTT; picking VE7CC again keeps it. WIMS sends one blank line to wake the node, then the callsign for `login:`, `call:`, `callsign:`, or `Please enter your call` (any case; AR-Cluster, DX-Spider, CC Cluster). No bytes yet is `connected, no spots yet`. Callsign sent is `logged in, no spots yet`. Spot lines are `logged in, N spots, M needed`. After 60 seconds with no banner: `Cluster: node sent nothing. Try another node on Setup.` Hover shows the last spot's age. Tests: `tests/unit/test_cluster.py` with `tests/fixtures/cluster_silent.txt`, `cluster_ar_cluster.txt`, `cluster_dx_spider.txt`.
+- **2026-10-28** — **DX cluster node list, and a silent node is not "connected".** Field check at FN42: `dxc.ve7cc.net` port 23 completed TCP and sent no bytes, so the Spotted list stayed empty with no hint. The usual node is now K1TTT, `k1ttt.net` port 7373. Setup also lists NC7J (`dxc.nc7j.com` port 7373), W3LPL (`w3lpl.net` port 7373), VE7CC, or another host and port. A saved schema-1 VE7CC default moves to K1TTT; picking VE7CC again keeps it. WS Hub sends one blank line to wake the node, then the callsign for `login:`, `call:`, `callsign:`, or `Please enter your call` (any case; AR-Cluster, DX-Spider, CC Cluster). No bytes yet is `connected, no spots yet`. Callsign sent is `logged in, no spots yet`. Spot lines are `logged in, N spots, M needed`. After 60 seconds with no banner: `Cluster: node sent nothing. Try another node on Setup.` Hover shows the last spot's age. Tests: `tests/unit/test_cluster.py` with `tests/fixtures/cluster_silent.txt`, `cluster_ar_cluster.txt`, `cluster_dx_spider.txt`.
 - **2026-10-28** — **One Operate line for a compound FT8 call.** WSJT-X prints P4/WE9V in full on CQ and as `<P4/WE9V>` once it knows the hash. A DXpedition transmission is `K5WVF RR73; YU6DX <P4/WE9V> +04`. The roster was keying the raw token, so that station occupied two lines and the DXpedition line was filed under `RR73;`. Brackets come off, that line is the fox, and `<...>` opens no line. A compound CQ has no grid, so the Grid cell stays blank, Country says Aruba, and the row is not marked grid assumed. A home call such as WE9V joins P4/WE9V only on the same instance and band within three minutes; a CQ of WE9V stays a separate station. The same rule covers `/P`, `/R`, `/QRP`, `/MM`, and a prefix such as VE3/W1XX. A trailing `/R` is the rover tag, so W1XX/R stays the United States; R/W1XX stays European Russia. Tests: `tests/unit/test_roster_compound.py`, `tests/unit/test_messages.py`, `tests/unit/test_dxcc.py`.
 - **2026-10-27** — **DX cluster spots on Operate.** A separate Spotted list (design §2.15), not merged into the roster. The site server listens to one cluster node (Setup, default was `dxc.ve7cc.net` port 23, off until Show spots is checked). It sends only the callsign WSJT-X already reported, then listens. No spot is posted and no filter command is sent. Spots on any checked amateur band are kept (default all). Mode comes from the comment, then a watering hole, then the US band segment. Needed is judged on that spot’s band and mode. Range is per band from the grid WSJT-X reports. **QSY** means no live instance is on that band and mode; the spot stays and loses the Setup QSY cost (default 8). **On band** means one is. A click selects the station and remembers the grid. It does not transmit and it does not retune. Work still needs a live decode. Spots drop off after 15 minutes. Weights: [scoring.md](scoring.md). Tests: `tests/unit/test_cluster.py`.
 - **2026-10-27** — **One call-to-entity resolver.** The checklist and the Country column both use the country file when `cty.dat` is on this PC, and the same suffix rules when a prefix cannot say the entity. Exact calls and zone overrides in the file win. A `*` primary (Sicily, African Italy, Shetland, Bear Island, European Turkey, Vienna) is not a separate DXCC entity. KG4 letter count, KC4 Antarctic bases, `3Y0`, `3Y/B`, `VP8` island letters, `SV/A`, `CE0/X`, and rover `/R` are the structural rules. The builtin list remains the Country column fallback and no longer calls VK7 Macquarie or `/R` Russia. Survey: `docs/plan/wims_call_entities.md`. Audit: `tools/dev/audit_entities.py`. Tests: `tests/unit/test_call_entity.py`, `tests/unit/test_kg4_checklist.py`, `tests/unit/test_dxcc.py`.
 - **2026-10-27** — **A three-letter KG4 call is the United States.** The country file's KG4 prefix is Guantanamo Bay, so a normal US call such as KG4LDK was read as a new DXCC entity on a band where Guantanamo had not been worked. Just operating then badged it Mult and needed even when that grid was already in the log. A one- or two-letter suffix stays Guantanamo Bay. An exact call in the file still wins. A single remembered square for a fixed station is not labeled grid assumed. Tests: `tests/unit/test_kg4_checklist.py`.
 - **2026-10-27** — **Grid assumed is only a rover square from an earlier hearing.** A fixed station that has sent a grid stays in that square, so a remembered grid is shown as the grid. Hover still names the band and the time (`Grid from 6m at 18:02 UTC`). A rover (`/R`, or two squares) is the same when the square was heard in this QSO: an exchange with our call, from our first message to them (Work, or a Status whose TX text names that call and is not a CQ) or their first message to us, while the next such message arrives within 3 minutes. The CQ or grid in the 90 seconds before that start counts as this QSO. **grid assumed** (italic, plus the words) is only a rover square from before that. The 10-minute rover window is unchanged: an older rover square stays blank and is not sent. The ADIF comment `grid remembered` is written only for that assumed rover square. A fixed station and a same-QSO rover square are filled with no comment; the log copy still marks the square remembered so a later decode can correct it. Work still sends the same square. Tests: `tests/unit/test_heard_grids.py`, `tests/unit/test_work_dx_grid.py`, `tests/unit/test_tx_status_line.py`.
-- **2026-10-23** — **Linux desktop icon is a double-click.** `scripts/Add WIMS to Desktop.desktop` puts WIMS on the desktop and in the app menu. It runs the installer with bash, so a ZIP that dropped the executable bit still works after Allow Launching or the Permissions checkbox. The release tarball keeps that bit. A missing Python or window library opens a plain message (a dialog when the desktop has one) naming `python3` and `python3-tk` (`python3-tkinter` on Fedora). Tests: `tests/unit/test_linux_desktop_install.py`.
-- **2026-10-21** — **LoTW confirmations from GridTracker.** WIMS finds GridTracker 2 `LoTW_QSL.adif` (`~/.config/GridTracker2/Ginternal` on Linux, `%APPDATA%\GridTracker2\Ginternal` on Windows, Library/Application Support on macOS) and GridTracker 1 `~/Documents/GridTracker/LogbookOfTheWorld.adif`. The newest file is used. Read-only; re-read when the modified time changes. A logged contact is confirmed when call, band, LoTW mode group (FT8 matches DATA and MFSK), and time within 30 minutes match. The record's grid, state, and DXCC also confirm that place. Setup says `LoTW confirmations: from GridTracker, updated <time>` or `not found`. WIMS does not download LoTW. Tests: `tests/unit/test_lotw.py`.
+- **2026-10-23** — **Linux desktop icon is a double-click.** `scripts/Add WS Hub to Desktop.desktop` puts WS Hub on the desktop and in the app menu. It runs the installer with bash, so a ZIP that dropped the executable bit still works after Allow Launching or the Permissions checkbox. The release tarball keeps that bit. A missing Python or window library opens a plain message (a dialog when the desktop has one) naming `python3` and `python3-tk` (`python3-tkinter` on Fedora). Tests: `tests/unit/test_linux_desktop_install.py`.
+- **2026-10-21** — **LoTW confirmations from GridTracker.** WS Hub finds GridTracker 2 `LoTW_QSL.adif` (`~/.config/GridTracker2/Ginternal` on Linux, `%APPDATA%\GridTracker2\Ginternal` on Windows, Library/Application Support on macOS) and GridTracker 1 `~/Documents/GridTracker/LogbookOfTheWorld.adif`. The newest file is used. Read-only; re-read when the modified time changes. A logged contact is confirmed when call, band, LoTW mode group (FT8 matches DATA and MFSK), and time within 30 minutes match. The record's grid, state, and DXCC also confirm that place. Setup says `LoTW confirmations: from GridTracker, updated <time>` or `not found`. WS Hub does not download LoTW. Tests: `tests/unit/test_lotw.py`.
 - **2026-10-21** — **Unconfirmed chase follows scope, and skips a known non-confirmer.** The station already worked for a grid, US state, DXCC entity, continent, CQ zone, or ITU zone is excluded in the line's scope: overall is any band or mode, per band is that band, per mode is that mode. A station worked before, with no confirmed contact anywhere, is not marked unconfirmed. A new place can still be needed. Under All, the hover can say worked before, never confirmed. XE2SSB in DL97 (10 m 2025-05-22, 30 m 2025-10-09, 10 m 2025-10-30, FT8, nothing confirmed) stays off the unconfirmed list when the grid line is overall. Tests: `tests/unit/test_unconfirmed.py`.
-- **2026-10-21** — **Worked but not confirmed.** On an award or a checklist, a grid, US state, DXCC entity, continent, CQ zone, or ITU zone that is in the log and not confirmed shows as **unconfirmed** when the station heard is not one already worked for that place. The scope is the one the goal already uses (overall, per band, or per mode). A new place stays **needed**. The same station again stays off the needed list. A confirmed contact finishes the place for that scope. The log WIMS already reads is the source: a card or LoTW yes, and an eQSL yes when that field is in the file. WIMS does not download LoTW. Setup → **Count worked but not confirmed as needed** is on by default, and Needed / Needed and CQ / Needed and CQ or 73 follow it. The roster hover names the place. Work is still a click. Tests: `tests/unit/test_unconfirmed.py`.
-- **2026-10-20** — **Work fills WSJT-X DX Grid from memory.** Clicking a decode that has no grid sends the remembered square to that WSJT-X after the Reply, as a Configure that sets DX Grid and leaves mode, tolerance, submode, fast mode, T/R period, Rx DF, and DX call unchanged. Reply text is not rewritten. Generate Messages is off, so TX texts are not rebuilt and TX is not enabled. A square already in the decode is not sent. Rovers (`/R`, or two squares) use one window of 10 minutes. The roster shows **grid assumed** when the square came from memory; the ADIF comment stays `grid remembered`. A later decode that carries a grid, while that contact is still open, updates WIMS and sends the new square to the same instance. The WSJT-X log file is not written. The Operate line stays `Working PY3FSN on flex`; the square is on the hover. Tests: `tests/unit/test_work_dx_grid.py`, `tests/unit/test_heard_grids.py`.
-- **2026-10-19** — **Restart site server restarts the copy on this PC.** The button stops a WIMS site server only when `/healthz` says it is WIMS and the process id is local (the pid file in the WIMS state directory, or the process listening on the console port). A process that is not WIMS is left alone. A site server on another PC is left alone: **Restart needed** stays, and the window names that PC and says to restart it there. After a restart on this PC, the window waits until `server_rev` matches the installed copy and says `Restarted on <rev>`. One site server on the LAN, the Operate port check, and the second-click handoff are unchanged. Tests: `tests/unit/test_site_restart.py`.
+- **2026-10-21** — **Worked but not confirmed.** On an award or a checklist, a grid, US state, DXCC entity, continent, CQ zone, or ITU zone that is in the log and not confirmed shows as **unconfirmed** when the station heard is not one already worked for that place. The scope is the one the goal already uses (overall, per band, or per mode). A new place stays **needed**. The same station again stays off the needed list. A confirmed contact finishes the place for that scope. The log WS Hub already reads is the source: a card or LoTW yes, and an eQSL yes when that field is in the file. WS Hub does not download LoTW. Setup → **Count worked but not confirmed as needed** is on by default, and Needed / Needed and CQ / Needed and CQ or 73 follow it. The roster hover names the place. Work is still a click. Tests: `tests/unit/test_unconfirmed.py`.
+- **2026-10-20** — **Work fills WSJT-X DX Grid from memory.** Clicking a decode that has no grid sends the remembered square to that WSJT-X after the Reply, as a Configure that sets DX Grid and leaves mode, tolerance, submode, fast mode, T/R period, Rx DF, and DX call unchanged. Reply text is not rewritten. Generate Messages is off, so TX texts are not rebuilt and TX is not enabled. A square already in the decode is not sent. Rovers (`/R`, or two squares) use one window of 10 minutes. The roster shows **grid assumed** when the square came from memory; the ADIF comment stays `grid remembered`. A later decode that carries a grid, while that contact is still open, updates WS Hub and sends the new square to the same instance. The WSJT-X log file is not written. The Operate line stays `Working PY3FSN on flex`; the square is on the hover. Tests: `tests/unit/test_work_dx_grid.py`, `tests/unit/test_heard_grids.py`.
+- **2026-10-19** — **Restart site server restarts the copy on this PC.** The button stops a WS Hub site server only when `/healthz` says it is WS Hub and the process id is local (the pid file in the WS Hub state directory, or the process listening on the console port). A process that is not WS Hub is left alone. A site server on another PC is left alone: **Restart needed** stays, and the window names that PC and says to restart it there. After a restart on this PC, the window waits until `server_rev` matches the installed copy and says `Restarted on <rev>`. One site server on the LAN, the Operate port check, and the second-click handoff are unchanged. Tests: `tests/unit/test_site_restart.py`.
 - **2026-10-19** — **Operate Work status is a short line.** After Work, the line reads `Working PY3FSN on flex` (the rig name, without the `WSJT-X - ` prefix). Halt reads `Halted flex`. The method, address, port, and message stay on the hover and in the server log. A refusal (no route, decode-only seat, interlock or overlap, claim held on another console) stays on the line as one sentence, with the detail on the hover. The short success line fades after a few seconds, or when the next action replaces it. Work, Halt, Reply, Configure, claim, and interlock are unchanged. Tests: `tests/unit/test_tx_status_line.py`.
-- **2026-10-19** — **Site console window comes back where you left it.** On this PC, Open site console, Restart site server, and Operate reuse a console that is already connected instead of opening another window; that window reloads and stays put. A browser on another PC is unchanged (it still opens the URL, and a restart only reconnects its live update). When Chrome, Chromium, or Edge is installed, the console is its own window and opens at the saved size and place, kept on a visible screen. Otherwise it opens as before and WIMS says the window cannot be placed. Other tools… → Reset console window puts the next open at the default spot. Tests: `tests/unit/test_console_place.py`.
+- **2026-10-19** — **Site console window comes back where you left it.** On this PC, Open site console, Restart site server, and Operate reuse a console that is already connected instead of opening another window; that window reloads and stays put. A browser on another PC is unchanged (it still opens the URL, and a restart only reconnects its live update). When Chrome, Chromium, or Edge is installed, the console is its own window and opens at the saved size and place, kept on a visible screen. Otherwise it opens as before and WS Hub says the window cannot be placed. Other tools… → Reset console window puts the next open at the default spot. Tests: `tests/unit/test_console_place.py`.
 - **2026-10-19** — **Operate show menu.** The Needed checkbox is a menu: Needed, Needed and CQ, Needed and CQ or 73, or All. Needed is the old checked box. All is the old unchecked box. Needed and CQ keeps a needed station whose latest decode is a CQ, including CQ NA or CQ DX. Needed and CQ or 73 also keeps 73 or RR73, including RR73 with a grid. Those stations are free to call. CQ and the sign-off are the Message-column parse. The choice is saved in the browser. Transmit, interlock, and Work are unchanged. Tests: `tests/unit/test_roster_filter.py`.
-- **2026-10-19** — **Remembered grid for a tail-end.** A decode such as `W1XX CX4BAN R-10` has no grid, so WSJT-X logs a blank square. WIMS keeps the last grid heard for each call (band and UTC), for 30 days, in `heard_grids.json`. A 6-character grid upgrades a matching 4-character one. A different square replaces it, even a 4-character square after a 6-character one. `RR73` and free text are ignored. A blank QSO Logged or Logged ADIF line takes that grid in WIMS and in the record forwarded to N1MM, marked remembered. The WSJT-X log file is not edited and can still show the grid blank. The Operate grid is italic when it is remembered; the hover names the time, the band, and a rover’s previous square. Calls ending in `/R`, and any call heard in two squares, are rovers: a blank log line uses a grid only from the last 30 minutes. A newer heard square wins over an older logged square, so a rover in a new grid is a new contact under the existing VHF rule. Tests: `tests/unit/test_heard_grids.py`.
-- **2026-10-19** — **Checklist replaces WSJT-X Colors.** Setup → Just operating is Checklist only. Advanced no longer edits color checks. A saved `wsjtx-colors` choice (or the older empty Contest menu) is rewritten once into checklist lines: New DXCC / grid / call, overall or per band; Highlight by mode, when it was saved in WIMS, makes the call line per mode. No saved list becomes DXCC per band, which is the factory pair. The contest suggestion uses that same checklist window. Log to use stays the only log. Continent, CQ zone, and ITU zone are new checklist lines (overall, per band, per mode). They use the `cty.dat` WSJT-X already keeps. Multi-zone entities take the zone from the grid when the square is inside one published zone box; otherwise the roster says zone uncertain and does not mark the station needed. ADIF CQZ, ITUZ, and CONT on a logged contact win. A missing country file leaves those three lines off, with a tip, and keeps a saved tick. County and prefix stay coming soon. Contest files are unchanged. Tests: `tests/unit/test_checklist_zones.py`, `tests/unit/test_goal_rules.py`.
-- **2026-10-19** — **Country on the Operate roster.** The call roster shows each station's DXCC entity (Uruguay for CX4BAN, United States for a W1 call). A portable suffix stays with the home entity. A prefix before or after the slash (W1AW/CX) uses the place they are operating from. An unknown prefix is left blank. Hover names the entity and, when WIMS has them, the continent and CQ zone. The same name is on a per-decode table that shows callsigns. Tests: `tests/unit/test_dxcc.py`.
+- **2026-10-19** — **Remembered grid for a tail-end.** A decode such as `W1XX CX4BAN R-10` has no grid, so WSJT-X logs a blank square. WS Hub keeps the last grid heard for each call (band and UTC), for 30 days, in `heard_grids.json`. A 6-character grid upgrades a matching 4-character one. A different square replaces it, even a 4-character square after a 6-character one. `RR73` and free text are ignored. A blank QSO Logged or Logged ADIF line takes that grid in WS Hub and in the record forwarded to N1MM, marked remembered. The WSJT-X log file is not edited and can still show the grid blank. The Operate grid is italic when it is remembered; the hover names the time, the band, and a rover’s previous square. Calls ending in `/R`, and any call heard in two squares, are rovers: a blank log line uses a grid only from the last 30 minutes. A newer heard square wins over an older logged square, so a rover in a new grid is a new contact under the existing VHF rule. Tests: `tests/unit/test_heard_grids.py`.
+- **2026-10-19** — **Checklist replaces WSJT-X Colors.** Setup → Just operating is Checklist only. Advanced no longer edits color checks. A saved `wsjtx-colors` choice (or the older empty Contest menu) is rewritten once into checklist lines: New DXCC / grid / call, overall or per band; Highlight by mode, when it was saved in WS Hub, makes the call line per mode. No saved list becomes DXCC per band, which is the factory pair. The contest suggestion uses that same checklist window. Log to use stays the only log. Continent, CQ zone, and ITU zone are new checklist lines (overall, per band, per mode). They use the `cty.dat` WSJT-X already keeps. Multi-zone entities take the zone from the grid when the square is inside one published zone box; otherwise the roster says zone uncertain and does not mark the station needed. ADIF CQZ, ITUZ, and CONT on a logged contact win. A missing country file leaves those three lines off, with a tip, and keeps a saved tick. County and prefix stay coming soon. Contest files are unchanged. Tests: `tests/unit/test_checklist_zones.py`, `tests/unit/test_goal_rules.py`.
+- **2026-10-19** — **Country on the Operate roster.** The call roster shows each station's DXCC entity (Uruguay for CX4BAN, United States for a W1 call). A portable suffix stays with the home entity. A prefix before or after the slash (W1AW/CX) uses the place they are operating from. An unknown prefix is left blank. Hover names the entity and, when WS Hub has them, the continent and CQ zone. The same name is on a per-decode table that shows callsigns. Tests: `tests/unit/test_dxcc.py`.
 - **2026-10-19** — **CX4BAN stayed a Mult with a blank grid.** WSJT-X wrote `<gridsquare:0>` on the new 20 m line. The 2021 GF15 contact is on 40 m, so it does not clear 20 m. The CQ `CQ DX CX4BAN GF15` is the square. The next roster push copies that square onto the blank log line, and the station is worked rather than a mult. Hover names the square, the band, and the log. Tests: `tests/unit/test_roster_logged.py`.
 - **2026-10-19** — **Roster Mult after a logged contact.** Logging a contact updates needed and Mult on the next roster push (the page refresh, about one second). Log to use is the only log that counts. A contact in a different file stays a multiplier, and changing the goal does not switch logs. N1MM's meter band `2` is 2 m, an empty N1MM grid is taken from the decode, and a 6-character grid matches the 4-character square. The mult badge tip names the square, the band, and the log. A contact on another band, a portable suffix, or a contact before Start now still shows Mult, and the tip says why. Tests: `tests/unit/test_roster_logged.py`.
 - **2026-10-19** — **Operate TX groups stay quiet until there is something to know.**
@@ -319,11 +319,11 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   Work gating, and transmit behavior are unchanged.
 - **2026-10-18** — **Version `1.0.17`**. `pyproject.toml` and `wims.__version__` are `1.0.17`. Release notes: [v1.0.17](../releases/v1.0.17.md). The git tag and GitHub Release are not cut yet.
 - **2026-10-18** — **Operate Message column.** Roster shows the exchange after the callsigns (R-12, RR73, 73, a grid, or leftover QSY / free text) in Message, just after Calling. A saved column set gains it once. Hover the cell for the full decode. No transmit change.
-- **2026-10-18** — **Second double-click raises the WIMS window.** The desktop
+- **2026-10-18** — **Second double-click raises the WS Hub window.** The desktop
   icon, `scripts/start-wims.sh`, and the Windows shortcut share one start.
   When the window is already open, another start brings it forward
   (un-minimized, raised, and focused) and does not open the site console.
-  If that window does not answer, WIMS says what to do next.
+  If that window does not answer, WS Hub says what to do next.
   Tests: `tests/unit/test_launcher_handoff.py`.
 - **2026-10-18** — **Updates list dates use this PC's local day.** A version tagged late in the evening shows that date, not the next UTC day. The row tip includes the local time.
 - **2026-10-18** — **Operate max age labels.** The pulldown reads 15 sec, 30 sec, 1 min, 2 min, 3 min, and 5 min (values unchanged) so “2 min” is not the 2M band checkbox.
@@ -332,14 +332,14 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   first, so v1.0.11–v1.0.16 (and the older unreleased tags) show up. A tag with
   no notes uses the commits since the previous tag. Hovering a row shows that
   row. Restart site server names the revision the server loaded and whether it
-  matches the installed code. The title and the line under WIMS label the
+  matches the installed code. The title and the line under WS Hub label the
   launcher (loaded when the window opened) and the server (loaded when the
   server started). The window height fits through Other tools…; checking that
   box grows the window up to the screen, then the extra tools scroll.
   Unchecking returns to the compact height.
 - **2026-10-18** — **Restart needed when the site server is on older code.**
   The site server records the git revision it loaded (`server_rev` on
-  `/healthz`, existing fields unchanged). The WIMS window re-reads the
+  `/healthz`, existing fields unchanged). The WS Hub window re-reads the
   checkout on each refresh and after an install, and marks **Restart site
   server** when this PC’s server is stale. The window shows both revisions.
   After Install, the Updates list says to restart the server to finish.
@@ -348,7 +348,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   Tests: `tests/unit/test_server_rev.py`.
 - **2026-10-17** — **Log page.** Log to use, the count-since presets, per-radio
   log warnings, the shared WSJT-X file, Check logs, and N1MM resync moved off
-  Setup onto `/log`. The operator picks the log WIMS checks for needed and
+  Setup onto `/log`. The operator picks the log WS Hub checks for needed and
   already worked. The line shows the name, path, contact count, and cutoff. A
   contest Goal suggests the newest matching N1MM log; Just operating, an award,
   or a custom list suggests the WSJT-X log. A saved choice wins and reloads
@@ -359,7 +359,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   several stations and stays hidden when fewer than two are heard. Challenge
   pace (worked, elapsed, rate) is a follow-up in
   [wims_logs_and_rules.md](wims_logs_and_rules.md) §2.5.
-- **2026-10-17** — **One start, and an Updates list on the WIMS window.** The
+- **2026-10-17** — **One start, and an Updates list on the WS Hub window.** The
   desktop icon, `scripts/start-wims.sh`, and the Windows shortcuts open the
   same window (Update, Restart site server, Open site console stay). Operate
   from that window and from Start-Wims-Solo share one start: port 8787 and
@@ -402,7 +402,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   county reset, mode groups, modes that do not count, points, multipliers,
   log path, and Check logs. The color-check tips were removed 2026-10-19.
 - **2026-10-16** — **Zero-knowledge start and launcher path.** Desktop and Start
-  menu icon named WIMS (`scripts/Add WIMS to Desktop.bat`,
+  menu icon named WS Hub (`scripts/Add WS Hub to Desktop.bat`,
   `scripts/add-wims-to-desktop.sh`). Second double-click reopens the console.
   A busy port says what to do next. Checkout shim so a start from the repo
   needs no path variable. Principle: [design-principles.md](../design-principles.md).
@@ -436,7 +436,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
 - **2026-09-13** — **Version `1.0.14`**. N1MM TCP Log Call: measured on
   live `:52001`/`ham.s3db` — N1MM skips the first byte after
   `<parameters:N>`. Prefix ADIF with a space *inside* N. Live test
-  `W5WIMS` stored Call; without space Call was blank.
+  `W5WS Hub` stored Call; without space Call was blank.
 - **2026-09-13** — **Version `1.0.13`**. N1MM JTDX TCP Log wants lowercase
   `<call:` (JTDX/WSJT style). 1.0.12’s `<CALL:` left Call blank; wire
   format is now `<call:5>… <eor>` with no EOH/extra tags.
@@ -455,7 +455,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   dashboard id; Halt stops live claims from that browser (two bands → both),
   not other operators and not a global stop-all. Button label lists the bands.
   Tests in `test_server_tx`.
-- **2026-09-12** — **Version `1.0.10`**. Seat **Update WIMS** relaunch now drops
+- **2026-09-12** — **Version `1.0.10`**. Seat **Update WS Hub** relaunch now drops
   `launcher.lock` before spawn (`pythonw` was exiting with no window). Status
   refresh no longer restores "Update available" over "Updating…". N1MM
   Broadcast POST is queued so RadioInfo cannot stall contactinfo (6m logger
@@ -473,7 +473,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   presence. Windows Install skips LibreOffice / Store-stub Python and pins a
   real `python.exe` via `python-path.txt`.
 - **2026-09-12** — Windows Install no longer treats **LibreOffice**'s bundled
-  Python as the WIMS runtime. LibreOffice's `python.exe` reports
+  Python as the WS Hub runtime. LibreOffice's `python.exe` reports
   `sys.executable` as `python-core-3.x.y` (a **directory**), which then failed
   the smoke test (`The term '...\python-core-3.12.12' is not recognized`).
   Finder requires a real `python.exe` with Tk, skips vendor embeds, and does
@@ -488,7 +488,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   Checkboxes from live instances; heartbeat-only falls back to UDP id.
 - **2026-09-11** — **Version `1.0.5`**. WSJT-X start uses `C:\WSJT\wsjtx` if present,
   else `wsjtx-inhibit`. Operate band checks follow live WSJT-X (Heartbeat/Status),
-  not roster decodes (`roster.live_bands`). Hide Update WIMS when already current.
+  not roster decodes (`roster.live_bands`). Hide Update WS Hub when already current.
 - **2026-09-11** — **Version `1.0.4`**. Hide leftover `python.exe` consoles after
   Update (1.0.1 left the old site server window up). New children also
   `FreeConsole` when stdout is piped; relaunch uses the hidden VBS starter.
@@ -506,8 +506,8 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   shows Open site console / Start / Restart; Details lives under Other tools….
 - **2026-09-11** — **Version `1.0.2`**. Logon boot from saved **seat intent**: `Start-WimsAtLogon.cmd`
   / `Install-WimsLogonStartup.cmd`. This PC’s intent (WSJT on, N1MM/server off)
-  starts WSJT-X (`--rig-name` from named configs) + the WIMS launcher.
-- **2026-09-11** — **Version `1.0.1`**. Desktop **WIMS** does not open a `python.exe` console:
+  starts WSJT-X (`--rig-name` from named configs) + the WS Hub launcher.
+- **2026-09-11** — **Version `1.0.1`**. Desktop **WS Hub** does not open a `python.exe` console:
   launcher uses `pythonw`; child site server / agents use `CREATE_NO_WINDOW`.
 - **2026-09-11** — Startup checks **GitHub Releases** (launcher, site server,
   N1MM agent, WSJT agent) in addition to `git fetch`. ZIP / no-git PCs see
@@ -567,9 +567,9 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   (dual-primary exit used to restart + steal focus every few seconds).
   **Checkboxes = live status (not prefs):** no `agent_boxes` restore; app up →
   box on + agent up; app down → box off + agent stop.
-  **Windows update (2026-08-31):** `Update-Wims.cmd` + launcher **Update WIMS**
+  **Windows update (2026-08-31):** `Update-Wims.cmd` + launcher **Update WS Hub**
   button when behind `origin/main` (`update_check.py`); Install-Wims also places
-  Desktop **WIMS** + **Update WIMS** shortcuts.
+  Desktop **WS Hub** + **Update WS Hub** shortcuts.
   **Seat intent vs Running (2026-09-01):**
   **Ingest self-heal (2026-09-02):** ingest loop heartbeat + watchdog restarts
   dead/stuck ingest in-process (not keyed on rx — quiet VHF/UHF is normal);
@@ -580,7 +580,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
 
 - **2026-08-28** — Desktop GUI launcher (`python -m wims` / `wims.launcher`): role cards
   (Solo ★, Check, Site server, Seat agent, KEY lab) with tooltips, Solo band-port radios,
-  Open Operate/Status/Setup, Put-on-Desktop shortcut helper. Windows Desktop **WIMS** icon
+  Open Operate/Status/Setup, Put-on-Desktop shortcut helper. Windows Desktop **WS Hub** icon
   now points at `Start-WimsLauncher.cmd` (`assets\wims.ico`); Linux
   `scripts/add-wims-to-desktop.sh`. Top-level CLI roles (`solo`/`server`/`agent`/`key`/
   `version`); `wims.solo --port`; thin `wims.key` wrapping inhibit bench selftest.
@@ -619,12 +619,12 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   profile, seat bring-up, continuous 🟢/🔴 readiness with plain-language fixes, fail-soft TX,
   MVP build order; §2.5 / S1 cross-links in wims_design.md. Not implemented in code yet.
 - **2026-07-14** — **WSJT-X Outgoing interface** elevated to first-class setup/verify/monitor
-  requirement (silent failure: decodes OK, WIMS blind). Design §1.1 / §3.14 / I1 + networking §4/§12;
+  requirement (silent failure: decodes OK, WS Hub blind). Design §1.1 / §3.14 / I1 + networking §4/§12;
   `wsjtx_config.py` errors on blank/`@Invalid`/loopback iface and loopback UDP Server (fleet mode);
   `--all` discovers Linux `WSJT-X - <rig>.ini`; `test_wsjtx_config` added.
 - **2026-07-14** — networking.md **§4.1 Contest LAN interface** expanded: required/forbidden
   values, silent-failure lab case, operator steps, multi-homed rules, `wsjtx_config` gate, live
-  monitoring, WIMS/N1MM iface parallels.
+  monitoring, WS Hub/N1MM iface parallels.
 - **2026-07-14** — Fleet UX: **prune** WSJT-X nodes silent >120s (killed desktop no longer sticks
   as DEAD forever); activity “waterfall” tile created on Heartbeat/Status (empty band OK);
   id_collision uses recent-host window so desktop→VM move clears ⚠ id.
@@ -665,7 +665,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   **one N1MM-144**; **222/432** single PC each, **SSB and/or FT8**. Docs: wims_networking §1–2/§8,
   wims_design deployment context. M4 rotator checklist: live az, set-az, point-to-DX az.
 - **2026-07-18** — Design only (no code): **closing free text / QSY on final 73** (§2.8, backlog
-  G4) — WIMS supports operator-chosen Free Text (e.g. `QSY 432`) at QSO complete. **Cross-band
+  G4) — WS Hub supports operator-chosen Free Text (e.g. `QSY 432`) at QSO complete. **Cross-band
   opportunity (C7 / §2.9):** evidence-first so the operator can **assess other-band contact
   ability** and **decide** whether to use a QSY suggestion; score boost is secondary, never
   auto-applied (skip/plain 73 is default). Prior-contest history via §3.6 seed (evidence/scoring
@@ -678,7 +678,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
 - **2026-07-20** — Design only: **Run vs S&P / CQ control boundary (§2.12, G6)**. WSJT-X UDP has
   no usable Call CQ or run-autorespond. **Click-to-work = Reply** echoing retained Decode
   (GridTracker2 `initiateQso`): not CQ-only — WSJT-X 3.0.1 also auto-TX on **`73 `** (**tailend**).
-  Product path: WIMS **S&P + tailend**; **run** stays in seat WSJT-X UI (or RDP). FreeText CQ
+  Product path: WS Hub **S&P + tailend**; **run** stays in seat WSJT-X UI (or RDP). FreeText CQ
   lab-only. M5/M6 + scenarios S2/S2a/S2b/S6 updated. **README** aligned (S&P/tailend vs run).
 - **2026-07-18** — Design: **§3.3.1 seat agent matrix** — each station runs an agent for setup
   test (**built**), interlock (sensor/actuator), rotator I/O, plus thumbnails, process lifecycle,
@@ -711,7 +711,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   memory). Solo still 2237-only. Escape hatch `--ports`. *(Map revised 2026-07-26 — see above.)*
 
 - **2026-07-23** — **Station agent desktop launcher:** `Install-WimsAgent-Desktop-Shortcut.cmd`
-  + green `assets/wims-agent.ico`; install also creates **WIMS Agent** + **WIMS Server**
+  + green `assets/wims-agent.ico`; install also creates **WS Hub Agent** + **WS Hub Server**
   shortcuts. Continuous agent opens local UI `http://127.0.0.1:8790/`.
 - **2026-07-27** — **Tester quick start:** `docs/tester_quickstart.md` — layered tracks A–D
   (no radio apps → WSJT only → N1MM+WSJT → optional multi-PC). Linked from README + runbook.
@@ -746,11 +746,11 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   field, no clear code path in the gate (tx_inhibit §11.3). Gate counters now
   `hold_rx`/`release_rx`/`expiries`/`invalid` (releases never enter the deadline table, so
   expiries stay pure keepalive-loss alarms). Protocol magic renamed `wims_inhibit` →
-  `tx_inhibit` (patch carries no WIMS reference, §11.7.4); class `TxInhibitGate` → `PttGate`.
+  `tx_inhibit` (patch carries no WS Hub reference, §11.7.4); class `TxInhibitGate` → `PttGate`.
   Code+tests+spike updated, 23/23 green; §11.7 netcat two-liner demoed live against the gate.
   Doc-side same day: radio-inhibit prior-art survey (K2TR's Elecraft mid-key **latch**
   measurement; Flex TX REQ initiation-only; Kenwood TS-890 has no external inhibit line) +
-  the arbitration-model statement (radios: two humans, first-PTT-wins; WIMS: one human vs
+  the arbitration-model statement (radios: two humans, first-PTT-wins; WS Hub: one human vs
   N machines, human always wins — why level semantics + puncture had to be built new).
   Same day, second simplification (per WA1HCO): **gate tracks ONE hold** — per-station
   deadline table removed; last hold wins, any valid release opens; multi-station
@@ -773,7 +773,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   `NetworkMessage::InhibitStatus` (type 17) + docs (superbuild / build / inhibit).
   Protocol matches Python spike (`tx_inhibit`, ttl-only). Official CI
   (`.github/workflows/build-{linux,windows,macos}.yml` + `release.yml`) kept for
-  downloadable test binaries via `build/v*` tags. WIMS design link updated.
+  downloadable test binaries via `build/v*` tags. WS Hub design link updated.
 - **2026-07-31** — **WSJT-X Improved → own GitHub project** for Stage 2 tracking:
   [wa1hco/wsjtx-improved-wims](https://github.com/wa1hco/wsjtx-improved-wims). Baseline import of
   extracted Improved 3.1.0 (`improved_AL_PLUS_260522`) as tag
@@ -784,7 +784,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   (SSB-PTT/VOX/semi-BK) hang cut **0.5 s → 20 ms debounce** (`LONG_HANG_S`), hardware
   safety under arbitrary keying being a station requirement, not the agent's job. CW
   8×dit rule unchanged. Tests updated, 23/23 green. Superbuild drop remains local under
-  `~/ham/wsjtx-3.1.0_improved_AL_PLUS_260522/` (not in the WIMS tree). Design cross-link added in
+  `~/ham/wsjtx-3.1.0_improved_AL_PLUS_260522/` (not in the WS Hub tree). Design cross-link added in
   [wims_tx_inhibit.md](wims_tx_inhibit.md).
 - **2026-08-11** — **Release-track Phase 0:** fix seat-agent N1MM probe so UserDir\\Databases
   is found via `n1mm_user_dirs()` (test was patching agent helpers while `database_dirs()`
@@ -798,16 +798,16 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   multi-KEY, multi-N1MM answer, inhibit+Halt roles) folded from operator scenarios; networking
   logger invariant clarified. Code not yet; todos listed under design backlog.
 - **2026-08-12** — **Design §2.14** band-sharing policy: **`interlock`** (original real-time
-  inhibit, SSB/CW priority) vs **`coordinated`** (manual handoff; WIMS informs both sides, no
+  inhibit, SSB/CW priority) vs **`coordinated`** (manual handoff; WS Hub informs both sides, no
   automatic inhibit). Goals + §3.4.1 + tx_inhibit §1 cross-linked.
 - **2026-08-12** — **Slice 1 (inventory + policy) code:** `state.fleet_to_dict` → `bands[]` +
   per-instance `share_policy` / `inhibit` placeholder; LiveFleet `set_share_policy`;
   `POST /api/band/policy`; `--interlock-band`; Status Band inventory table + policy pills.
   Tests in `test_server_state`. KEY/SSB rows and inhibit actuation still later.
 - **2026-08-14** — **Split inhibit generator designs:** **inhibit-test** + **inhibit-agent**
-  (wsjtx-inhibit; design [inhibit_agent.md](inhibit_agent.md) — no WIMS mentions, exportable)
-  vs **WIMS Key agent** ([wims_key_agent.md](wims_key_agent.md)). Not coded yet.
-- **2026-08-16** — **Agents do not debounce PTT** (per WA1HCO): inhibit-agent and WIMS Key
+  (wsjtx-inhibit; design [inhibit_agent.md](inhibit_agent.md) — no WS Hub mentions, exportable)
+  vs **WS Hub Key agent** ([wims_key_agent.md](wims_key_agent.md)). Not coded yet.
+- **2026-08-16** — **Agents do not debounce PTT** (per WA1HCO): inhibit-agent and WS Hub Key
   agent assume **manual switches that already debounce**. Long/SSB hang **20 ms → 0**
   (`LONG_HANG_S`); hang remains **CW-only** (8×dit). Aligns with shipped inhibit-test
   (continuous KEY hang = 0). Spec + `test_inhibit` updated.
@@ -815,7 +815,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   (`tools/inhibit-agent/`): CLI (`--port` + `--addr host:port`) for scripts; GUI
   (no args; auto Keyline + `127.0.0.1:22372`) for operators; Linux and Windows.
   Hang matches inhibit-test. Design copy: [inhibit_agent.md](inhibit_agent.md).
-- **2026-09-02** — **Inhibit wire transfer into WIMS (docs only):** sister
+- **2026-09-02** — **Inhibit wire transfer into WS Hub (docs only):** sister
   `wsjtx-inhibit` now ships **type-18** `NetworkMessage::TxInhibit` +
   **per-Controller ID leases** (JSON hold obsolete). New implementation brief
   [`docs/protocols/wsjtx_tx_inhibit.md`](../protocols/wsjtx_tx_inhibit.md);
@@ -823,7 +823,7 @@ partial; everything else missing — see the backlog table in wims_design.md §2
   [wims_key_agent.md](wims_key_agent.md), [inhibit_agent.md](inhibit_agent.md).
   **Code still JSON** (`src/wims/interlock/inhibit.py`, spike, `wims.key`) —
   next: encode/parse + lease gate + Key agent Controller ID.
-- **2026-09-02** — **WIMS lab inhibit speaks type 18:** `interlock/inhibit.py`
+- **2026-09-02** — **WS Hub lab inhibit speaks type 18:** `interlock/inhibit.py`
   encode/parse = `NetworkMessage::TxInhibit` (schema 3); `InhibitGate` =
   per-`controller_id` leases OR'd (release clears one row only); JSON rejected
   as invalid. `KeyAgentScheduler` requires `controller_id`; hang aligned to

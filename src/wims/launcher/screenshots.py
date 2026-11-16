@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -176,7 +176,7 @@ class ScreenshotPanel:
             self._win.focus_force()
             return
         win = tk.Toplevel(self.master)
-        win.title("WIMS — Screenshots")
+        win.title("WS Hub — Screenshots")
         win.configure(bg="#f4f4f4")
         win.minsize(380, 520)
         self._win = win

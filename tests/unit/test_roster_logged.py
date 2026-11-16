@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -546,7 +546,7 @@ def test_cx4ban_empty_grid_credits_the_heard_square():
     """The shared IC7300 log, the 2021 40 m GF15 line, and the new blank 20 m line.
 
     WSJT-X writes <gridsquare:0> when the exchange never sent a grid. The CQ
-    WIMS heard was 'CQ DX CX4BAN GF15'. That square is on 20 m, so the 40 m
+    WS Hub heard was 'CQ DX CX4BAN GF15'. That square is on 20 m, so the 40 m
     record does not clear it. Once the 20 m line is in the selected log, the
     heard square is credited and the station is worked, not a mult.
     """

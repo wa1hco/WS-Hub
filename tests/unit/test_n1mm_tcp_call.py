@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -117,7 +117,7 @@ class LiveN1mmCallTests(unittest.TestCase):
         )
 
     def test_current_wrap_adif(self):
-        call = "W5WIMS"
+        call = "W5WS Hub"
         adif = (
             f"<call:{len(call)}>{call} <gridsquare:4>EN80 <mode:3>FT8 "
             f"<rst_sent:3>-06 <rst_rcvd:3>+14 <qso_date:8>20260913 "
@@ -129,7 +129,7 @@ class LiveN1mmCallTests(unittest.TestCase):
         self.assertEqual(got, call)
 
     def test_space_after_parameters_not_in_N(self):
-        call = "W8WIMS"
+        call = "W8WS Hub"
         adif = (
             f"<call:{len(call)}>{call} <gridsquare:4>EN80 <mode:3>FT8 "
             f"<qso_date:8>20260913 <time_on:6>{time.strftime('%H%M%S')} "
@@ -140,7 +140,7 @@ class LiveN1mmCallTests(unittest.TestCase):
         self.assertEqual(got, call)
 
     def test_space_after_parameters_in_N(self):
-        call = "W9WIMS"
+        call = "W9WS Hub"
         adif = (
             f"<call:{len(call)}>{call} <gridsquare:4>EN80 <mode:3>FT8 "
             f"<qso_date:8>20260913 <time_on:6>{time.strftime('%H%M%S')} "
@@ -151,7 +151,7 @@ class LiveN1mmCallTests(unittest.TestCase):
         self.assertEqual(got, call)
 
     def test_wsjt_eoh_blob(self):
-        call = "W6WIMS"
+        call = "W6WS Hub"
         adif = (
             "<adif_ver:5>3.1.0 <programid:6>WSJT-X <EOH> "
             f"<call:{len(call)}>{call} <gridsquare:4>EN80 <mode:3>FT8 "

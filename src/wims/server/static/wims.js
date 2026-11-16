@@ -1,5 +1,5 @@
 /*
- * WIMS — WSJT-X Instance Management System
+ * WS Hub
  * Copyright (C) 2026 Jeff Millar, WA1HCO
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// WIMS console — shared render layer for Operate / Status / Setup.
+// WS Hub console — shared render layer for Operate / Status / Setup.
 // One SSE feed (/events) carries the full JSON state contract; each page includes
 // only the DOM containers for the panels it wants, and every render* function
 // no-ops when its container is absent. The frontend is the disposable part; the
@@ -93,7 +93,7 @@ function renderSystem(s) {
   const nInter = bands.filter(b => b.share_policy === "interlock").length;
   const nCoord = bands.filter(b => b.share_policy === "coordinated").length;
   el.innerHTML =
-    `<span><span class="dot active"></span><b>WIMS server</b> · live</span>` +
+    `<span><span class="dot active"></span><b>WS Hub server</b> · live</span>` +
     `<span><span class="k">WSJT-X:</span>${inst.length} (` +
       `<span class="ALIVE">${by("ALIVE")} alive</span>` +
       (by("STALE") ? ` · <span class="STALE">${by("STALE")} stale</span>` : ``) +
@@ -121,7 +121,7 @@ function policyBadge(pol) {
   const cls = p === "interlock" ? "policy-interlock" : "policy-coordinated";
   const title = p === "interlock"
     ? "SSB/CW KEY inhibit when configured — automatic priority"
-    : "Manual handoff — WIMS informs operators, does not inhibit";
+    : "Manual handoff — WS Hub informs operators, does not inhibit";
   return `<span class="pill ${cls}" title="${title}">${esc(p)}</span>`;
 }
 
@@ -649,7 +649,7 @@ function renderContests(n) {
       `<span><span class="dot active"></span><span class="k">active log:</span>` +
       `<b>${esc(active.label || active.contest_name)}</b></span>` +
       `<span><span class="k">file:</span>${esc(active.db_label || "")}</span>` +
-      `<span><span class="k">loaded:</span><b>${n.qso_count||0}</b> QSOs in WIMS</span>`;
+      `<span><span class="k">loaded:</span><b>${n.qso_count||0}</b> QSOs in WS Hub</span>`;
   } else if (act) {
     act.innerHTML =
       `<span><span class="dot idle"></span><span class="k">active log:</span>` +
@@ -1029,7 +1029,7 @@ function renderGoalChecklist(goal) {
     : "";
   const intro = showLines
     ? `<p class="hint" style="margin:4px 0">Check what is worth working. ` +
-      `WIMS compares each station with the contacts already in the log.</p>`
+      `WS Hub compares each station with the contacts already in the log.</p>`
     : "";
   box.innerHTML = intro + (showLines ? body : "") + toggle;
   box.dataset.ready = "1";
@@ -1071,7 +1071,7 @@ function renderGoalChecklist(goal) {
 }
 
 const LOG_TIPS = {
-  pick: "The log WIMS checks for needed and already worked. Your choice stays until you change it. Suggested for this goal is used only when you have not chosen.",
+  pick: "The log WS Hub checks for needed and already worked. Your choice stays until you change it. Suggested for this goal is used only when you have not chosen.",
   cutoff: "Whole log counts every contact. Start now counts only contacts you log after you pick it. This year counts contacts since January 1. This changes which contacts count as worked, not just the list on screen.",
   refresh: "Look for logs again. A new contest file shows up here, and the log you already chose stays chosen.",
   resync: "Read this N1MM contest file again. Use this after the file was updated, or when already-worked stations look wrong.",
@@ -1260,9 +1260,9 @@ const ADV_TIPS = {
   multipliers: "A custom rule does not add multipliers. ARRL VHF counts a new grid on each band, and NY QSO Party does not mark multipliers yet.",
   rover: "Working a rover again counts as a new contact after that rover moves to a new grid square.",
   saveCustom: "Save these contest choices and switch Goal to Custom.",
-  udcPath: "An N1MM contest file on this computer. WIMS reads it, shows what it understood, and does not change the file.",
+  udcPath: "An N1MM contest file on this computer. WS Hub reads it, shows what it understood, and does not change the file.",
   udcImport: "Read the N1MM contest file named above and show the name, how often a station counts, the points, and the multipliers.",
-  checkLogs: "Compare the logs WIMS found on the site server computer and list what does not match. Nothing in the logs is changed.",
+  checkLogs: "Compare the logs WS Hub found on the site server computer and list what does not match. Nothing in the logs is changed.",
   checkLogsHere: "Compare the logs on this computer. The seat agent must be running, and nothing in the logs is changed.",
 };
 
@@ -1662,7 +1662,7 @@ function renderSeatMarks(s) {
 // banner), not as a paragraph on the page.
 const IL_GROUP_TIP =
   "A group is a set of WSJT-X instances that must not transmit at the same time " +
-  "(shared PA, antenna, or band policy). WIMS refuses Work when another instance " +
+  "(shared PA, antenna, or band policy). WS Hub refuses Work when another instance " +
   "in the same group already holds TX.";
 
 // Display rule (does not grant, refuse, or halt):
@@ -1840,7 +1840,7 @@ function renderInterlock(il, tx, holdRefusal) {
 const ROS_COLS = [
   {key:"call",          label:"DX",      cls:"",          locked:1, cell:rosCall},
   {key:"country",       label:"Country", cls:"country",
-   hint:"DXCC entity for this call. Blank when the prefix is not known. Hover for the full name, and continent and CQ zone when WIMS has them.",
+   hint:"DXCC entity for this call. Blank when the prefix is not known. Hover for the full name, and continent and CQ zone when WS Hub has them.",
    cell:rosCountry},
   {key:"to_call",       label:"Calling", cls:"",          cell:c=>rosCalling(c)},
   {key:"msg",           label:"Message", cls:"",
@@ -3721,11 +3721,11 @@ function statusShowTab(name) {
   if (!allowed.includes(name)) name = "overview";
   // Title per panel
   const titles = {
-    overview: "WIMS — Overview",
-    wsjt: "WIMS — WSJT-X",
-    n1mm: "WIMS — N1MM",
+    overview: "WS Hub — Overview",
+    wsjt: "WS Hub — WSJT-X",
+    n1mm: "WS Hub — N1MM",
   };
-  try { document.title = titles[name] || "WIMS — Status"; } catch (_) {}
+  try { document.title = titles[name] || "WS Hub — Status"; } catch (_) {}
   for (const id of allowed) {
     const panel = $("panel-" + id);
     if (!panel) continue;

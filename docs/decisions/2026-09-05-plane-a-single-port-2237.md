@@ -5,7 +5,7 @@
 
 ## Decision
 
-All WSJT-X instances and the WIMS site server join:
+All WSJT-X instances and the WS Hub site server join:
 
 ```text
 224.0.0.73:2237
@@ -23,7 +23,7 @@ plane A as a reader.
 
 - Operators were still being told “144 → 2238, 432 → 2241…” after the fleet had moved
   to one port — docs and code defaults disagreed with reality.
-- One port removes the empty-roster class of “WSJT on 2238, WIMS still on 2237.”
+- One port removes the empty-roster class of “WSJT on 2238, WS Hub still on 2237.”
 - Multi-instance on one LAN already requires unique `--rig-name`; that is enough identity.
 
 ## Code / docs

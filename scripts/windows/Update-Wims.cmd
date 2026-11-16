@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-REM One-click WIMS update: git pull --ff-only origin/main, then optional relaunch.
+REM One-click WS Hub update: git pull --ff-only origin/main, then optional relaunch.
 REM Usage:
 REM   Update-Wims.cmd
 REM   Update-Wims.cmd /relaunch

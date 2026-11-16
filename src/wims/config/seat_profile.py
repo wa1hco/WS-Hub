@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -7,7 +7,7 @@
 
 File location (same as shared-trx design):
 
-  * Windows: ``%LOCALAPPDATA%\\WIMS\\seat-profile.json``
+  * Windows: ``%LOCALAPPDATA%\\WS Hub\\seat-profile.json``
   * Linux / macOS: ``~/.local/share/wims/seat-profile.json``
 
 H2 uses only ``station_class`` and ``wsjt_instances[{id, tx_capable, rf_path}]``.

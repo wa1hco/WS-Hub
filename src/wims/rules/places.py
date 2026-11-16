@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,7 +19,7 @@
 """US states, DC, and Canadian provinces — postal abbreviations only.
 
 Original list of well-known postal abbreviations and their names. This is not
-a county file and not a callsign-prefix file. WIMS does not ship either of
+a county file and not a callsign-prefix file. WS Hub does not ship either of
 those, and this module does not invent them.
 """
 

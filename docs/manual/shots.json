@@ -85,7 +85,7 @@
       "id": "launcher-home",
       "kind": "window",
       "window": "launcher",
-      "caption": "WIMS launcher — intents, Start/Restart site server, Open site console.",
+      "caption": "WS Hub launcher — intents, Start/Restart site server, Open site console.",
       "section": "Desktop launcher and agents",
       "status": "active"
     },

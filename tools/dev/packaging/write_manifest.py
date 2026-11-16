@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Write release manifest.json (design: docs/plan/wims_release_packages.md).
-"""Stamp a WIMS release manifest.
+"""Stamp a WS Hub release manifest.
 
 Channel mapping from a release tag (without leading ``v``):
 

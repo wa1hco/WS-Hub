@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -781,8 +781,8 @@ def linux_desktop_entry_text() -> str:
         "Type=Application\n"
         "Version=1.0\n"
         f"Name={SHORTCUT_NAME}\n"
-        "GenericName=WSJT-X Instance Management\n"
-        "Comment=WS Hub (formerly WIMS) agents and site console\n"
+        "GenericName=One console for several WSJT-X instances\n"
+        "Comment=WS Hub agents and site console\n"
         f"Exec={exec_line}\n"
         f"Path={_REPO_ROOT}\n"
         f"{icon_line}\n"
@@ -954,7 +954,7 @@ def legacy_entry_starts_wims(text: str) -> bool:
 
     Forms seen: ``Exec=... scripts/start-wims.sh`` (1.0.x installer),
     ``Exec=env PYTHONPATH=.../src python -m wims.launcher`` (earliest), and a
-    ``Path=`` that is a WIMS/WS Hub program folder. Anything else is left alone.
+    ``Path=`` that is a WS Hub/WS Hub program folder. Anything else is left alone.
     """
     exec_line = ""
     path_line = ""
@@ -1151,7 +1151,7 @@ def migrate_legacy_shortcut() -> Path | None:
             if any(
                 (desk / f"{n}.lnk").is_file() for n in _LEGACY_SHORTCUT_NAMES
             ) and not (desk / f"{SHORTCUT_NAME}.lnk").is_file():
-                # The helper removes the old icon only when it starts WIMS.
+                # The helper removes the old icon only when it starts WS Hub.
                 return write_windows_shortcut()
             return None
         if any(
@@ -1338,7 +1338,7 @@ class LauncherApp:
         head = tk.Frame(home, bg="#f4f4f4")
         head.pack(fill="x")
         tk.Label(
-            head, text="WIMS", font=_ui_font(16, "bold"),
+            head, text="WS Hub", font=_ui_font(16, "bold"),
             bg="#f4f4f4", fg="#1a1a1a",
         ).pack(side="left")
         tk.Label(
@@ -1466,7 +1466,7 @@ class LauncherApp:
             "The next open uses that spot.",
         )
         desk_btn = tk.Button(
-            tools_row, text="Put WIMS on Desktop", font=_ui_font(11),
+            tools_row, text="Put WS Hub on Desktop", font=_ui_font(11),
             command=self._install_shortcut, padx=10, pady=4,
         )
         desk_btn.pack(side="left", padx=(8, 0))
@@ -1500,7 +1500,7 @@ class LauncherApp:
         ent.pack(side="left")
         ToolTip(
             ent,
-            "Filled from the last success, or from finding WIMS on the network.\n"
+            "Filled from the last success, or from finding WS Hub on the network.\n"
             "Change this only when that search fails.",
         )
         tk.Button(
@@ -1573,7 +1573,7 @@ class LauncherApp:
         self._log.bind("<<Paste>>", lambda _e: "break")
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         _append_details_file(
-            f"\n===== WIMS launcher v{__version__} ({self._rev})  {stamp} =====\n"
+            f"\n===== WS Hub launcher v{__version__} ({self._rev})  {stamp} =====\n"
         )
         self._append_log(
             f"Launcher v{__version__} ({self._rev}).\n"
@@ -4053,9 +4053,9 @@ class LauncherApp:
 
 
 ALREADY_RUNNING_UNREACHABLE = (
-    "WIMS is already open on this PC, but the window did not come forward.\n"
-    "Click the WIMS window if you can see it.\n"
-    "If you cannot see it, close WIMS and double-click the icon again."
+    "WS Hub is already open on this PC, but the window did not come forward.\n"
+    "Click the WS Hub window if you can see it.\n"
+    "If you cannot see it, close WS Hub and double-click the icon again."
 )
 
 
@@ -4078,7 +4078,7 @@ def show_operator_message(text: str) -> None:
             root.attributes("-topmost", True)
         except Exception:
             pass
-        messagebox.showinfo("WIMS", text, parent=root)
+        messagebox.showinfo("WS Hub", text, parent=root)
     except Exception:
         print(text, flush=True)
     finally:
@@ -4089,7 +4089,7 @@ def show_operator_message(text: str) -> None:
 
 
 def announce_already_running() -> int:
-    """Second double-click: bring the existing WIMS window forward.
+    """Second double-click: bring the existing WS Hub window forward.
 
     Quiet exit when that window answers. A plain message when it does not.
     Does not open the site console or any other window.
@@ -4104,8 +4104,8 @@ def announce_already_running() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
-        prog="WIMS",
-        description="WIMS desktop launcher — checkbox agents for apps on this PC.",
+        prog="WS Hub",
+        description="WS Hub desktop launcher — checkbox agents for apps on this PC.",
     )
     ap.add_argument(
         "--install-shortcut", action="store_true",

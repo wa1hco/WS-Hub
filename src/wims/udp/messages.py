@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -20,7 +20,7 @@
 
 Decodes the big-endian QDataStream datagrams documented in WSJT-X's
 ``Network/NetworkMessage.hpp`` into typed events. Covers the outbound messages
-WIMS consumes: Heartbeat, Status, Decode, Clear, QSO Logged, Close, WSPR Decode,
+WS Hub consumes: Heartbeat, Status, Decode, Clear, QSO Logged, Close, WSPR Decode,
 Logged ADIF. Unknown/inbound types are returned as ``UnknownMessage`` rather than
 raising, per the protocol's "ignore silently" rule.
 
@@ -52,7 +52,7 @@ CONFIGURE = 15
 INHIBIT_STATUS = 17  # Out — TX Inhibit telemetry (wsjtx-inhibit)
 TX_INHIBIT = 18      # In  — hold/release (parsed elsewhere; not on plane A)
 
-# Types WIMS / GridTracker *send* (not WSJT-X presence). Ingesting our own
+# Types WS Hub / GridTracker *send* (not WSJT-X presence). Ingesting our own
 # Replay/Reply/Halt on the multicast group makes the site-server IP look like
 # a second host for that --rig-name (false ⚠ shared id).
 INBOUND_CONTROL_TYPES = frozenset({

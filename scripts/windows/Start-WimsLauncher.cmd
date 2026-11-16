@@ -1,11 +1,11 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
 
-REM Desktop peer launcher (GUI). Double-click or use Desktop "WIMS" shortcut.
+REM Desktop peer launcher (GUI). Double-click or use Desktop "WS Hub" shortcut.
 REM If that window is already open, this brings it forward.
 
 setlocal EnableExtensions
@@ -19,7 +19,7 @@ cd /d "%ROOT%"
 
 call "%~dp0_resolve-python.cmd"
 if not exist "%PYTHON_EXE%" if /I not "%PYTHON_EXE%"=="py" if /I not "%PYTHON_EXE%"=="python" (
-  echo Python was not found, so WIMS cannot start.
+  echo Python was not found, so WS Hub cannot start.
   echo Double-click Install-Wims.cmd in this folder, then try again.
   pause
   exit /b 1
@@ -30,7 +30,7 @@ if exist "%~dp0seat-common.cmd" call "%~dp0seat-common.cmd"
 if exist "%~dp0seat-local.cmd" call "%~dp0seat-local.cmd"
 REM WIMS_SERVER is optional; if unset, WS Hub finds or starts the site server.
 
-REM Prefer pythonw / pyw so starting WIMS does not open a python.exe console.
+REM Prefer pythonw / pyw so starting WS Hub does not open a python.exe console.
 set "GUI_EXE=%PYTHON_EXE%"
 if /I "%PYTHON_EXE%"=="py" (
   where pyw >nul 2>&1 && set "GUI_EXE=pyw"

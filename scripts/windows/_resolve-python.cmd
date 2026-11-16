@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -60,7 +60,7 @@ goto :eof
 
 :pin_ok
 REM Pin must be a real python.exe file. Directories (LibreOffice python-core-*)
-REM and vendor embeds exist on disk but are not a WIMS runtime.
+REM and vendor embeds exist on disk but are not a WS Hub runtime.
 if not defined PYTHON_EXE exit /b 1
 if not exist "%PYTHON_EXE%" exit /b 1
 if exist "%PYTHON_EXE%\*" exit /b 1

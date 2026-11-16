@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@
 
 """Read-only ``cty.dat`` (AD1C country file) for continent and zones.
 
-WIMS does not ship a country file and does not write one. It reads the copy
+WS Hub does not ship a country file and does not write one. It reads the copy
 WSJT-X already keeps. The format is the country-file layout documented at
 https://www.country-files.com/cty-dat-format/ : a primary line (name, CQ,
 ITU, continent, lat, lon, offset, primary prefix) and comma-separated alias
@@ -539,7 +539,7 @@ class CtyIndex:
 def find_cty_dat(roots: list[str | Path] | None = None) -> Path | None:
     """The first readable ``cty.dat``.
 
-    ``roots`` limits the search (tests). With no argument, WIMS looks in each
+    ``roots`` limits the search (tests). With no argument, WS Hub looks in each
     WSJT-X data directory and beside a normal install. It does not download
     a file and it does not write one.
     """

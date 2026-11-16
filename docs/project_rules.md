@@ -17,7 +17,7 @@ to date from this file. `.claude/settings.local.json` stays ignored by git.
 WS Hub (formerly WIMS, WSJT-X Instance Management System; repo `wa1hco/WS-Hub`; the package, folders, and files keep the `wims` name) — a supervised, **human-in-the-loop**
 operating console for multi-instance VHF contesting (the "WSJT-X wrangler"
 position). Target deployment: a fixed multi-multi VHF effort across several
-vehicles on one LAN; WIMS provides cross-vehicle visibility and lets one console
+vehicles on one LAN; WS Hub provides cross-vehicle visibility and lets one console
 operator cover several digital bands.
 
 **The authoritative requirements/design is
@@ -30,10 +30,10 @@ Keep the two separated: design vs progress.
 
 **Fleet networking (planes A–E, band ports, seat-local CAT, preferred Icom + wfview seat):**
 [`docs/plan/wims_networking.md`](plan/wims_networking.md) — especially **§3 / §3.2 / §3.3 /
-§4**. CAT/PTT is seat-local middleware, not a WIMS server plane; do not conflate with plane A
+§4**. CAT/PTT is seat-local middleware, not a WS Hub server plane; do not conflate with plane A
 UDP.
 
-## WIMS-specific conventions
+## WS Hub-specific conventions
 
 - **Python, stdlib-first.** Keep runtime dependencies minimal (currently zero);
   prefer a stdlib solution over pulling in a framework. Python 3.14.
@@ -49,7 +49,7 @@ UDP.
 - **Don't over-assume; fold in corrections** (e.g. the dev FlexRadio station is
   *not* the contest fleet) and adjust the plan.
 - **Zero-knowledge / zero-memory.** A person who only vaguely remembers the name
-  WIMS must be able to get going: recognition over recall, zero-config,
+  WS Hub must be able to get going: recognition over recall, zero-config,
   auto-detect, progressive disclosure, and errors that say what to do next in
   plain words. Operator instructions do not ask for environment variables,
   `python -m`, or command-line flags. Those belong in a section titled
@@ -65,7 +65,7 @@ UDP.
 ## GUI
 
 - **Light mode**, 12 pt (project default).
-- **Stack = browser, served by the WIMS server** (stdlib HTTP + Server-Sent Events
+- **Stack = browser, served by the WS Hub server** (stdlib HTTP + Server-Sent Events
   → static HTML). The **JSON state contract (`src/wims/server/state.py`) is the
   durable boundary**; the frontend is the only replaceable part.
 - **Two-phase UI:** Phase 1 developer-oriented (information-dense, expose internals,

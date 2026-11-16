@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,18 +19,18 @@
 """Read N1MM's contest log DB read-only — cold-start seed and operator resync (§3.6).
 
 The same read serves two purposes:
-  * **Seed** the log copy at startup with QSOs made before WIMS was running.
-  * **Resync** on demand (operator says "WIMS, refresh from N1MM" after manual
+  * **Seed** the log copy at startup with QSOs made before WS Hub was running.
+  * **Resync** on demand (operator says "WS Hub, refresh from N1MM" after manual
     edits/deletions, or after a broadcast outage / dropped UDP). A resync is just a
     re-read + reconcile by `ID` (LogStore.reconcile) — authoritative, and it does
     not depend on any N1MM re-broadcast feature.
 
 One `.s3db` can hold **multiple** contest logs (`ContestInstance` + `DXLOG.ContestNR`).
-WIMS must not blindly load every QSO in the file (June VHF + Sept VHF + …). Operators
+WS Hub must not blindly load every QSO in the file (June VHF + Sept VHF + …). Operators
 should not need cryptic ContestNR flags: we **list** human-readable contests, **auto-pick**
 the best candidate, and let the Status UI override.
 
-Always opened read-only (`mode=ro`); WIMS never writes N1MM's database. Reading
+Always opened read-only (`mode=ro`); WS Hub never writes N1MM's database. Reading
 while N1MM has the DB open is safe (proven for the Settings table).
 """
 

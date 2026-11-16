@@ -1,9 +1,9 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Ask the running WIMS window to come forward.
+"""Ask the running WS Hub window to come forward.
 
 The process that owns the launcher lock listens on 127.0.0.1 and writes
 ``launcher.raise`` next to ``launcher.lock`` (port and a token). A second

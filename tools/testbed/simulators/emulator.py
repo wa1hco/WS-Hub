@@ -2,7 +2,7 @@
 
 Emits realistic Heartbeat/Status/Decode UDP for several instances (distinct
 rig-name ids, bands) on the multicast group, and reacts to inbound Reply / Halt Tx
-(an instance flips to TX for a period on Reply, stops on Halt). Lets WIMS's
+(an instance flips to TX for a period on Reply, stops on Halt). Lets WS Hub's
 monitor / fleet view / activity map — and later the §3.2 sender and §3.4 arbiter —
 be developed and tested at multi-instance scale with no radios.
 

@@ -1,4 +1,4 @@
-# WIMS - Desktop + logon Startup shortcuts for the site console in kiosk mode.
+# WS Hub - Desktop + logon Startup shortcuts for the site console in kiosk mode.
 param(
     [switch]$NoPause,
     [switch]$NoStartup
@@ -52,12 +52,12 @@ $desk = Get-DesktopDir
 if (-not (Test-Path -LiteralPath $desk)) {
     New-Item -ItemType Directory -Path $desk -Force | Out-Null
 }
-$deskLnk = Join-Path $desk "WIMS Console Kiosk.lnk"
+$deskLnk = Join-Path $desk "WS Hub Console Kiosk.lnk"
 $sd = $wsh.CreateShortcut($deskLnk)
 $sd.TargetPath = $cmdAbs
 $sd.WorkingDirectory = $here
 $sd.WindowStyle = 1
-$sd.Description = "WIMS Operate console (compact, resizable)"
+$sd.Description = "WS Hub Operate console (compact, resizable)"
 if ($icoAbs) { $sd.IconLocation = "$icoAbs,0" }
 $sd.Save()
 Write-Host " Desktop: $deskLnk"
@@ -67,13 +67,13 @@ if (-not $NoStartup) {
     if (-not (Test-Path -LiteralPath $startup)) {
         New-Item -ItemType Directory -Path $startup -Force | Out-Null
     }
-    $startLnk = Join-Path $startup "WIMS Console Kiosk.lnk"
+    $startLnk = Join-Path $startup "WS Hub Console Kiosk.lnk"
     $ss = $wsh.CreateShortcut($startLnk)
     $ss.TargetPath = $cmdAbs
     $ss.Arguments = "/silent"
     $ss.WorkingDirectory = $here
     $ss.WindowStyle = 7
-    $ss.Description = "Logon: WIMS site console kiosk"
+    $ss.Description = "Logon: WS Hub site console kiosk"
     if ($icoAbs) { $ss.IconLocation = "$icoAbs,0" }
     $ss.Save()
     Write-Host " Startup: $startLnk"
@@ -82,7 +82,7 @@ if (-not $NoStartup) {
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null
 
 Write-Host ""
-Write-Host " Double-click Desktop WIMS Console Kiosk (or wait until next logon)."
+Write-Host " Double-click Desktop WS Hub Console Kiosk (or wait until next logon)."
 Write-Host " Opens Operate in a compact resizable window (same idea as Chrome --app=)."
 Write-Host ""
 if (-not $NoPause) { pause }

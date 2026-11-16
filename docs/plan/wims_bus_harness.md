@@ -1,4 +1,4 @@
-# WIMS message-bus migration — harness plan
+# WS Hub message-bus migration — harness plan
 
 **Status:** active plan (no production cutover)  
 **Date:** 2026-09-17  
@@ -6,7 +6,7 @@
 
 ## 1. Goal
 
-Prove a pub/sub fabric for WIMS **before** any contest path depends on it.
+Prove a pub/sub fabric for WS Hub **before** any contest path depends on it.
 
 - Keep current plane-A / HTTP / seat paths as the **default live drivers**.
 - Build contracts + Linux-first automated stress.
@@ -67,7 +67,7 @@ Use string topics; payloads JSON (or msgpack later). Instance ids = WSJT `--rig-
 | `inhibit/{key_id}/state` | Inhibit | Dashboard, Operate | KEY up/down |
 | `operate/{env_id}/work` | Operate | WSJT agent | Command |
 | `operate/{env_id}/halt` | Operate | WSJT agent | Command |
-| `presence/{host_id}` | Every WIMS | All | Broker URL, roles, health |
+| `presence/{host_id}` | Every WS Hub | All | Broker URL, roles, health |
 | `broker/advertise` | Broker host | All | URL + epoch |
 
 Type-18 datagrams are **not** bus payloads.
@@ -217,7 +217,7 @@ No phase removes plane-A listeners until P6+ and a named contest rehearsal.
 
 ### 13.1 Which message bus (recommendation)
 
-| Candidate | Verdict for WIMS contest LAN |
+| Candidate | Verdict for WS Hub contest LAN |
 |-----------|------------------------------|
 | **MQTT (Mosquitto + Paho)** | **Choose for ProcessBus / production fabric** |
 | NATS | Strong alternate if Work request-reply becomes the pain point |

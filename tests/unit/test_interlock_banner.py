@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -36,7 +36,7 @@ JS = ROOT / "src" / "wims" / "server" / "static" / "wims.js"
 
 TIP = (
     "A group is a set of WSJT-X instances that must not transmit at the same time "
-    "(shared PA, antenna, or band policy). WIMS refuses Work when another instance "
+    "(shared PA, antenna, or band policy). WS Hub refuses Work when another instance "
     "in the same group already holds TX."
 )
 
@@ -74,7 +74,7 @@ def test_tx_groups_ids_and_starts_hidden():
     assert 'id="il-banner"' in page and "hidden" in page[page.find('id="il-banner"'):page.find('id="il-banner"') + 80]
     js = _js()
     assert "A group is a set of WSJT-X instances that must not transmit at the same time" in js
-    assert "WIMS refuses Work when another instance" in js
+    assert "WS Hub refuses Work when another instance" in js
     assert "function interlockView(" in js
     assert "function renderInterlock(" in js
     # Quiet path must not put the old always-on line back.

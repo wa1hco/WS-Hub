@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,13 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""WIMS's own log copy + dupe/mult view (plan §3.10).
+"""WS Hub's own log copy + dupe/mult view (plan §3.10).
 
-This is WIMS's database — a SQLite file (`wims.db` by default, or `:memory:` for
+This is WS Hub's database — a SQLite file (`wims.db` by default, or `:memory:` for
 tests), the materialized view the decision engine queries. It is **seeded** from
 N1MM's `.s3db` (read-only) and kept **live** by N1MM contact UDP (`<contactinfo>`
 add, `<contactreplace>` edit, `<contactdelete>` delete); an operator **resync**
-is `reconcile()` over a fresh DB read. WIMS only ever writes this database, never
+is `reconcile()` over a fresh DB read. WS Hub only ever writes this database, never
 N1MM's.
 
 VHF dupe/mult model (N1MM / ARRL VHF): a **fixed** station is a dupe on
@@ -92,7 +92,7 @@ _EXTRA_COLUMNS = (
 
 class LogStore:
     def __init__(self, path: str = "wims.db"):
-        # check_same_thread=False so the WIMS server can share one connection across
+        # check_same_thread=False so the WS Hub server can share one connection across
         # its ingest + HTTP threads; callers must serialize access (the server does,
         # via its own lock). Single-threaded users (tests, CLIs) are unaffected.
         self.con = sqlite3.connect(path, check_same_thread=False)

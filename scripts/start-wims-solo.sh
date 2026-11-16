@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -21,7 +21,7 @@
 # Home H0 Operate (Linux/macOS). Docs: docs/home_h0_h1.md
 # WSJT-X: UDP Server 224.0.0.73:2237, Accept UDP requests ON.
 #
-# Same Operate start the WIMS window uses (port check, seat reading,
+# Same Operate start the WS Hub window uses (port check, seat reading,
 # network default, log and rules, browser, messages, log file).
 
 set -eu

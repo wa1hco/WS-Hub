@@ -21,7 +21,7 @@
 [CmdletBinding()]
 param(
     [string] $RepoPath = "",
-    [string] $RepoUrl = "https://github.com/wa1hco/WIMS.git",
+    [string] $RepoUrl = "https://github.com/wa1hco/WS-Hub.git",
     [string] $LogPath = "",
     [switch] $SkipFirewall,
     [switch] $SkipShortcut,
@@ -33,7 +33,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $Inner = Join-Path $RepoRoot "scripts\windows\Install-Wims.ps1"
 if (-not (Test-Path -LiteralPath $Inner)) {
-    throw "Missing $Inner — not a full WIMS tree?"
+    throw "Missing $Inner — not a full WS Hub tree?"
 }
 
 if (-not $RepoPath) {

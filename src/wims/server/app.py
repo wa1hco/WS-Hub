@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""WIMS server — ingest the fleet and serve the console (plan §4.5 / §3.12).
+"""WS Hub server — ingest the fleet and serve the console (plan §4.5 / §3.12).
 
 A single process that:
   * joins the WSJT-X multicast + the N1MM broadcast and maintains a live FleetTracker,
@@ -1173,7 +1173,7 @@ class LiveFleet:
         """Operator-triggered re-read of the active contest's DXLOG → reconcile.
 
         UDP contactinfo/delete/replace keeps the log copy live; this is the
-        safety net when events were missed (WIMS down, Contacts broadcast off,
+        safety net when events were missed (WS Hub down, Contacts broadcast off,
         remote DB replaced). Re-opens the same ``.s3db`` + ContestNR already
         loaded, upserts by ID, and deletes rows no longer in N1MM.
 
@@ -1378,7 +1378,7 @@ class LiveFleet:
         group holds TX). The actual `sendto` runs outside the lock so a slow
         socket never stalls the ingest thread.
 
-        On success WIMS has only *sent* a WSJT-X Reply datagram — if DX Call / Enable
+        On success WS Hub has only *sent* a WSJT-X Reply datagram — if DX Call / Enable
         Tx do not change in WSJT-X, the packet did not reach MessageClient (Accept UDP
         off, firewall, wrong dest, or decode too old in Band Activity).
         """
@@ -1775,7 +1775,7 @@ class LiveFleet:
         existing decode. The only UDP route is a one-shot FreeText that WSJT-X will
         not auto-sequence, so it is gated behind `--enable-cq-freetext` and remains
         unimplemented pending the live spike (plan P3). Default: instruct the operator
-        to call CQ in WSJT-X directly; WIMS does the (clean) answering."""
+        to call CQ in WSJT-X directly; WS Hub does the (clean) answering."""
         if not self._enable_cq:
             return {"ok": False, "error": "cq_not_supported_yet",
                     "detail": "WSJT-X UDP has no Call CQ; call CQ in WSJT-X directly. "
@@ -2555,7 +2555,7 @@ class LiveFleet:
         )
 
     def _preserve_grids(self, qsos):
-        """A file row with no grid keeps a grid WIMS already learned for that id."""
+        """A file row with no grid keeps a grid WS Hub already learned for that id."""
         for qso in qsos:
             if qso is None or (qso.grid or "").strip():
                 continue
@@ -2651,7 +2651,7 @@ class LiveFleet:
         return None
 
     def _fold_logged_udp(self, msg) -> None:
-        """Same id as the ADIF row, so a QSO logged while WIMS is up is one row.
+        """Same id as the ADIF row, so a QSO logged while WS Hub is up is one row.
 
         Runs even when the log-agent import fails. A QSO for a different file
         than Log to use does not change needed or mult.
@@ -3566,7 +3566,7 @@ def main() -> None:
         pass
     from wims.discovery import presence as P
 
-    ap = argparse.ArgumentParser(description="WIMS server (ingest + console).")
+    ap = argparse.ArgumentParser(description="WS Hub server (ingest + console).")
     # Fleet default: one plane-A port (decision 2026-09-05). Lab escape: --ports 2237,2238
     FLEET_WSJT_PORTS = "2237"
     ap.add_argument("--http-port", type=int, default=8787)
@@ -3605,10 +3605,10 @@ def main() -> None:
                          f"at HOST:PORT (default port {DEFAULT_GT_FORWARD_PORT}). "
                          "Example: --gt-forward 127.0.0.1:22370  "
                          "(GT Receive UDP = that port). "
-                         f"WIMS reverse-bind defaults to {DEFAULT_GT_BRIDGE_PORT} "
+                         f"WS Hub reverse-bind defaults to {DEFAULT_GT_BRIDGE_PORT} "
                          "(must differ from GT port on the same host)")
     ap.add_argument("--gt-bridge-port", type=int, default=DEFAULT_GT_BRIDGE_PORT,
-                    help=f"local UDP port WIMS binds for GT Reply return path "
+                    help=f"local UDP port WS Hub binds for GT Reply return path "
                          f"(default {DEFAULT_GT_BRIDGE_PORT}). On same host as GT, "
                          f"do NOT use the same port as --gt-forward")
     ap.add_argument("--no-gt-control", action="store_true",
@@ -3636,7 +3636,7 @@ def main() -> None:
                     help=f"site-server presence UDP port (default {P.DEFAULT_PORT}; "
                          f"HTTP console stays on --http-port)")
     ap.add_argument("--no-presence", action="store_true",
-                    help="do not announce or listen for other WIMS site servers")
+                    help="do not announce or listen for other WS Hub site servers")
     ap.add_argument("--force-server", action="store_true",
                     help="start even if another site server is announcing (lab only; loud)")
     ap.add_argument("--sim-rotator", action="append", default=[], metavar="SPEC",
@@ -3648,7 +3648,7 @@ def main() -> None:
                          "bands is coordinated (manual handoff, info only) — design §2.14.")
     ap.add_argument("--seat-profile", default=None, metavar="PATH",
                     help="seat-profile.json path (H2 TX-capable marks; default: "
-                         "%%LOCALAPPDATA%%\\WIMS\\seat-profile.json or "
+                         "%%LOCALAPPDATA%%\\WS Hub\\seat-profile.json or "
                          "~/.local/share/wims/seat-profile.json)")
     args = ap.parse_args()
 
@@ -3705,7 +3705,7 @@ def main() -> None:
                 file=sys.stderr,
             )
         if peers and args.force_server:
-            print("WARNING: --force-server: another WIMS site server is announcing; "
+            print("WARNING: --force-server: another WS Hub site server is announcing; "
                   "starting anyway (lab only).", file=sys.stderr)
             for p in peers:
                 print(f"  peer {p.get('hostname')} {p.get('console_base')}",
@@ -3847,16 +3847,16 @@ def main() -> None:
         except ValueError as e:
             ap.error(f"invalid --gt-forward {args.gt_forward!r}: {e}")
         bind_port = int(args.gt_bridge_port)
-        # Same host + same port → packets loop into WIMS; GT starves (observed live).
+        # Same host + same port → packets loop into WS Hub; GT starves (observed live).
         if gt_port == bind_port and (
                 is_loopback_host(gt_host)
                 or gt_host in ("0.0.0.0", "", P._primary_lan_ip(args.iface) or "")):
             ap.error(
                 f"--gt-forward port {gt_port} equals --gt-bridge-port {bind_port} "
-                f"on this host: WIMS and GridTracker cannot share one UDP port. "
+                f"on this host: WS Hub and GridTracker cannot share one UDP port. "
                 f"Use e.g. --gt-forward 127.0.0.1:{DEFAULT_GT_FORWARD_PORT} "
                 f"--gt-bridge-port {DEFAULT_GT_BRIDGE_PORT} "
-                f"(GT Receive={DEFAULT_GT_FORWARD_PORT}, WIMS reverse={DEFAULT_GT_BRIDGE_PORT})")
+                f"(GT Receive={DEFAULT_GT_FORWARD_PORT}, WS Hub reverse={DEFAULT_GT_BRIDGE_PORT})")
         try:
             gt_bridge = GridTrackerBridge(
                 gt_host, gt_port,
@@ -3882,10 +3882,10 @@ def main() -> None:
         )
     except OSError as e:
         print(
-            f"WIMS could not use port {args.http_port}.\n"
-            f"If WIMS is already open, use that window: "
+            f"WS Hub could not use port {args.http_port}.\n"
+            f"If WS Hub is already open, use that window: "
             f"http://localhost:{args.http_port}/\n"
-            f"If another program is using the port, close it and start WIMS again.\n"
+            f"If another program is using the port, close it and start WS Hub again.\n"
             f"({e})",
             file=sys.stderr,
         )
@@ -3894,9 +3894,9 @@ def main() -> None:
     # Operator banner: one URL (open this), log status, how to stop.
     # Bind/conflict warnings above go to stderr only when something is wrong.
     if console_ip and console_ip not in ("127.0.0.1", "0.0.0.0"):
-        print(f"WIMS server  http://{console_ip}:{args.http_port}/")
+        print(f"WS Hub server  http://{console_ip}:{args.http_port}/")
     else:
-        print(f"WIMS server  http://localhost:{args.http_port}/")
+        print(f"WS Hub server  http://localhost:{args.http_port}/")
     for line in seed_lines:
         print(line)
     sp = live.seat_profile_public()

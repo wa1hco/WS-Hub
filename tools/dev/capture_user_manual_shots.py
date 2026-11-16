@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -46,7 +46,7 @@ def _placeholder_png(path: Path, title: str, note: str) -> None:
         d = ImageDraw.Draw(im)
         d.rectangle([20, 20, 1079, 619], outline=(11, 92, 173), width=4)
         font = ImageFont.load_default()
-        d.text((40, 40), "WIMS manual screenshot stub", fill=(11, 92, 173), font=font)
+        d.text((40, 40), "WS Hub manual screenshot stub", fill=(11, 92, 173), font=font)
         d.text((40, 80), title, fill=(30, 30, 30), font=font)
         d.text((40, 120), note or "Replace with a real capture.", fill=(80, 80, 80), font=font)
         d.text((40, 180), f"File: {path.name}", fill=(100, 100, 100), font=font)

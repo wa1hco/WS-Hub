@@ -1,13 +1,13 @@
-# WIMS — WSJT-X Instance Management System: Requirements & Design
+# WS Hub: Requirements & Design
 
 > **Name:** the product is **WS Hub** (formerly WIMS) since 1.0.18; the repo is [wa1hco/WS-Hub](https://github.com/wa1hco/WS-Hub). This design keeps the WIMS name where it names code, files, and history. What is built is in [wims_status.md](wims_status.md).
 
-*Working name: **WIMS** (WSJT-X Instance Management System).*
+*The product name is **WS Hub**. The package and file names keep `wims`.*
 
-This is the **requirements / goals / design** source of truth for WIMS — a supervised,
+This is the **requirements / goals / design** source of truth for WS Hub — a supervised,
 human-in-the-loop console for multi-instance VHF contesting, plus the integration plumbing
 around N1MM+, GridTracker, and antennas (rotctld on the seat; SteppIR and
-switches later). It describes *what* WIMS must do
+switches later). It describes *what* WS Hub must do
 and *why*, and
 records design decisions as they're made.
 
@@ -16,7 +16,7 @@ companion tracker [wims_status.md](wims_status.md).** Keep the two separated: ch
 when the *design* changes; record *progress* there.
 
 **Zero-knowledge / zero-memory** is a standing principle: a person who only vaguely
-remembers the name WIMS must be able to get going. Recognition over recall, zero-config,
+remembers the name WS Hub must be able to get going. Recognition over recall, zero-config,
 auto-detect, progressive disclosure, and errors that say the next step in plain words.
 Operator instructions do not ask for environment variables, `python -m`, or flags.
 Statement and checklist: [design-principles.md](../design-principles.md).
@@ -29,12 +29,12 @@ consoles, **resilience & guided setup** for tired/non-expert seat ops):
 Rotator heading is the first device kind. The older name [wims_rotator.md](wims_rotator.md) points at the antenna brief.
 The per-PC agent speaks hamlib rotctld. The console never sees a port or a serial device.
 
-**Adopted architecture direction (2026-07-30): WIMS Switchboard.**
-**[wims_switchboard_concept.md](wims_switchboard_concept.md)** is the assumed model: WIMS
+**Adopted architecture direction (2026-07-30): WS Hub Switchboard.**
+**[wims_switchboard_concept.md](wims_switchboard_concept.md)** is the assumed model: WS Hub
 is the application-layer router (switchboard) for the operating flows between WSJT-X, N1MM,
 and GridTracker; operators cover bands via **subscriptions**; the **call roster is either
-WIMS's own browser roster or GridTracker, per operator choice** — both are subscribers of the
-same switchboard flows. Logging never routes through WIMS (WIMS audits). **Current fleet
+WS Hub's own browser roster or GridTracker, per operator choice** — both are subscribers of the
+same switchboard flows. Logging never routes through WS Hub (WS Hub audits). **Current fleet
 wiring (2026-09-05):** plane A is **`224.0.0.73:2237`** for all bands; digi → N1MM is the
 **N1MM agent Log** path (built-in WSJT UDP reader **OFF**) — see
 [operator_setup.md](../operator_setup.md) and
@@ -44,44 +44,44 @@ seat-hardware decision: dedicated-RTS PTT
 
 ---
 
-## WIMS goals
+## WS Hub goals
 
-WSJTX Instance Management System (WIMS) is a tool to manage multiple instances of WSJT-X either
+WS Hub is a tool to manage multiple instances of WSJT-X either
 on the same band or on several bands. A station may have several antennas with receivers and
 WSJT-X running to look in different directions. A station may have WSJT-X monitoring for FT8,
 EME, or meteor scatter simultaneously. A station may have several bands receiving simultaneously.
 
-WSJT-X sends each decoded message to WIMS — the **switchboard** — which routes a filtered
-decode stream to each operator's **call roster**. The roster is **either WIMS's own browser
+WSJT-X sends each decoded message to WS Hub — the **switchboard** — which routes a filtered
+decode stream to each operator's **call roster**. The roster is **either WS Hub's own browser
 roster or GridTracker**, per operator preference: both are subscribers of the same switchboard
 flows, and the filter (band subscription + Needed status against the live N1MM log copy) is
-applied by WIMS either way. Clicking a retained decode (CQ/QRZ **or a 73 for tailend**,
+applied by WS Hub either way. Clicking a retained decode (CQ/QRZ **or a 73 for tailend**,
 GridTracker2-style) in either roster causes the receiving station to start a contact via UDP
-**Reply**, routed through WIMS's TX arbiter. **Calling CQ and autoresponding to the pile** is
+**Reply**, routed through WS Hub's TX arbiter. **Calling CQ and autoresponding to the pile** is
 done in the **WSJT-X UI** at the seat (or remote desktop to that seat) — the UDP API cannot
 run that mode usefully; see **§2.12**.
 
 On each completed contact WSJT-X sends a message to N1MM to log the contact information.
 
-WIMS sorts the reported DX according to user preferences. The idea is to display only stations
+WS Hub sorts the reported DX according to user preferences. The idea is to display only stations
 relevant to the goals of the contest and in the order that is most likely to increase score by
 the most.
 
-WIMS has access to the N1MM log to create its own internal copy of the log and also receives
+WS Hub has access to the N1MM log to create its own internal copy of the log and also receives
 messages from N1MM when the log is updated.
 
-WIMS has support for setup where it verifies connection to all the WSJT-X and N1MM instances,
-guides the user in the setup, and reports loss of communication. WIMS has features to automate
+WS Hub has support for setup where it verifies connection to all the WSJT-X and N1MM instances,
+guides the user in the setup, and reports loss of communication. WS Hub has features to automate
 the setup.
 
-WIMS supports one or more SSB/CW stations on the same bands as WSJT-X. Contest rule remains
-**one radiated signal per band**. How WIMS enforces that is a **per-band policy** (§2.14 / §3.4.1):
+WS Hub supports one or more SSB/CW stations on the same bands as WSJT-X. Contest rule remains
+**one radiated signal per band**. How WS Hub enforces that is a **per-band policy** (§2.14 / §3.4.1):
 
-1. **Interlock (original WIMS mission)** — SSB/CW has **priority**. When the SSB/CW operator
-   keys, WIMS stops WSJT-X emission on that band in real time (TX Inhibit / fast mute, target
+1. **Interlock (original WS Hub mission)** — SSB/CW has **priority**. When the SSB/CW operator
+   keys, WS Hub stops WSJT-X emission on that band in real time (TX Inhibit / fast mute, target
    ≤10 ms; details [wims_tx_inhibit.md](wims_tx_inhibit.md)). Automatic; survives server outage
    on the seat path.
-2. **Coordinated handoff (manual)** — operators **share the band by agreement**. WIMS does
+2. **Coordinated handoff (manual)** — operators **share the band by agreement**. WS Hub does
    **not** assert inhibit or mute. It supplies **clear mutual status** (who is TX, who is in a
    digital QSO, who wants the band) so humans hand off cleanly. Same dashboards and presence
    feeds; no automatic RF stop.
@@ -90,14 +90,14 @@ Both modes use the same discovery and inventory; only actuation differs. A band 
 coordinated mode (no KEY hardware yet, or voice and digital ops prefer etiquette) and move to
 interlock when KEY agents and patched WSJT-X are ready.
 
-In general WIMS runs on a separate computer from the WSJT-X and SSB/CW computers.
+In general WS Hub runs on a separate computer from the WSJT-X and SSB/CW computers.
 
 ## Architecture at a glance
 
 ```
    WSJT-X #1 (6m FT8) ┐
    WSJT-X #2 (6m MSK) ┤          ┌──────────────────────────┐
-   WSJT-X #3 (2m FT8) ┼─UDP──▶  │          WIMS            │ ◀── human override (SSB/CW op)
+   WSJT-X #3 (2m FT8) ┼─UDP──▶  │          WS Hub            │ ◀── human override (SSB/CW op)
    WSJT-X #N ...       ┘         │  - UDP parse/control     │
         ▲                        │  - multi-instance mgr    │
         │  Reply / HaltTx /      │  - INTERLOCK (TX arbiter)│──▶ Dashboard
@@ -112,31 +112,31 @@ In general WIMS runs on a separate computer from the WSJT-X and SSB/CW computers
 ```
 
 Key constraints carried over from the notes: **zero overlap on transmitters** (*per
-shared-resource group* — see below), **WSJT-X transmissions cannot be interleaved**, and WIMS
+shared-resource group* — see below), **WSJT-X transmissions cannot be interleaved**, and WS Hub
 **ranks/recommends** who to work and when to give up — the human initiates every TX. **Run (CQ)
-vs S&P is split by protocol reality (§2.12):** WIMS drives **S&P and tailend** over UDP
+vs S&P is split by protocol reality (§2.12):** WS Hub drives **S&P and tailend** over UDP
 (click-to-work → Reply on a retained decode, including **73**); **run/CQ + pile autorespond stays
 in the WSJT-X UI** because the UDP API cannot start a CQ or keep answering callers.
 The site server does not open rotator ports. The seat agent does, and it reports
 headings to the server (§2.10).
 
-### WIMS functions and program partitioning (Switchboard baseline, 2026-07-30)
+### WS Hub functions and program partitioning (Switchboard baseline, 2026-07-30)
 
 The definitive function list, and where each function runs. The partition principle:
-**time-critical interlock paths never traverse the central server** — WIMS *assigns* those
+**time-critical interlock paths never traverse the central server** — WS Hub *assigns* those
 paths and monitors them; the packets flow directly between the endpoints. Everything that is
-not time-critical centralizes in one WIMS server.
+not time-critical centralizes in one WS Hub server.
 
 | # | Function | Lives in |
 |---|----------|----------|
-| 1 | **Switchboard / router / NAT** for packet flows among WSJT-X, N1MM, GridTracker (concept F1–F6) | WIMS server |
-| 2 | **Decode-list → roster filter** — band subscriptions + Needed status computed against the live N1MM log copy | WIMS server |
-| 3 | **Fleet inventory / status dashboard** — discovery, readiness, per-flow liveness | WIMS server |
-| 4 | **Operations control: assign bands to call rosters** (subscriptions + control leases, handoff) | WIMS server |
-| 5 | **Operations control: assign WSJT-X inhibit inputs to SSB/CW Key outputs** — interlock wiring as a routing assignment, pushed to the Key agents | WIMS server (assignment only — not the data path) |
-| 6 | **WIMS call roster** — browser roster as the alternative to GridTracker | WIMS server |
-| 7 | **WIMS Key agent** — fleet KEY sense + **WIMS-assigned** multi-target inhibit fan-out; optional inventory report. **Not** the same binary as **inhibit-agent** (wsjtx-inhibit, localhost-only — design copy: [inhibit_agent.md](inhibit_agent.md)). WIMS-side design: **[wims_key_agent.md](wims_key_agent.md)**. Usually on the **N1MM / SSB-CW PC**. | **Standalone program** (WIMS tree), one per SSB/CW sense point |
-| 8 | **WSJT-X inhibit input** — gate thread controlling PTT from UDP inhibit datagrams ([wims_tx_inhibit.md](wims_tx_inhibit.md)) | **Inside WSJT-X** (improved-fork patch) — part of WSJT-X, not of WIMS |
+| 1 | **Switchboard / router / NAT** for packet flows among WSJT-X, N1MM, GridTracker (concept F1–F6) | WS Hub server |
+| 2 | **Decode-list → roster filter** — band subscriptions + Needed status computed against the live N1MM log copy | WS Hub server |
+| 3 | **Fleet inventory / status dashboard** — discovery, readiness, per-flow liveness | WS Hub server |
+| 4 | **Operations control: assign bands to call rosters** (subscriptions + control leases, handoff) | WS Hub server |
+| 5 | **Operations control: assign WSJT-X inhibit inputs to SSB/CW Key outputs** — interlock wiring as a routing assignment, pushed to the Key agents | WS Hub server (assignment only — not the data path) |
+| 6 | **WS Hub call roster** — browser roster as the alternative to GridTracker | WS Hub server |
+| 7 | **WS Hub Key agent** — fleet KEY sense + **WS Hub-assigned** multi-target inhibit fan-out; optional inventory report. **Not** the same binary as **inhibit-agent** (wsjtx-inhibit, localhost-only — design copy: [inhibit_agent.md](inhibit_agent.md)). WS Hub-side design: **[wims_key_agent.md](wims_key_agent.md)**. Usually on the **N1MM / SSB-CW PC**. | **Standalone program** (WS Hub tree), one per SSB/CW sense point |
+| 8 | **WSJT-X inhibit input** — gate thread controlling PTT from UDP inhibit datagrams ([wims_tx_inhibit.md](wims_tx_inhibit.md)) | **Inside WSJT-X** (improved-fork patch) — part of WSJT-X, not of WS Hub |
 | 9 | **Per-PC agent** — config audit + monitoring for local WSJT-X instance(s). When this seat’s **Rotators** intent is on, the same agent finds local rotors, speaks rotctld, and announces name and heading (§2.10). Not required for decode/TX. | Standalone program, one per PC that runs WSJT-X, rotators, or both |
 | 10 | **Log agent** — on each **N1MM PC**: join fleet mcast, band-filter Logged QSO, deliver to local N1MM (TCP **52001** preferred). See [docs/decisions/2026-08-22-remote-n1mm-logging.md](../decisions/2026-08-22-remote-n1mm-logging.md). | Standalone program, one per N1MM logger PC |
 
@@ -145,10 +145,10 @@ GridTracker itself stays third-party and unmodified — a subscriber, never a co
 **Contest PC roles (2026-08-29):** [docs/decisions/2026-08-29-contest-pc-roles.md](../decisions/2026-08-29-contest-pc-roles.md) —
 N1MM PC = log agent + key agent (+ optional site server); WSJT PC = optional seat
 monitor/config; **Solo is lab-only**. Each agent owns a **scoped config check** and a
-**compact GUI** (status / interconnect / fleet SW config). Config check is a WIMS
+**compact GUI** (status / interconnect / fleet SW config). Config check is a WS Hub
 function of the role, not a separate product.
 
-The former "WIMS server + agent" split survives as **one central server + seat-side
+The former "WS Hub server + agent" split survives as **one central server + seat-side
 programs** (log agent, key agent, WSJT seat monitor, in-WSJT-X inhibit thread). The Key
 agent knows its serial port, assignment list, and dashboard; the log agent knows mcast +
 band pin + localhost N1MM delivery; the inhibit thread knows its UDP port and PTT line;
@@ -156,8 +156,8 @@ the per-PC agent knows that PC’s WSJT instances and, when Rotators is checked,
 
 ### Launch and updates (2026-10-17)
 
-Double-clicking **WIMS**, the start file in `scripts/`, and the Windows shortcuts
-all open the **same WIMS window**. That window is the front door. It keeps
+Double-clicking **WS Hub**, the start file in `scripts/`, and the Windows shortcuts
+all open the **same WS Hub window**. That window is the front door. It keeps
 **Update**, **Restart site server**, and **Open site console**.
 
 The desktop icon runs `scripts/start-wims.sh`. The script may set paths. The
@@ -166,7 +166,7 @@ which opens the same window.
 
 A second double-click, while that window is already open, brings the same
 window forward. It is un-minimized, raised, and focused. It does not open
-another window or the site console. If the window does not answer, WIMS
+another window or the site console. If the window does not answer, WS Hub
 says what to do next.
 
 **Operate** (one PC, browser console) uses one start routine whether the window
@@ -185,7 +185,7 @@ starts it or Start-Wims-Solo does. That routine:
 **Console window on this PC (2026-10-19).** Open site console, Restart site
 server, and Operate open the console the same way. If a console page on
 **this** PC is already connected (its live update, or a ping in the last few
-seconds), WIMS does not open another window. It tells that page to reload, so
+seconds), WS Hub does not open another window. It tells that page to reload, so
 the window stays where it is. A restart reconnects that same page. A browser
 on another PC is unchanged: it still opens the console URL, watches the
 WSJT-X instances, and uses Work and Halt under the same claim and interlock
@@ -193,8 +193,8 @@ rules. A restart only drops and restores its live update, the way it does
 today. Its size and place are not saved over this PC’s. When this PC has
 Chrome, Chromium, or Edge, the console opens as its own window, separate
 from everyday browsing, and comes back at the size and place last used. The
-page reports that place; WIMS keeps it on a screen that is actually there.
-Without one of those browsers, the console opens as it does today and WIMS
+page reports that place; WS Hub keeps it on a screen that is actually there.
+Without one of those browsers, the console opens as it does today and WS Hub
 says the window cannot be placed. **Other tools… → Reset console window**
 puts the next open at the default spot.
 
@@ -209,16 +209,16 @@ previous tag, in one short plain sentence. The window asks GitHub for the
 release list, the tag list, and those compares. It pages past the first
 batch so an older version is not dropped. It remembers tag summaries for
 the rest of the time the window is open. **Check now** looks immediately.
-While the window is open, WIMS also looks every few hours, and not more
+While the window is open, WS Hub also looks every few hours, and not more
 often than every 15 minutes. The look runs in the background and does not
 freeze the window. No network, or GitHub asking us to wait, leaves the list
 as it was and says so in one quiet line. A small **update** mark appears
 when something newer exists. **Install this update** switches to the version
 you selected and remembers the previous copy. **Go back** returns to that
-copy. WIMS never installs by itself.
+copy. WS Hub never installs by itself.
 
 The site server records the git revision it loaded and reports it on `/healthz`
-(`server_rev`, plus `version`). The window title and the line under **WIMS**
+(`server_rev`, plus `version`). The window title and the line under **WS Hub**
 name both copies. **Launcher** is the code this window loaded when it opened.
 **Server** is the code the site server loaded at start. Each label has a
 short tip that says which is which. **Restart site server** says the revision
@@ -234,9 +234,9 @@ update**, if the local server is now stale, the list says **Restart server
 to finish the update**.
 
 **Restart site server** restarts a server on this PC only. The process has
-to answer `/healthz` as the WIMS site server, and its process id has to be
-local: the pid file the server writes in the WIMS state directory, or the
-process listening on the console port. A process that is not WIMS is left
+to answer `/healthz` as the WS Hub site server, and its process id has to be
+local: the pid file the server writes in the WS Hub state directory, or the
+process listening on the console port. A process that is not WS Hub is left
 alone. A site server on another PC is left alone. The window keeps
 **Restart needed** and names that PC, and says to restart it there. A
 restart this window does perform waits until `/healthz` reports the
@@ -259,11 +259,11 @@ stationary, **one grid, no roving on our side**. Vehicles / sites: **"Roy"** (tr
 **"Chip"** (truck) 903 + 1296 + up (microwave); **"Trailer"** 50 + 144; plus possible
 **off-trailer radio sites** (e.g. **TV station** tower for one or more **50 MHz** WSJT-X hosts).
 Today the sites have a network between them **but no shared visibility — coordination is by chat
-only.** WIMS's headline value is the **cross-site operations console**: one combined call roster,
+only.** WS Hub's headline value is the **cross-site operations console**: one combined call roster,
 per-band activity + health, one merged log / dupe-mult view — replacing "anyone there?" over chat.
 
 **Digital fleet (authoritative — networking detail in
-[wims_networking.md](wims_networking.md)).** Plane map, seat-local CAT (not a WIMS plane), and
+[wims_networking.md](wims_networking.md)).** Plane map, seat-local CAT (not a WS Hub plane), and
 the preferred **Icom + wfview** seat stack: **[wims_networking.md](wims_networking.md) §3 /
 §3.2 / §3.3**.
 
@@ -273,9 +273,9 @@ the preferred **Icom + wfview** seat stack: **[wims_networking.md](wims_networki
 |------|------------------------------|--------------|
 | **50** | **N1MM-50** (typically trailer / central) | **1–N** FT8 instances: trailer beam PCs **and/or remote** (e.g. **TV station PC + radio**). Remote hosts do **not** run a second N1MM for 50 — they only emit plane A multicast; **N1MM-50’s agent Log** is sole digi logger. |
 | **144** | **N1MM-144** | **Up to two** hosts: separate **radio + PC** for FT8 and for MSK144 (or EME); both use **the same** N1MM-144 (agent Log). |
-| **222** | **N1MM-222** | **One seat PC** (e.g. Roy / **MGEF-222**): radio CAT is **21 MHz**. WIMS maps that IF to 222 **only after the rig-name / N1MM station is marked** as reporting IF ([decision 2026-10-14](../decisions/2026-10-14-if-reporting-seats.md)). SSB and/or FT8 as the period requires. |
+| **222** | **N1MM-222** | **One seat PC** (e.g. Roy / **MGEF-222**): radio CAT is **21 MHz**. WS Hub maps that IF to 222 **only after the rig-name / N1MM station is marked** as reporting IF ([decision 2026-10-14](../decisions/2026-10-14-if-reporting-seats.md)). SSB and/or FT8 as the period requires. |
 | **432** | **N1MM-432** | **One seat PC** (e.g. Roy / **MGEF-432**): **transverter** + radio CAT **28 MHz**. Same opt-in IF map to 432. A Flex / SmartSDR XVTR slice already reports RF — 28.074 MHz stays **10m** unless that instance is marked. |
-| **10 GHz** | **N1MM-10G** (**MGEF-10-UP**) | Network Status **Band 10000**, **Freq 10368090.00** (kHz) = **10368.090 MHz**. N1MM already has RF; WIMS must label **3cm**, not 13cm. |
+| **10 GHz** | **N1MM-10G** (**MGEF-10-UP**) | Network Status **Band 10000**, **Freq 10368090.00** (kHz) = **10368.090 MHz**. N1MM already has RF; WS Hub must label **3cm**, not 13cm. |
 
 → **4 N1MMs** (one per band), all networked into one contest log (plane C). WSJT-X count is
 **variable** (remote 50, optional second 144 PC, 222/432 idle of FT8 during SSB runs). Shorthand
@@ -296,11 +296,11 @@ the preferred **Icom + wfview** seat stack: **[wims_networking.md](wims_networki
   in `if_seats.json`** (Setup page): 28 MHz is 10m on a Flex, and 222/432 only
   for seats that still report IF
   ([decision 2026-10-14](../decisions/2026-10-14-if-reporting-seats.md)).
-  WIMS joins **2237**; each band’s N1MM agent Log filters
+  WS Hub joins **2237**; each band’s N1MM agent Log filters
   by live band. Per-site unicast relay is a **fallback**, not required. *Watch:* managed switches
   with **IGMP snooping** + no querier can prune multicast — verify on plain/unmanaged L2 it floods
   fine. Internet is **1–2 Starlinks**, separate Starlink WiFi for other devices — **out of the
-  WIMS data path** (WIMS radio path is LAN-only; Starlink CGNAT/latency never involved). Remote 50
+  WS Hub data path** (WS Hub radio path is LAN-only; Starlink CGNAT/latency never involved). Remote 50
   **must** be on contest L2, not “over the public internet only.”
 - *Rover dupe still applies:* our position is one fixed grid, but we **work rovers** (others'
   stations moving between grids); each grid×band is a mult, so the `(call, band, grid)` dupe key
@@ -310,11 +310,11 @@ the preferred **Icom + wfview** seat stack: **[wims_networking.md](wims_networki
   — 50, 144, 222, 432 may TX concurrently; **all** 50 MHz instances (trailer + remote) contend for
   one `50-signal` token (§3.4).
 - **Operating model — NO automated operation.** Every active transmitter always has a human
-  operator: either the **local op in the seat / remote site**, or the **WIMS console operator** who
-  **smoothly takes over** a band when its seat is empty (e.g. 222/432 when nobody's there). WIMS is
+  operator: either the **local op in the seat / remote site**, or the **WS Hub console operator** who
+  **smoothly takes over** a band when its seat is empty (e.g. 222/432 when nobody's there). WS Hub is
   a **remote operating position + force-multiplier** — one console op covers several empty-seat
-  bands via the call roster + click-to-work. WIMS **ranks/recommends; the human initiates every
-  TX**. The key UX is **clean handoff** (local ⇄ WIMS op, instant claim/takeover, §4.5) with always
+  bands via the call roster + click-to-work. WS Hub **ranks/recommends; the human initiates every
+  TX**. The key UX is **clean handoff** (local ⇄ WS Hub op, instant claim/takeover, §4.5) with always
   exactly one operator per instance (ties to §3.13, §2.3, scenario S7).
 
 ---
@@ -322,16 +322,16 @@ the preferred **Icom + wfview** seat stack: **[wims_networking.md](wims_networki
 ## 1. External-component behavior (what we must verify before trusting it)
 
 Goal: characterize each building block (and lock in the known quirks as regression checks)
-*before* trusting it inside WIMS. Behavior that can be exercised without RF belongs in the test
+*before* trusting it inside WS Hub. Behavior that can be exercised without RF belongs in the test
 bed (§5).
 
 ### 1.1 WSJT-X UDP protocol
 - **Outbound messages** — Heartbeat, Status, Decode, QSO Logged, ADIF, per `NetworkMessage.hpp`
   (schema 2/3, big-endian QDataStream; ref `Documents/wsjtx-3.0.1/Network/NetworkMessage.hpp`).
-  WIMS must **extract grid** from `CQ CALL GRID` / Tx1 decode text.
-- **Inbound control** — confirm each command WIMS sends actually acts: Reply, Halt Tx, Free Text,
+  WS Hub must **extract grid** from `CQ CALL GRID` / Tx1 decode text.
+- **Inbound control** — confirm each command WS Hub sends actually acts: Reply, Halt Tx, Free Text,
   Replay, Configure. *(Confirm exact message names/IDs against the WSJT-X UDP protocol header.)*
-- **Reply socket stays unbound.** WIMS may listen on `127.0.0.1` (solo) while WSJT-X's
+- **Reply socket stays unbound.** WS Hub may listen on `127.0.0.1` (solo) while WSJT-X's
   packet source is another address on the same PC. Binding the unicast reply socket to
   the listen address makes Work and Halt fail (Linux errno 22, Windows 10051 / 10049 /
   10065). The operating system chooses the route. When there is no route, the operator
@@ -347,7 +347,7 @@ bed (§5).
     while I run.” `Configure` can set DX call/grid and *Generate Messages* but does **not**
     Enable Tx or put the instance into run mode.
   - **Reply (msg 4)** *is* the click-to-work path — but it is **broader than CQ-only** in actual
-    WSJT-X 3.0.1 (the NetworkMessage.hpp wording is outdated). WIMS must **echo a prior Decode’s
+    WSJT-X 3.0.1 (the NetworkMessage.hpp wording is outdated). WS Hub must **echo a prior Decode’s
     fields** (GridTracker2 `initiateQso` pattern). WSJT-X finds that line in Band Activity and
     runs `processMessage`; it sets double-click / auto-TX when the text is **CQ/CQDX/QRZ**,
     contains **`73 `** (classic **tailend**), or **Hold Tx Freq** is checked — see §2.12.
@@ -355,7 +355,7 @@ bed (§5).
     one-shot `CQ MYCALL GRID` string) but WSJT-X **does not auto-sequence** after it — no
     autorespond to callers. Unsuitable as run mode; experimental FreeText-CQ remains off by
     default and is **not** a product path for contest run.
-  - **Halt Tx (msg 8)** still works and is the WIMS stop path for both S&P and observed run.
+  - **Halt Tx (msg 8)** still works and is the WS Hub stop path for both S&P and observed run.
 - **Mid-cycle Halt Tx — timing** — Halt Tx (UDP msg ID 8, `auto only`=false) stops WSJT-X feeding
   the audio buffer, but RF persists until the buffer drains. Expected ~50–200 ms, dominated by OS
   audio-buffer drain + PTT release — *not* the LAN. This is the slow path; treat UDP Halt Tx as
@@ -374,16 +374,16 @@ bed (§5).
 - **Multicast vs unicast** — this station uses **multicast `224.0.0.73:2237`** for plane A
   (TTL 3; **all bands share one port** —
   [decision 2026-09-05](../decisions/2026-09-05-plane-a-single-port-2237.md)). Distinguish
-  instances with `--rig-name`. **Consumers:** WIMS site server + **N1MM agent Log** on each
-  logger PC (built-in WSJT UDP reader **OFF**). WIMS never double-logs. Keep WSJT-X Secondary
+  instances with `--rig-name`. **Consumers:** WS Hub site server + **N1MM agent Log** on each
+  logger PC (built-in WSJT UDP reader **OFF**). WS Hub never double-logs. Keep WSJT-X Secondary
   UDP / Broadcast to N1MM (**2333**) **OFF** when the agent Log path is used.
   Config: `WSJT-X.ini` / `~/.config/WSJT-X*.ini` (Linux, including `WSJT-X - <rig-name>.ini`).
   Seat CAT (wfview, etc.) is orthogonal — §1.1 is UDP only; see networking **§3.2–§3.3**.
   Historical multi-port Scheme A remains lab archaeology in networking §4.
 - **Outgoing interface is mandatory** — Settings → Reporting → **Outgoing interface** must be the
   **contest LAN NIC**. Blank / Qt `@Invalid()` / loopback is a **silent failure mode**: WSJT-X
-  still decodes, but Heartbeat/Status/Decode never reach WIMS or other hosts (observed: one
-  instance on `127.0.0.1` visible to WIMS, another on `224.0.0.73` with `@Invalid()` interface
+  still decodes, but Heartbeat/Status/Decode never reach WS Hub or other hosts (observed: one
+  instance on `127.0.0.1` visible to WS Hub, another on `224.0.0.73` with `@Invalid()` interface
   invisible despite local decodes). **Setup, config verification (`wsjtx_config`), and continuous
   readiness must all treat this as a first-class error** — see
   [wims_networking.md](wims_networking.md) §4 / §12.
@@ -392,11 +392,11 @@ bed (§5).
 
 ### 1.2 GridTracker
 > **Role (revised 2026-07-30, Switchboard baseline):** GridTracker is a **first-class operator
-> roster**, fed exclusively by the WIMS switchboard (concept F2) — never connected to WSJT-X
+> roster**, fed exclusively by the WS Hub switchboard (concept F2) — never connected to WSJT-X
 > directly on managed instances. **Click-to-work is now permitted** because GridTracker's
-> Reply can only reach WSJT-X through WIMS, where the TX arbiter, lease, and SSB/CW gate are
+> Reply can only reach WSJT-X through WS Hub, where the TX arbiter, lease, and SSB/CW gate are
 > enforced (F3) — the original reason for the viewer-only ban (arbiter bypass) is gone by
-> construction. WIMS's own call roster (§Goals / §3.12) remains the alternative roster; the
+> construction. WS Hub's own call roster (§Goals / §3.12) remains the alternative roster; the
 > choice is per operator. *(Superseded earlier stance: parallel read-only multicast
 > subscriber, viewer-only, click-to-work banned.)*
 - **Grid forwarding quirk** — only relevant if GridTracker is in a *relay* path; multicast avoids
@@ -419,7 +419,7 @@ bed (§5).
 - **Dupe / needed — RESOLVED: contactinfo feed + self-compute (no round-trip).** The spot
   round-trip is **dead**: N1MM's `<spot>` broadcast is bare (call/freq/mode, *no* status), and
   `lookupinfo` (External Lookup) is a callbook-data mechanism, greyed out unless an external
-  lookup source is configured — neither returns a mult/dupe verdict. **Design:** WIMS subscribes
+  lookup source is configured — neither returns a mult/dupe verdict. **Design:** WS Hub subscribes
   to N1MM **`<contactinfo>`** broadcasts as a real-time log feed (50 fields incl. `call`, `band`,
   `mode`, `ismultiplier1/2/3`, `points`, unique `ID`, `timestamp`, edit-tracking via
   `oldcall`/`IsOriginal`), builds its internal log copy keyed on `(call, band, grid)`, and
@@ -427,7 +427,7 @@ bed (§5).
   calibrated by N1MM's `ismultiplier` on each logged QSO (mirrors a simple rule N1MM keeps honest
   — no contest-engine reimplementation).
   - *Grid source:* N1MM's `gridsquare` is **contest-dependent and was empty** in the DX-config
-    test (grid went to `comment`/Cabrillo only). So WIMS takes grid from the **WSJT-X decode**
+    test (grid went to `comment`/Cabrillo only). So WS Hub takes grid from the **WSJT-X decode**
     (§3.1), not N1MM. *(To confirm later: does `gridsquare`/`exchange1` populate under an actual
     VHF-contest config? Not blocking, since grid comes from WSJT-X.)*
   - *Config (`N1MM Admin.s3db` → Settings/ExternalBroadcast):* broadcasts default **off**;
@@ -438,8 +438,8 @@ bed (§5).
   unique `ID`). Read-only seed + `reconcile()` resync. **Resync** = re-read `DXLOG` + reconcile by
   ID (handles deletions); operator-triggerable, no N1MM resync feature needed. *N1MM's own
   (networked) Resync merges peer logs into `DXLOG` by unique ID over N1MM's TCP peer channel;
-  since WIMS mirrors `DXLOG`, it **inherits** the result at its next reconcile — the two compose,
-  and WIMS never speaks N1MM's proprietary network protocol.* **Live edits/deletes:** N1MM
+  since WS Hub mirrors `DXLOG`, it **inherits** the result at its next reconcile — the two compose,
+  and WS Hub never speaks N1MM's proprietary network protocol.* **Live edits/deletes:** N1MM
   `<contactdelete>` removes the QSO from the log copy by `ID` (roster needed/dupe updates
   immediately); `<contactreplace>` upserts like `<contactinfo>` (edit = delete + replace).
   **Open:** confirm `GridSquare` populates under a real VHF-contest config
@@ -450,7 +450,7 @@ bed (§5).
   `CALL CALL R-12`) via the `call→current-grid` map (§3.5).
 - **Log export** — auto-export contest log out of N1MM (to GridTracker + WSJT-X). Format and
   trigger.
-- **Inbound contacts** — verify QSOs WIMS/WSJT-X make land correctly in the N1MM master log with
+- **Inbound contacts** — verify QSOs WS Hub/WSJT-X make land correctly in the N1MM master log with
   band/mode/grid.
 
 ### 1.4 Rotator (hamlib rotctld; GS-232 behind it)
@@ -459,9 +459,9 @@ Decided 2026-10-28 (Jeff, WA1HCO). Product behavior is **§2.10** and
 [wims_antenna.md](wims_antenna.md). This list is what to verify on the wire
 before trusting a controller.
 
-WIMS turns rotators itself. WSJT-X has no rotator control. The Flex radio is
+WS Hub turns rotators itself. WSJT-X has no rotator control. The Flex radio is
 not a rotator interface. The seat agent talks TCP to hamlib **rotctld**.
-GS-232A/B is the serial dialect rotctld speaks to a serial controller. WIMS
+GS-232A/B is the serial dialect rotctld speaks to a serial controller. WS Hub
 does not open that serial port.
 
 The owner’s controller,
@@ -498,14 +498,14 @@ the antenna name once.
   controller reports an elevation axis. Moon tracking is outside this
   decision.
 
-An earlier plan that put a Yaesu/K3NG client inside WIMS, and left rotctld
+An earlier plan that put a Yaesu/K3NG client inside WS Hub, and left rotctld
 optional, is superseded by this section.
 
 ### 1.5 Cross-app end-to-end
 - **Full QSO flow** — decode → reply → logged → appears in N1MM with grid → exported to
   GridTracker/WSJT-X.
 - **Grid propagation** — grid survives the whole chain (ties to §1.2 quirk).
-- **Multi-instance isolation** — N1MM and WIMS correctly attribute traffic to the right
+- **Multi-instance isolation** — N1MM and WS Hub correctly attribute traffic to the right
   instance/band/mode.
 - **Packet-flow capture** — capture and visualize real traffic between WSJT-X ↔ GridTracker ↔
   N1MM (feeds the test-bed replay library, §5).
@@ -642,9 +642,9 @@ SSB/CW or hand off to a 2nd op.
   from (but related to) TX control claim (§4.5): subscribe = “show me this band”; claim = “I may
   command TX/rotator on it.”
 - **Click-to-work (S&P + tailend)** — operator **clicks a roster line** (GridTracker2-style; no
-  Enable/Disable TX arm) → WIMS sends **Reply** echoing that station’s retained decode via the
+  Enable/Disable TX arm) → WS Hub sends **Reply** echoing that station’s retained decode via the
   arbiter + control claim (§Goals; §2.12; §3.12). Covers answering **CQ/QRZ** and **tailending** on
-  a **73** (and other lines WSJT-X will accept — §2.12). Primary WIMS-driven TX path. **Not** a
+  a **73** (and other lines WSJT-X will accept — §2.12). Primary WS Hub-driven TX path. **Not** a
   substitute for the WSJT-X run/CQ UI.
 - **No “Call CQ” console button (product path)** — starting a run is done in the **WSJT-X UI** at
   the seat (or via remote desktop/KVM to that seat). See §2.12. An experimental FreeText CQ API
@@ -656,8 +656,8 @@ SSB/CW or hand off to a 2nd op.
 - **Closing free text / QSY on final 73** — optional operator-chosen free-text (e.g. `QSY 432`)
   sent via WSJT-X Free Text on the completing contact, instead of a plain 73/RR73. Full design:
   §2.8. **Assess-then-decide:** operator reviews cross-band evidence (§2.9) and chooses accept /
-  other band / skip; never auto-applied. WIMS never auto-sends free text unattended.
-- **Per-instance halt-now** (UDP Halt Tx) — stops S&P QSOs WIMS started **and** can interrupt a
+  other band / skip; never auto-applied. WS Hub never auto-sends free text unattended.
+- **Per-instance halt-now** (UDP Halt Tx) — stops S&P QSOs WS Hub started **and** can interrupt a
   local run (fail-safe / SSB-CW priority / panic). Does not “disable CQ mode” in WSJT-X settings.
 - **Operate Halt TX — this console’s Work only.** Each Operate browser has a dashboard id.
   Halt stops live QSOs **this console started** (Enable Tx / transmitting / just Worked).
@@ -665,12 +665,12 @@ SSB/CW or hand off to a 2nd op.
   two bands, Halt stops **both**. There is **no** global stop-all-TX.
 - **Mode / strategy override per instance** — advisory run-vs-S&P **recommendation** and give-up
   signals (§3.5); does **not** flip WSJT-X into CQ (that remains seat UI, §2.12).
-- **Manual rotator point** — on the Operate row, enter a bearing (or a grid, which WIMS
+- **Manual rotator point** — on the Operate row, enter a bearing (or a grid, which WS Hub
   converts to a bearing) and stop (§2.10 step 2). Park and elevation wait until a
   controller reports them.
 
 ### 2.4 Design notes
-- **Stack = browser, served by the WIMS server.** Stdlib HTTP + **Server-Sent Events** push the
+- **Stack = browser, served by the WS Hub server.** Stdlib HTTP + **Server-Sent Events** push the
   §3.12 JSON state to a static HTML/JS page (`src/wims/server/`). No framework/build step; lowest
   lock-in. The **JSON state contract (`server/state.py`) is the durable boundary** — the frontend
   is the only replaceable part.
@@ -701,12 +701,12 @@ SSB/CW or hand off to a 2nd op.
 
 ### 2.5 Network setup, health & confidence
 Goal: make a complex multi-host UDP fleet **describable, verifiable, and visible** without
-reaching for Wireshark — WIMS is already on the wire, so it can be the diagnostic tool (fed by
-§3.15). **Resilience for non-expert seat operators** (reboots, fatigue, 222/432 not run by WIMS
+reaching for Wireshark — WS Hub is already on the wire, so it can be the diagnostic tool (fed by
+§3.15). **Resilience for non-expert seat operators** (reboots, fatigue, 222/432 not run by WS Hub
 authors): contest profile as source of truth, guided seat bring-up, continuous 🟢/🔴 readiness with
 **one plain-language fix**, fail-soft (no TX while red) — full how-it-works in
 **[wims_networking.md §12](wims_networking.md#12-resilience--guided-setup-tired-operators-restarts)**.
-- **Live topology map** — nodes (WSJT-X instances, N1MM(s), GridTracker, rotators, hosts, WIMS) +
+- **Live topology map** — nodes (WSJT-X instances, N1MM(s), GridTracker, rotators, hosts, WS Hub) +
   UDP flows + multicast-group membership + who-logs-whom, health-colored.
 - **Expected-vs-actual fleet** — passive discovery of every WSJT-X instance (id/host/band/mode/
   freq/state), health (ALIVE/STALE/DEAD + QUIET = alive-but-no-decodes), id-collision detection
@@ -716,19 +716,19 @@ authors): contest profile as source of truth, guided seat bring-up, continuous �
   🔴 BROKEN / ⚪ OFF plus a single next action (networking §12.5).
 - **Protocol-aware packet view ("Wireshark-lite")** — a live **decode log** (time / instance / dB
   / dF / message across the whole fleet, CQ-highlighted) plus per-source packet/decode rates,
-  message-type counts, decode hex on demand — filtered to the ham protocols WIMS understands.
+  message-type counts, decode hex on demand — filtered to the ham protocols WS Hub understands.
 - **Per-instance confidence tile** — state + **WSJT-X window / waterfall thumbnail** (via host
   agent, §3.3) + a **UDP-native decode-activity map** (df × cycle × SNR heatmap from the decode
   stream, confirms decodes flowing with no screen capture).
-- **Headless aspiration** — WIMS reliable enough that the WSJT-X GUIs are *unnecessary* for normal
+- **Headless aspiration** — WS Hub reliable enough that the WSJT-X GUIs are *unnecessary* for normal
   operation: all operation via the call roster + a few info panels; WSJT-X still runs
   (decode/modulate engine) but its window is optional. Thumbnails are the trust-but-verify backstop.
 - **Remote-desktop integration (deep-dive layer)** — *layered & decoupled* from the lightweight
-  thumbnails. WIMS stores each host's remote-desktop ID/address (§3.14) and offers per-host
+  thumbnails. WS Hub stores each host's remote-desktop ID/address (§3.14) and offers per-host
   **one-click launch** of an external tool (**RustDesk preferred** — open, self-hostable,
   scriptable, has a web client; AnyDesk works for launch-only, closed). Optional **embedded
   view-only RustDesk pane** scoped to the WSJT-X window for a *live* expanded tile; keep periodic
-  stills as the default many-tile view (N live sessions are heavy). WIMS orchestrates/launches; it
+  stills as the default many-tile view (N live sessions are heavy). WS Hub orchestrates/launches; it
   does not reimplement remote desktop. Remote-desktop tools handle their own NAT traversal, so the
   interactive layer works across the internet independent of the data-path overlay (§4.3).
 
@@ -736,19 +736,19 @@ authors): contest profile as source of truth, guided seat bring-up, continuous �
 
 ### 2.6 Call-roster feature backlog
 
-Consolidated from WIMS design discussions, **GridTracker's Call Roster** (good ideas worth
+Consolidated from WS Hub design discussions, **GridTracker's Call Roster** (good ideas worth
 copying), and decisions taken while building. One reviewable list to select from. **Prio** =
-contest value for fixed multi-multi VHF (H/M/L). **Src**: W = WIMS idea, G = GridTracker, D =
+contest value for fixed multi-multi VHF (H/M/L). **Src**: W = WS Hub idea, G = GridTracker, D =
 decision here. *(Per-feature implementation status is tracked in [wims_status.md](wims_status.md).)*
 
 **Guiding reframe:** GridTracker chases *awards* (DXCC/WAS/grids, LoTW/eQSL-confirmed) for general
-operating; WIMS ranks for *contesting* — **mult = grid×band, points, run vs S&P**, with **N1MM as
+operating; WS Hub ranks for *contesting* — **mult = grid×band, points, run vs S&P**, with **N1MM as
 the dupe/mult authority** for a contest. Award and checklist goals also read confirmation already
 stored in that same log (card, LoTW, or eQSL) and, when GridTracker has already
-downloaded one, in that LoTW file. WIMS does not download LoTW and does not
+downloaded one, in that LoTW file. WS Hub does not download LoTW and does not
 write the file. Copy GridTracker's
 *interaction model* (all stations, sortable, filterable, status-per-station, alerts, click-to-work);
-keep WIMS's contest scoring as the "wanted" engine.
+keep WS Hub's contest scoring as the "wanted" engine.
 
 **A. Population & per-station status**
 
@@ -789,8 +789,8 @@ keep WIMS's contest scoring as the "wanted" engine.
 | # | Feature | Contest form | Src | Prio |
 |---|---------|--------------|-----|------|
 | D1 | **Authoritative call→grid memory** (accumulate across all decodes) | load-bearing — mult = grid×band; WSJT-X often lacks grid in a decode | D/G | **H** |
-| D2 | **Supply remembered grid to WSJT-X for logging** | No log-only UDP write. WIMS and the N1MM forward carry the remembered grid. The WSJT-X log may stay blank. | D | **H** |
-| D3 | Dupe shown greyed (with context) vs hidden | GT keeps B4 rows visible; WIMS excludes — reconsider | G | M |
+| D2 | **Supply remembered grid to WSJT-X for logging** | No log-only UDP write. WS Hub and the N1MM forward carry the remembered grid. The WSJT-X log may stay blank. | D | **H** |
+| D3 | Dupe shown greyed (with context) vs hidden | GT keeps B4 rows visible; WS Hub excludes — reconsider | G | M |
 
 **E. Filtering & subscription**
 
@@ -813,11 +813,11 @@ keep WIMS's contest scoring as the "wanted" engine.
 | # | Feature | Contest form | Src | Prio |
 |---|---------|--------------|-----|------|
 | G1 | **Single-click to work** a station → Reply via arbiter + control claim | S&P + **tailend** — echo retained decode (CQ/QRZ/73/…); GT2 pattern (§2.12) | both | **H** |
-| G2 | Per-console halt of WIMS-started TX | Halt this dashboard’s Work; two bands → both; not other operators | W | H |
+| G2 | Per-console halt of WS Hub-started TX | Halt this dashboard’s Work; two bands → both; not other operators | W | H |
 | G3 | Right-click context menu / multiple roster windows | Phase-2 | G | L |
 | G4 | **Closing free text / QSY on final 73** | operator option to send e.g. `QSY 432` via Free Text when completing a contact; **operator assesses C7 evidence then chooses** accept / other band / skip — never auto-applied; §2.8 / §2.9 | W | **H** |
 | G5 | **Rotator heading and point** | agent + rotctld; Operate row (current, target, turning); manual turn; confirm the link; point at a spot without transmitting; Az ant font while turning; §2.10 | W | **H** |
-| G6 | **Run vs S&P boundary (§2.12)** | S&P = WIMS Reply; run/CQ + autorespond = WSJT-X UI; console shows mode + calling-us; no product Call-CQ | W | **H** |
+| G6 | **Run vs S&P boundary (§2.12)** | S&P = WS Hub Reply; run/CQ + autorespond = WSJT-X UI; console shows mode + calling-us; no product Call-CQ | W | **H** |
 
 **Top of the list (high-prio):** A1/A2/A3 (all-stations + per-station status + calling-us), B1/B2/B2b
 (column sort + Az ant/Az DX), D1/D2 (grid memory + grid-for-logging), **E1b** (subscribe → roster),
@@ -840,11 +840,11 @@ control claim (§4.5).
 
 ### 2.7 Multi-operator console (identity, band focus, coordination)
 
-WIMS supports **several human operators at once**, each in their own browser window, sharing one
+WS Hub supports **several human operators at once**, each in their own browser window, sharing one
 site server. This is the multi-console side of §4.5.
 
 - **Operator identity, no security.** Each operator identifies by **callsign + name** — there is
-  **no login/password**. The fleet is a known, cooperative team, so WIMS **assumes good will**;
+  **no login/password**. The fleet is a known, cooperative team, so WS Hub **assumes good will**;
   identity is for coordination and attribution, not access control.
 - **Band / station subscription (choose what you cover).** Each operator **subscribes** to the
   fleet station(s)/band(s) they elect to cover — full rules in **§2.11**. **That subscription is
@@ -865,7 +865,7 @@ contesting the operator often wants that closing TX to carry a short operational
 station — classic example: **`QSY 432`** (or `QSY 222`, `QSY 50`, …) so they know where to find us
 next. That is free-text territory, not a standard exchange field.
 
-**What WIMS can do** (human-in-the-loop; never unattended free-text TX):
+**What WS Hub can do** (human-in-the-loop; never unattended free-text TX):
 
 1. **Wire Free Text UDP** (§1.1 / §3.2) — encode Free Text, send to the instance that holds the
    QSO, confirm live that WSJT-X actually queues/transmits free text (character limit, whether it
@@ -877,7 +877,7 @@ next. That is free-text territory, not a standard exchange field.
      equipped) constrained to FT8 free-text length;
    - **Free-type** short text with validation (too long / illegal chars rejected before send);
    - **Skip** (default) → normal WSJT-X 73/RR73 path.
-3. **QSY suggestions are assess-then-decide, not auto** — WIMS may *propose* a closing free-text
+3. **QSY suggestions are assess-then-decide, not auto** — WS Hub may *propose* a closing free-text
    (e.g. QSY to a needed band) from the same evidence as **C7 / §2.9**, but the **operator must
    assess other-band contact ability and explicitly choose** accept suggestion / pick another band
    / skip. Default remains plain 73. No silent or one-shot auto-QSY. Detail of the assessment UI
@@ -902,11 +902,11 @@ if the operator can **judge that claim**. Prior-contest activity does not prove 
 that band, the path is open now, or our seat is free — the operator decides whether the
 cross-band opportunity is real and whether to use a QSY suggestion (§2.8).
 
-**Principle:** WIMS **surfaces evidence and ranks with an explainable factor**; the operator
+**Principle:** WS Hub **surfaces evidence and ranks with an explainable factor**; the operator
 **assesses other-band contact ability** and **decides** whether to prioritize the station and/or
 send a closing QSY. Score boost alone is not enough — **evidence must be visible**.
 
-**Evidence WIMS should show per DX call** (roster expand / work-dialog panel; durable on the
+**Evidence WS Hub should show per DX call** (roster expand / work-dialog panel; durable on the
 state contract so the console can render it):
 
 | Field | Why the operator cares |
@@ -932,7 +932,7 @@ other band (open/marginal/dead) — helps “can they make it *now*?” judgment
    - accept a suggested closing free text (`QSY 432`), or
    - choose a different band / custom free text, or
    - skip (plain 73) and/or ignore the score boost for action.
-4. WIMS never treats “suggestion accepted” as default; **skip is the safe default**.
+4. WS Hub never treats “suggestion accepted” as default; **skip is the safe default**.
 
 **Scoring (`cross_band` factor)** remains a weighted rank input so high-opportunity stations float
 up for *attention*, with a breakdown the operator can inspect (same facts as the panel). Ranking
@@ -964,7 +964,7 @@ antenna list can grow. There is no SteppIR code and no switch code. No
 kind sends a motion command or a set command. The console never learns a
 port, a COM device, or a serial path.
 
-WIMS turns the antennas. WSJT-X has no rotator control, so it is not in
+WS Hub turns the antennas. WSJT-X has no rotator control, so it is not in
 the path. The Flex radio is not in the path. The seat agent opens a TCP
 session to hamlib **rotctld**. A GS-232 serial controller sits on the far
 side of rotctld, and rotctld is the only program that opens the serial
@@ -1009,7 +1009,7 @@ to the other station.
 
 | Place | What shares a PC | What stays true |
 |-------|------------------|-----------------|
-| Home | WSJT-X, WIMS, and the rotators | The agent on that PC starts or finds rotctld and reports headings to the local site server |
+| Home | WSJT-X, WS Hub, and the rotators | The agent on that PC starts or finds rotctld and reports headings to the local site server |
 | Two PCs | Rotors and WSJT-X on one PC; the console, and usually the site server, on the other | The console PC has no serial device and no rotctld port |
 | Networked multi-multi | Each rotor’s seat runs the agent; one site server for the LAN; browsers may be remote | Confirmed links live in the site profile; a turn still goes server → owning agent → rotctld |
 
@@ -1075,14 +1075,14 @@ this step.
   the agent before the position command. A bearing outside them is refused
   in plain words.
 - **One controller of record** (§4.3). The owning agent, through one
-  rotctld session. WIMS does not also open the serial port. A second
+  rotctld session. WS Hub does not also open the serial port. A second
   rotator program on that port is a fault the agent reports.
 
 **Build order.** Each step is usable on its own.
 
 1. **Read-only heading.** The agent finds the rotor, reads name and
    heading, and Operate shows the row. No turn controls.
-2. **Manual turn.** The operator enters a bearing, or a grid that WIMS
+2. **Manual turn.** The operator enters a bearing, or a grid that WS Hub
    converts to a bearing, and can stop. Target and Turning fill in.
    Claims apply.
 3. **Auto-association.** The agent proposes the instance. The operator
@@ -1093,7 +1093,7 @@ this step.
    still started by the operator.
 
 **Outside this decision.** Moon-track elevation. A flag or an environment
-variable. The console learning a port or a serial path. WIMS speaking
+variable. The console learning a port or a serial path. WS Hub speaking
 GS-232 itself on the product path. The lab GS-232 helper already in the
 tree stays a lab stand-in and must not sit on the serial port beside
 rotctld ([wims_antenna.md](wims_antenna.md), Developer). The seat window
@@ -1136,7 +1136,7 @@ Az DX only.
 ### 2.12 Run vs S&P — CQ control boundary (protocol-limited)
 
 **Problem.** Contest ops need both **S&P** (answer someone else’s CQ / **tailend** a finished QSO)
-and **run** (call CQ and auto-answer callers). Early WIMS sketches assumed the console could choose
+and **run** (call CQ and auto-answer callers). Early WS Hub sketches assumed the console could choose
 run vs S&P and drive both. **WSJT-X’s UDP API does not support run mode** (Call CQ + autorespond
 to the pile). Separately, **click-to-work is richer than “CQ only”**: GridTracker2 already starts
 TX against non-CQ roster lines by echoing the decode as Reply — useful for **tailending**. This
@@ -1147,9 +1147,9 @@ section is the design resolution for both facts.
 | Wanted action | UDP support | Practical outcome |
 |---------------|-------------|-------------------|
 | Start QSO from a **retained decode** (CQ, **73** tailend, …) | **Reply** (msg 4) echoing that decode’s fields | **Click-to-work** (GT2 `initiateQso` pattern) |
-| Enable Tx / generate standard **CQ** msgs / Call 1st (run) | **None** | Cannot enter **run** from WIMS |
+| Enable Tx / generate standard **CQ** msgs / Call 1st (run) | **None** | Cannot enter **run** from WS Hub |
 | One free-text “CQ MYCALL GRID” TX | Free Text + Send (msg 9) | One shot only; **no auto-sequence** after it |
-| Autorespond to callers **while we CQ** | WSJT-X internal auto-seq / Call 1st only | **Seat WSJT-X UI**, not WIMS |
+| Autorespond to callers **while we CQ** | WSJT-X internal auto-seq / Call 1st only | **Seat WSJT-X UI**, not WS Hub |
 | Stop TX mid-cycle or end of period | **Halt Tx** (msg 8) | Works for S&P and observed run |
 | Set DX call/grid, generate messages only | **Configure** (msg 15), Generate Messages=true | Fills Tx1–Tx6; **does not** Enable Tx (GT2 secondary action) |
 
@@ -1171,7 +1171,7 @@ NetworkMessage.hpp prose):
    **that** QSO — “as if the station was calling CQ” from the operator’s point of view.
 
 So: **NetworkMessage.hpp’s “CQ or QRZ only” is incomplete.** Live behavior also accepts **73**
-for auto-TX (tailend), and with Hold Tx Freq can accept more. WIMS should treat Reply as
+for auto-TX (tailend), and with Hold Tx Freq can accept more. WS Hub should treat Reply as
 **“work this retained decode”**, not “CQ filter only.”
 
 **Still not supported over UDP:** starting our own CQ and staying in run to autorespond to the
@@ -1179,7 +1179,7 @@ pile. That remains seat WSJT-X UI.
 
 #### Design decision
 
-1. **S&P + tailend is the first-class WIMS TX path.** Console operator: rank → click roster
+1. **S&P + tailend is the first-class WS Hub TX path.** Console operator: rank → click roster
    station → claim + arbiter → **Reply** echoing the **retained Decode** for that row (same
    mechanism as GridTracker2 call-roster click). Prefer the best retained line for that call on
    that instance (newest CQ, else newest **73** for tailend, else newest workable decode).
@@ -1194,27 +1194,27 @@ pile. That remains seat WSJT-X UI.
    the **WSJT-X UI** on the seat PC (or remote desktop / KVM / screen-share **to that seat** —
    not inventing CQ over UDP). Typical seat setup: generate standard messages, Enable Tx, Call 1st
    (or manual double-click on callers) as the local op prefers.
-4. **WIMS does not ship a product “Call CQ” control.** Experimental FreeText CQ (`--enable-cq-freetext`)
+4. **WS Hub does not ship a product “Call CQ” control.** Experimental FreeText CQ (`--enable-cq-freetext`)
    may remain as a **lab spike only** (one-shot free text, no autorespond). Default off; never
    presented as run mode; not required for M5/M6.
 5. **Configure → Generate Messages** may be used later as a non-TX helper (“load this call into
    WSJT-X without enabling TX”) — secondary to Reply click-to-work; claim-gated if exposed.
    Work already sends a **grid-only** Configure after Reply when the decode has no square
    and memory has one inside the rover window. Generate Messages is false on that datagram.
-6. **WIMS still owns interlock, halt, visibility, and ranking while a seat runs.** Observing a
-   local CQ is not “unattended automation by WIMS” — the human at the seat (or RDP session)
+6. **WS Hub still owns interlock, halt, visibility, and ranking while a seat runs.** Observing a
+   local CQ is not “unattended automation by WS Hub” — the human at the seat (or RDP session)
    enabled TX. Fail-safe Halt / SSB-CW mute still apply.
 
 #### Two complementary roles per instance
 
-| Role | Who starts RF | CQ / autorespond | WIMS does |
+| Role | Who starts RF | CQ / autorespond | WS Hub does |
 |------|---------------|------------------|-----------|
-| **S&P / tailend (WIMS-driven)** | Console click-to-work → Reply on retained decode | N/A (we are not CQing) | Roster (CQ + mid-QSO + 73), rank, Reply, Free Text close, claim, arbiter, halt |
+| **S&P / tailend (WS Hub-driven)** | Console click-to-work → Reply on retained decode | N/A (we are not CQing) | Roster (CQ + mid-QSO + 73), rank, Reply, Free Text close, claim, arbiter, halt |
 | **Run (WSJT-X-driven)** | Op in WSJT-X: Enable Tx + CQ | **WSJT-X** auto-seq / Call 1st | Observe Status/decodes; **calling-us** alerts; rank callers; Halt / interlock; optional recommend “stop run, S&P/tailend this mult” |
 | **Idle / monitor** | Nobody | — | Roster + health only; RX-only (fail-safe) |
 
-An instance may **flip** between roles over the contest (open band → run at seat; dead → WIMS S&P
-from console). Role is **not** a WIMS UDP command — it is operational practice + observed state.
+An instance may **flip** between roles over the contest (open band → run at seat; dead → WS Hub S&P
+from console). Role is **not** a WS Hub UDP command — it is operational practice + observed state.
 
 #### Observed mode (console honesty)
 
@@ -1225,26 +1225,26 @@ Infer and show per instance from WSJT-X **Status** (and recent Tx message), e.g.
 
 UI rules:
 
-- When `run_local`: banner **“Running CQ in WSJT-X — autorespond is local; WIMS will not Call CQ.”**
+- When `run_local`: banner **“Running CQ in WSJT-X — autorespond is local; WS Hub will not Call CQ.”**
   Click-to-work remains available to **interrupt** into S&P/tailend on a high-value station
   (after Halt if needed — exact sequencing is implementation detail, claim-gated).
 - When idle/S&P: no Call CQ button; empty-seat help text points at **local WSJT-X or RDP to seat**
   if the op wants to run.
 - **Calling-us** rows (A3) stay high priority especially in run — the local auto-seq is answering
-  them; WIMS makes sure the console op sees who is in the pile if they are multi-band covering.
+  them; WS Hub makes sure the console op sees who is in the pile if they are multi-band covering.
 - Click-to-work enabled when a **Reply-capable retained decode** exists for that row (CQ/QRZ/73
   preferred; greyed with reason if only a stale mid-exchange line and Hold Tx Freq is not assumed).
 
 #### Multi-op / empty-seat implications
 
-- **Empty seat covered by WIMS console** = **S&P + tailend** product story (M5/M6). That matches
-  the protocol. “WIMS runs CQ on empty 222 overnight” is **out of scope** without a human in the
+- **Empty seat covered by WS Hub console** = **S&P + tailend** product story (M5/M6). That matches
+  the protocol. “WS Hub runs CQ on empty 222 overnight” is **out of scope** without a human in the
   WSJT-X UI (local or RDP) enabling run — and that human is the operator of record for run TX,
   consistent with **no automated/unattended TX** (§4.2).
-- **Local seat op running CQ** + **WIMS console watching** = normal: WIMS is assist + interlock +
+- **Local seat op running CQ** + **WS Hub console watching** = normal: WS Hub is assist + interlock +
   fleet roster; does not fight WSJT-X for CQ generation.
 - **Handoff run → S&P:** local op (or RDP) Disable Tx / Halt; console claim; click-to-work.
-- **Handoff S&P → run:** finish or Halt the WIMS QSO; op enables CQ in WSJT-X.
+- **Handoff S&P → run:** finish or Halt the WS Hub QSO; op enables CQ in WSJT-X.
 
 #### What we deliberately do *not* do
 
@@ -1264,14 +1264,14 @@ UI rules:
   (time/snr/dt/df/mode/message/…) so Reply can match Band Activity.
 - **No global TX arm / Enable / Disable (RESOLVED — GT2 workflow).** Operate does **not** have a
   master Enable TX / Disable TX switch. **Human initiation is the roster action itself:** click a
-  call-roster **line** (or its Work control) → WIMS sends Reply — same mental model as
+  call-roster **line** (or its Work control) → WS Hub sends Reply — same mental model as
   **GridTracker2** (select station → work). No automated/unattended TX: nothing transmits until
   that click. Gates that remain: `--no-tx` read-only, control claim (§4.5), arbiter ≤1 per group
   (§3.4), readiness fail-soft. **`halt` is always available** (this console’s Work only; not
   a global stop). State block: `enabled` /
   `can_tx` (wired controller) — no `armed` flag.
 - **§3.5** — “run vs S&P” is an **advisory recommendation** (conditions open → suggest seat run;
-  thin → suggest WIMS S&P/tailend), not an actuator. Give-up still applies to **WIMS-started**
+  thin → suggest WS Hub S&P/tailend), not an actuator. Give-up still applies to **WS Hub-started**
   QSOs. Ranking should value **fresh 73** on needed mults (tailend opportunity), not only CQs.
 - **§3.12 / console** — click-to-work when a Reply-capable retained decode is available; show
   S&P vs Tailend affordance; mode banner per § above.
@@ -1280,18 +1280,18 @@ UI rules:
 
 #### Acceptance (design-level)
 
-- Documented and UI-visible that **run ≠ WIMS UDP**.
+- Documented and UI-visible that **run ≠ WS Hub UDP**.
 - Live S&P: click CQ on roster → WSJT-X sequences QSO (Reply path).
 - Live **tailend**: click a station whose last useful line is **73** → WSJT-X enables TX / generates
   msgs toward that call (GT2-equivalent); requires decode still in Band Activity.
-- Live run: CQ + answer callers only when Enable Tx / Call 1st done in WSJT-X; WIMS shows
+- Live run: CQ + answer callers only when Enable Tx / Call 1st done in WSJT-X; WS Hub shows
   transmitting + calling-us without having issued a Call CQ.
 - FreeText one-shot CQ never required for contest operation.
 
 ### 2.13 Fleet inventory, dynamic membership, and console sessions
 
 **Need (operator scenarios, 2026-08-12).** The operator opens the browser on **:8787** and must
-see an **inventory of equipment known to WIMS** that stays current as nodes come and go.
+see an **inventory of equipment known to WS Hub** that stays current as nodes come and go.
 Several related operating scenarios (FT8 control for a band; SSB/CW watch-only roster; slow-band
 takeover) all depend on the same membership + inventory model.
 
@@ -1309,24 +1309,24 @@ culls columns) so the operator can find data without hunting. Minimum inventory 
 | **Operator consoles** | callsign + name, bands subscribed / claimed, last action age, session liveness | §2.7 / §2.13.5 |
 | **Rotators** (when present) | id, az, moving, mapped band(s) | §2.10 |
 
-**Convention — how WSJT-X joins WIMS.** Instances **multicast** WSJT-X protocol traffic
+**Convention — how WSJT-X joins WS Hub.** Instances **multicast** WSJT-X protocol traffic
 (Heartbeat / Status / Decode / …) to the fleet group + **band stream port**
-([wims_networking.md](wims_networking.md) §4: `224.0.0.73:2237`). WIMS is a **subscriber**
+([wims_networking.md](wims_networking.md) §4: `224.0.0.73:2237`). WS Hub is a **subscriber**
 to those streams (solo: one port; fleet server: all declared ports). There is no separate
-“register with WIMS” handshake for WSJT-X beyond correct Reporting settings + Accept UDP for
+“register with WS Hub” handshake for WSJT-X beyond correct Reporting settings + Accept UDP for
 control. Discovery = first datagram + ongoing health from silence prune (§3.15).
 
 #### 2.13.2 Overlap control: inhibit *and* Halt (not either-or for safety)
 
-WIMS uses **both** layers; they are not alternate product modes that replace each other:
+WS Hub uses **both** layers; they are not alternate product modes that replace each other:
 
 | Mechanism | Role | Time scale |
 |-----------|------|------------|
-| **TX arbiter** (server) | ≤1 WIMS-granted TX per resource group; preventive “don’t start if SSB keyed” | Before Reply / work |
+| **TX arbiter** (server) | ≤1 WS Hub-granted TX per resource group; preventive “don’t start if SSB keyed” | Before Reply / work |
 | **TX Inhibit gate** (in patched WSJT-X + Key agent) | SSB/CW key-down stops RF mid-cycle (puncture); KEY agents hold **assigned target lists** | ≤10 ms path |
-| **UDP Halt Tx** | Cleanup / panic / end WIMS QSO; **no UDP Enable** — “halt/enable” is not a symmetric pair | ~200–400 ms to PTT-down |
+| **UDP Halt Tx** | Cleanup / panic / end WS Hub QSO; **no UDP Enable** — “halt/enable” is not a symmetric pair | ~200–400 ms to PTT-down |
 
-**Product wording:** WIMS does **not** “Enable Tx” over UDP. Human initiation is roster click
+**Product wording:** WS Hub does **not** “Enable Tx” over UDP. Human initiation is roster click
 (Reply) or seat WSJT-X UI. **Halt** is always available. **Inhibit** is the SSB/CW priority
 path. Seats without the inhibit patch fall back to audio-mute + Halt cleanup (§3.4.1).
 
@@ -1335,19 +1335,19 @@ path. Seats without the inhibit patch fall back to audio-mute + Halt cleanup (§
 - **N KEY agents on a band are allowed** (identified by Key-agent registration: station id +
   band + last seen).
 - **Each KEY agent receives an assignment list** of WSJT-X inhibit targets on that band
-  (function #5: server pushes list; agent persists last list so interlock survives WIMS outage —
+  (function #5: server pushes list; agent persists last list so interlock survives WS Hub outage —
   [wims_tx_inhibit.md](wims_tx_inhibit.md) §4.4).
-- **WIMS discovers WSJT-X on a band and proposes / maintains them on the control list** for
+- **WS Hub discovers WSJT-X on a band and proposes / maintains them on the control list** for
   that band’s KEY agent(s) (auto-suggest new instances; operator confirms or Instance Profile
-  pins the map). When a WSJT-X instance appears/disappears, WIMS **updates KEY target lists**.
-- **WIMS does not arbitrate TX overlap among multiple SSB/CW stations on the same band.**
-  That is **out of scope for WIMS** — station RF practice / hardware OR of KEY lines / external
-  SO*R interlock (same decision as inhibit multi-holder: one logical inhibit into WSJT-X). WIMS
+  pins the map). When a WSJT-X instance appears/disappears, WS Hub **updates KEY target lists**.
+- **WS Hub does not arbitrate TX overlap among multiple SSB/CW stations on the same band.**
+  That is **out of scope for WS Hub** — station RF practice / hardware OR of KEY lines / external
+  SO*R interlock (same decision as inhibit multi-holder: one logical inhibit into WSJT-X). WS Hub
   only protects **digital vs human voice/CW** on that band.
 
 #### 2.13.4 WSJT-X ↔ N1MM binding verification
 
-WIMS **verifies** that each digi band has a coherent logger:
+WS Hub **verifies** that each digi band has a coherent logger:
 
 1. Which N1MM process(es) are **alive** (Broadcast Data / agent → site).
 2. Which N1MM is the **logger-of-record** for that band (one **N1MM agent Log** path per
@@ -1363,11 +1363,11 @@ WIMS **verifies** that each digi band has a coherent logger:
 | **One digital N1MM (agent Log) + separate SSB/CW N1MM** that does **not** take digi QSOs | **Yes, observe both** | Digital N1MM remains logger-of-record for FT8; SSB N1MM contributes RadioInfo / voice-log presence. Dupe/mult for **digital** still from the contest digital log (or merged copy if the station intentionally uses one multi-contest DB). |
 | **Multiple N1MMs broadcasting Contacts for different contests** | **Yes, pick active contest** | Already: Setup contest picker + resync; do not merge unrelated contests into one dupe key. |
 
-WIMS may **display** every N1MM it hears; it must **not** treat two digi log paths as OK.
+WS Hub may **display** every N1MM it hears; it must **not** treat two digi log paths as OK.
 
 #### 2.13.5 Dynamic membership (come and go)
 
-WIMS continuously updates membership; no full restart required for normal churn:
+WS Hub continuously updates membership; no full restart required for normal churn:
 
 | Entity | Join signal | Leave / prune |
 |--------|-------------|----------------|
@@ -1377,7 +1377,7 @@ WIMS continuously updates membership; no full restart required for normal churn:
 | KEY target lists | Derived from live WSJT set + assignment policy | Re-push when instances join/leave or operator edits map |
 | Operator browser | Identify (call/name) + subscribe/claim heartbeats via API/SSE | Session idle TTL → drop from multi-op widget; claims auto-expire (§4.5) |
 
-#### 2.13.6 What WIMS monitors about browser windows
+#### 2.13.6 What WS Hub monitors about browser windows
 
 **Not** a full remote-desktop of the browser. Only **session coordination metadata**:
 
@@ -1390,7 +1390,7 @@ WIMS continuously updates membership; no full restart required for normal churn:
 | **Session liveness** (SSE connected / last poll) | “Console open” vs abandoned tab |
 | Optional: page focus (Operate vs Status) | Ops only; not required for safety |
 
-WIMS does **not** need mouse position, form field contents, or authentication. Identity is
+WS Hub does **not** need mouse position, form field contents, or authentication. Identity is
 good-will coordination, not security.
 
 #### 2.13.7 Operating scenarios (acceptance sketches)
@@ -1414,18 +1414,18 @@ These are design acceptance stories; implementation tracks M5–M7 / status todo
 
 ### 2.14 Band sharing: interlock vs coordinated (manual) handoff
 
-**Origin.** WIMS began as an **interlock system**: inhibit WSJT-X in real time so SSB/CW can
+**Origin.** WS Hub began as an **interlock system**: inhibit WSJT-X in real time so SSB/CW can
 take the band under the one-signal rule without waiting for FT8 cycles. That remains the
 **primary safety product** where KEY + gate are deployed ([wims_tx_inhibit.md](wims_tx_inhibit.md),
 §3.4.1).
 
-**Additional requirement (2026-08-12).** WIMS must also support bands where **WSJT-X and
-SSB/CW hand off operation manually**. In that mode WIMS’s job is **information for operators**,
+**Additional requirement (2026-08-12).** WS Hub must also support bands where **WSJT-X and
+SSB/CW hand off operation manually**. In that mode WS Hub’s job is **information for operators**,
 not automatic inhibit. Humans decide when digital stops and voice/CW starts (and the reverse).
 
 #### 2.14.1 Policy (per band / resource group)
 
-| Policy | Automatic RF stop? | WIMS role | Typical use |
+| Policy | Automatic RF stop? | WS Hub role | Typical use |
 |--------|--------------------|-----------|-------------|
 | **`interlock`** | **Yes** — KEY / inhibit path (and preventive “don’t start Work if SSB keyed”) | Enforce + show status | Multi-multi contest when KEY + gate ready |
 | **`coordinated`** | **No** — no inhibit push, no audio mute from KEY | **Inform only** — same status both sides | Lab; seats without KEY; ops prefer manual etiquette; mixed periods |
@@ -1435,7 +1435,7 @@ not automatic inhibit. Humans decide when digital stops and voice/CW starts (and
 - **Default when KEY path not configured:** `coordinated` (fail-soft: never pretend interlock
   works without hardware). **Default when KEY + targets assigned:** `interlock`.
 - Changing policy is an operator/setup action (Status/Setup), logged; not a silent auto flip.
-- **FT8-vs-FT8** zero-overlap (arbiter ≤1 per group for WIMS-granted TX) is **independent** of
+- **FT8-vs-FT8** zero-overlap (arbiter ≤1 per group for WS Hub-granted TX) is **independent** of
   this policy — it always applies to console-driven Work.
 
 #### 2.14.2 What “information” means in coordinated mode
@@ -1448,18 +1448,18 @@ sides see (Operate banner + Status section + optional SSB “small client” vie
 | **SSB/CW TX / KEY state** (idle / keyed, station id) | Digital op knows voice is live — hold Work / finish QSO |
 | **SSB/CW frequency / mode** (when N1MM RadioInfo available) | Context for “they’re on run freq” |
 | **WSJT-X TX / cycle** (transmitting, period, dx_call if in QSO) | SSB op can wait for end of over / end of QSO |
-| **WIMS Work in progress** (claim holder, call being worked) | SSB knows digital is mid-contact |
+| **WS Hub Work in progress** (claim holder, call being worked) | SSB knows digital is mid-contact |
 | **Band policy** badge (`INTERLOCK` / `COORDINATED`) | No ambiguity about whether RF will auto-stop |
 | **“Wants the band” / handoff intent** (optional soft flag) | Either side can mark “requesting band” without keying or inhibiting |
 
-In **coordinated** mode, WIMS **must not**:
+In **coordinated** mode, WS Hub **must not**:
 
 - send inhibit holds from KEY agents to WSJT-X for policy reasons (KEY agent may still run for
   telemetry only, or be disabled — config);
 - refuse Work solely because SSB is keyed (optional **advisory** warning is OK; hard block is
   interlock-mode behavior);
 - imply that one-signal is software-guaranteed — UI copy: *“Coordinated band — operators hand
-  off; WIMS does not inhibit.”*
+  off; WS Hub does not inhibit.”*
 
 In **interlock** mode, the same status remains visible (SSB op still benefits from seeing an
 in-progress FT8 QSO before keying when possible); actuation adds automatic inhibit.
@@ -1470,7 +1470,7 @@ in-progress FT8 QSO before keying when possible); actuation adds automatic inhib
    waits for TX→RX or claims clear → digital op finishes or Halts → SSB keys. No inhibit
    fired. Optional: SSB sets “requesting band”; digital roster shows banner.
 2. **Digital wants the band after voice** — FT8 op sees SSB KEY idle + optional clear flag →
-   starts Work / seat CQ. WIMS does not “enable” anything; it only shows clear.
+   starts Work / seat CQ. WS Hub does not “enable” anything; it only shows clear.
 3. **Policy switch mid-contest** — Setup sets band to `interlock` after KEY wiring verified;
    Status badge flips; KEY agents begin fan-out. Reverse to `coordinated` if gate fails (fail
    open to RX on inhibit path is separate; policy reverts inform-only).
@@ -1484,12 +1484,12 @@ in-progress FT8 QSO before keying when possible); actuation adds automatic inhib
 | KEY → TX Inhibit | **On** (safety path) | **Off** for priority (telemetry optional) |
 | Preventive “no Work while SSB keyed” | **On** | **Off** (advisory toast optional) |
 | UDP Halt (panic / end QSO) | Available | Available |
-| Arbiter (WIMS multi-instance TX) | On | On |
+| Arbiter (WS Hub multi-instance TX) | On | On |
 | Multi-op claim / subscribe | On | On |
 | Inventory / SSB status on roster | On | On (primary value) |
 
 **Not a third “disable all safety” mode.** Coordinated still assumes cooperative operators and
-contest rules; WIMS simply does not automate the stop. Panic Halt and readiness fail-soft remain.
+contest rules; WS Hub simply does not automate the stop. Panic Halt and readiness fail-soft remain.
 
 ---
 
@@ -1515,7 +1515,7 @@ send no bytes. That is not a working login. The first saved copy of that
 factory pair is moved to K1TTT. Picking VE7CC again keeps it.
 
 Login uses the callsign WSJT-X (or the N1MM logger, or a seat-agent config) has
-already reported. WIMS sends one blank line so a node that waits for the
+already reported. WS Hub sends one blank line so a node that waits for the
 client will speak, then the callsign when it sees a login prompt (`login:`,
 `call:`, `callsign:`, or `Please enter your call`, any case). That covers
 AR-Cluster, DX-Spider, and CC Cluster. It does not post a spot, an
@@ -1529,12 +1529,12 @@ yet is `connected, no spots yet`. The callsign has been sent and no spot
 line has arrived is `logged in, no spots yet`. Spot lines are `logged in, N
 spots, M needed`. After about 60 seconds with no banner the line is
 `Cluster: node sent nothing. Try another node on Setup.` Hover shows how
-long since the last spot line. WIMS will not send a filter command.
+long since the last spot line. WS Hub will not send a filter command.
 
 A spot is kept when all of these are true:
 
 - The frequency is on an amateur band the operator left checked. The set
-  defaults to every band WIMS already names (160 m through 1.2 cm). Saving
+  defaults to every band WS Hub already names (160 m through 1.2 cm). Saving
   with every box checked stores “all”, so a band added later stays included.
 - The inferred mode is one the operator left checked on Operate (SSB, CW,
   FT8, FT4, or Other). All start on. Saving with every box checked stores
@@ -1542,13 +1542,13 @@ A spot is kept when all of these are true:
 - The station is still needed on **that spot’s** band and mode under the
   current Goal. The same classify path as the roster decides this. A dupe is
   not listed.
-- A grid is in the comment, or WIMS has already heard one for that call.
+- A grid is in the comment, or WS Hub has already heard one for that call.
   `RR73` is not a grid.
 - The distance from the station grid WSJT-X reports is inside the workable
   window for **that band** (and for MSK144, that mode). The windows are a
   choice, written in [scoring.md](scoring.md). No station grid means nothing
   is listed, and the status says why.
-- The spot is younger than 15 minutes. Age is when WIMS received the line.
+- The spot is younger than 15 minutes. Age is when WS Hub received the line.
 
 The mode is inferred: a word in the comment wins (FT8, FT4, MSK144, Q65, CW,
 SSB, and the other tokens in `integrations/cluster/modes.py`), then the nearest
@@ -1573,7 +1573,7 @@ Country, Band, Mode, Grid, Freq, Az DX, km, Age, Score): same order, same
 headers, same content widths. The DX badge is the roster’s one place name,
 from that same check, on this spot’s band and mode. Spotter sits where
 Source sits on the roster. QSY sits just before Score. Freq is the spotted
-frequency. Age is when WIMS received the line. Score is the spot score,
+frequency. Age is when WS Hub received the line. Score is the spot score,
 including the retune cost. A remote browser sees the same list on the live
 update.
 
@@ -1599,17 +1599,17 @@ Build and test each module independently against the test bed (§5) before integ
 | 3.1 | **UDP listener/parser** | Decode WSJT-X (and N1MM) datagrams into typed events; **extract grid** from `CQ CALL GRID` / Tx1 decode text | UDP from all instances | Normalized event stream (incl. grid) |
 | 3.2 | **UDP controller/sender** | Product TX path is **S&P + tailend (§2.12):** arbiter grant + retained Decode → `reply(instance, decode)` (GT2 echo of decode fields — CQ/QRZ **or 73**); `halt(instance)`; **Free Text** (closing / QSY — §2.8); Replay. **No supported `call_cq`** — cannot start run/autorespond (lab FreeText-CQ flag only, default off). Claim-gated (§3.4/§4.5) | Commands from arbiter/engine | UDP to WSJT-X |
 | 3.3 | **Multi-instance manager** | Track N instances; map **port/ID ↔ band/mode ↔ antenna/direction ↔ rotator**; lifecycle (launch/close incl. warning-window dismissal). Includes a **per-station local agent** — full responsibility matrix **§3.3.1** (setup test, interlock mute, rotator I/O, thumbnails, process health, …). Also a **setup wizard**: collect each **Instance Profile** (§3.14) via a form, auto-discover what it can, **validate** before on-air, verify connectivity to every WSJT-X/N1MM instance, report loss of comms (§Goals) | Heartbeats, profiles, mute/rotator commands | Instance registry, agent reports, mute/rotator actuation, thumbnails, setup/validation status |
-| 3.4 | **Interlock / TX arbiter** | Grant one transmitter **per shared-resource group** (transmitter/antenna/PA chain, §3.14) — *not* one global token; different bands/vehicles TX concurrently by design. Within a group: zero overlap, no interleaving, single-holder **by construction**. An `OverlapDetector` independently watches *observed* TX state as defence-in-depth. Enforces SSB/CW priority two ways: a **preventive gate** (won't initiate a WSJT-X TX on a band where an SSB/CW station is keyed — band-by-band per contest rules) and a **fast reactive TX Inhibit** (the in-WSJT-X PTT gate, [wims_tx_inhibit.md](wims_tx_inhibit.md) — ≤10 ms key-down to RF-gone with puncture-and-resume; the audio-gain mute of §1.1 remains the fallback for CAT-PTT seats and unpatched WSJT-X). Full design: §3.4.1. **Constraint:** on a WIMS-managed instance, **no second remote app** (GridTracker click-to-work, JTAlert, etc.) may send Reply/Tx — that bypasses the arbiter and can cause overlap (§4.3). **Local WSJT-X UI run/CQ is allowed** (§2.12): the seat operator Enable Tx / Call 1st is attended TX, not a second remote controller; WIMS still observes TX and enforces interlock/Halt/mute. **Console-initiated TX is gated by the control claim (§4.5):** only the claim-holding console may Reply/FreeText; nobody steering and no local Enable Tx → RX-only (fail-safe) | TX requests, instance states, SSB/CW priority, claim state | TX grant/deny, fast-mute command |
-| 3.5 | **Decision / recommendation engine** | **Advisory, not autonomous** — ranks & recommends for the WIMS operator, who **initiates every S&P/tailend TX by click-to-work (Reply)**; WIMS never transmits unattended. Suggest next-best **CQ or fresh-73** target, **advisory** run vs S&P (run means “use WSJT-X UI / seat”, not a WIMS actuator — §2.12), needed > dupe, give-up on **WIMS-started** QSOs. Maintains a **`call→current-grid` map** (with staleness) so a **rover** reappearing in a new grid is treated as a fresh QSO + candidate mult, ranked high; mult value is per `grid × band`. The grid map is **authoritative grid memory** (accumulated across *all* decodes, GridTracker-style but better-retained) — load-bearing because mult = grid×band and WSJT-X often lacks a station's grid in a given decode (e.g. `CALL CALL +08`); WIMS may **supply the remembered grid to WSJT-X for logging** so the QSO records the correct grid → N1MM computes the right mult (mechanism TBD, Open questions). **N1MM is the multiplier authority:** for *logged* QSOs WIMS defers to N1MM's `ismultiplier`; for *prospective* roster candidates (which N1MM can't judge until logged) WIMS self-computes new-mult with the identical `grid×band` rule and continuously **reconciles** to N1MM's verdicts. **No LoTW/eQSL/award confirmation** — that is general-operating chasing (GridTracker), not contest dupe/mult. Ranks the roster by **expected score gain** via a **scoring model** (§3.11) — QSO points + mult value per the contest. **Geometry-aware** (§3.14): only works/ranks stations a given instance's antenna can actually hear — within a fixed beam's sector, or reachable by a re-point inside the soft az limits. The scoring model is **pluggable + explainable** — score = sum of named weighted **factors** (new_mult, points, snr, cq, rover, **cross_band**) with a per-factor **breakdown** the operator sees; strategies swappable by name; **weights vary by band condition** (open/marginal/dead); dupe/non-CQ/unreachable excluded with reason. **`cross_band` (C7 / §2.9):** advisory rank boost when the same call may offer needed contacts on *other* fleet bands — evidence (a) **current contest** log/decodes, (b) **previous contest logs**. Factor is secondary: engine also emits **structured cross-band evidence** on the roster/state contract so the operator can **assess other-band ability and decide** whether to prioritize or send a QSY (§2.8). Score alone must never hide the evidence. Explainable e.g. `cross_band +12 (needed 432; prior Jun on 432)` | Decodes+grid, dupe/mult status, scoring model, instance profiles, **station history (prior contests)** | Ranked + explained targets, **cross-band evidence for operator assessment**, optional QSY *suggestions* (not auto) |
-| 3.6 | **Logger interface** (`LogSource` backend; **N1MM = first impl**) | Abstract behind a small **backend interface** so other loggers (DXLog.net, Log4OM, N3FJP, WSJT-X-native…) plug in later — the engine depends only on the normalized `LoggedQso` + interface, never on N1MM specifics. **Minimal portable contract** (because WIMS self-computes dupe/mult): `seed()` snapshot + `live_events()` add/update/delete stream + `resync()`; optional `mult/points` if the backend supplies it (N1MM does, others may not). **No dedicated WIMS N1MM** — since all contest N1MMs are networked and share one merged log, the **server reads from *any* designated networked N1MM** (e.g. the SSB/CW position's). The logger-of-record invariant (one N1MM *ingests* each WSJT-X stream) is independent of which N1MM WIMS *reads*. **N1MM impl:** seed by reading a `DXLOG` `.s3db` read-only, live via `<contactinfo>` broadcasts (12060) from any N1MM, dedup by `ID`. Maintain log copy keyed on `(call, band, grid)`; self-compute dupe + new-mult (grid×band). Logging path stays WSJT-X→logger; WIMS reads, never double-logs; grid from WSJT-X decode. **Station history for C7:** optionally seed a lightweight `call → {bands seen/worked}` map from **prior contest** `DXLOG` rows (multi-contest `.s3db` already listed on Setup) without treating them as this-contest dupes — history only feeds evidence/scoring/QSY suggestions (§2.9), never the live dupe key | seed snapshot, live log events, WSJT-X grid, **optional prior-contest DXLOG** | Log copy, dupe/mult verdicts, export trigger, **station band-history (for operator assessment)** |
-| 3.7 | **GridTracker interface** | GridTracker is an **optional, parallel read-only viewer** (multicast subscriber, §4.3) — coexists, not in WIMS's control or logging path. WIMS's own roster (§3.12) supersedes its operating role; GridTracker's residual value is its map/viz + ADIF/log-export integrations. Interface = leave the multicast open for it; optionally feed log export | Log, QSO events | (optional) export to GT |
+| 3.4 | **Interlock / TX arbiter** | Grant one transmitter **per shared-resource group** (transmitter/antenna/PA chain, §3.14) — *not* one global token; different bands/vehicles TX concurrently by design. Within a group: zero overlap, no interleaving, single-holder **by construction**. An `OverlapDetector` independently watches *observed* TX state as defence-in-depth. Enforces SSB/CW priority two ways: a **preventive gate** (won't initiate a WSJT-X TX on a band where an SSB/CW station is keyed — band-by-band per contest rules) and a **fast reactive TX Inhibit** (the in-WSJT-X PTT gate, [wims_tx_inhibit.md](wims_tx_inhibit.md) — ≤10 ms key-down to RF-gone with puncture-and-resume; the audio-gain mute of §1.1 remains the fallback for CAT-PTT seats and unpatched WSJT-X). Full design: §3.4.1. **Constraint:** on a WS Hub-managed instance, **no second remote app** (GridTracker click-to-work, JTAlert, etc.) may send Reply/Tx — that bypasses the arbiter and can cause overlap (§4.3). **Local WSJT-X UI run/CQ is allowed** (§2.12): the seat operator Enable Tx / Call 1st is attended TX, not a second remote controller; WS Hub still observes TX and enforces interlock/Halt/mute. **Console-initiated TX is gated by the control claim (§4.5):** only the claim-holding console may Reply/FreeText; nobody steering and no local Enable Tx → RX-only (fail-safe) | TX requests, instance states, SSB/CW priority, claim state | TX grant/deny, fast-mute command |
+| 3.5 | **Decision / recommendation engine** | **Advisory, not autonomous** — ranks & recommends for the WS Hub operator, who **initiates every S&P/tailend TX by click-to-work (Reply)**; WS Hub never transmits unattended. Suggest next-best **CQ or fresh-73** target, **advisory** run vs S&P (run means “use WSJT-X UI / seat”, not a WS Hub actuator — §2.12), needed > dupe, give-up on **WS Hub-started** QSOs. Maintains a **`call→current-grid` map** (with staleness) so a **rover** reappearing in a new grid is treated as a fresh QSO + candidate mult, ranked high; mult value is per `grid × band`. The grid map is **authoritative grid memory** (accumulated across *all* decodes, GridTracker-style but better-retained) — load-bearing because mult = grid×band and WSJT-X often lacks a station's grid in a given decode (e.g. `CALL CALL +08`); WS Hub may **supply the remembered grid to WSJT-X for logging** so the QSO records the correct grid → N1MM computes the right mult (mechanism TBD, Open questions). **N1MM is the multiplier authority:** for *logged* QSOs WS Hub defers to N1MM's `ismultiplier`; for *prospective* roster candidates (which N1MM can't judge until logged) WS Hub self-computes new-mult with the identical `grid×band` rule and continuously **reconciles** to N1MM's verdicts. **No LoTW/eQSL/award confirmation** — that is general-operating chasing (GridTracker), not contest dupe/mult. Ranks the roster by **expected score gain** via a **scoring model** (§3.11) — QSO points + mult value per the contest. **Geometry-aware** (§3.14): only works/ranks stations a given instance's antenna can actually hear — within a fixed beam's sector, or reachable by a re-point inside the soft az limits. The scoring model is **pluggable + explainable** — score = sum of named weighted **factors** (new_mult, points, snr, cq, rover, **cross_band**) with a per-factor **breakdown** the operator sees; strategies swappable by name; **weights vary by band condition** (open/marginal/dead); dupe/non-CQ/unreachable excluded with reason. **`cross_band` (C7 / §2.9):** advisory rank boost when the same call may offer needed contacts on *other* fleet bands — evidence (a) **current contest** log/decodes, (b) **previous contest logs**. Factor is secondary: engine also emits **structured cross-band evidence** on the roster/state contract so the operator can **assess other-band ability and decide** whether to prioritize or send a QSY (§2.8). Score alone must never hide the evidence. Explainable e.g. `cross_band +12 (needed 432; prior Jun on 432)` | Decodes+grid, dupe/mult status, scoring model, instance profiles, **station history (prior contests)** | Ranked + explained targets, **cross-band evidence for operator assessment**, optional QSY *suggestions* (not auto) |
+| 3.6 | **Logger interface** (`LogSource` backend; **N1MM = first impl**) | Abstract behind a small **backend interface** so other loggers (DXLog.net, Log4OM, N3FJP, WSJT-X-native…) plug in later — the engine depends only on the normalized `LoggedQso` + interface, never on N1MM specifics. **Minimal portable contract** (because WS Hub self-computes dupe/mult): `seed()` snapshot + `live_events()` add/update/delete stream + `resync()`; optional `mult/points` if the backend supplies it (N1MM does, others may not). **No dedicated WS Hub N1MM** — since all contest N1MMs are networked and share one merged log, the **server reads from *any* designated networked N1MM** (e.g. the SSB/CW position's). The logger-of-record invariant (one N1MM *ingests* each WSJT-X stream) is independent of which N1MM WS Hub *reads*. **N1MM impl:** seed by reading a `DXLOG` `.s3db` read-only, live via `<contactinfo>` broadcasts (12060) from any N1MM, dedup by `ID`. Maintain log copy keyed on `(call, band, grid)`; self-compute dupe + new-mult (grid×band). Logging path stays WSJT-X→logger; WS Hub reads, never double-logs; grid from WSJT-X decode. **Station history for C7:** optionally seed a lightweight `call → {bands seen/worked}` map from **prior contest** `DXLOG` rows (multi-contest `.s3db` already listed on Setup) without treating them as this-contest dupes — history only feeds evidence/scoring/QSY suggestions (§2.9), never the live dupe key | seed snapshot, live log events, WSJT-X grid, **optional prior-contest DXLOG** | Log copy, dupe/mult verdicts, export trigger, **station band-history (for operator assessment)** |
+| 3.7 | **GridTracker interface** | GridTracker is an **optional, parallel read-only viewer** (multicast subscriber, §4.3) — coexists, not in WS Hub's control or logging path. WS Hub's own roster (§3.12) supersedes its operating role; GridTracker's residual value is its map/viz + ADIF/log-export integrations. Interface = leave the multicast open for it; optionally feed log export | Log, QSO events | (optional) export to GT |
 | 3.8 | **Rotator controller** (product path = hamlib **rotctld** over TCP; GS-232 serial only through rotctld; §2.10 / [wims_antenna.md](wims_antenna.md)) | The **per-PC agent** owns every rotor on that PC: find it, start rotctld when the controller is not already speaking rotctld, read name and heading, announce them with the WSJT-X instances, execute turn requests. One **controller-of-record per rotator** (§4.3): the agent, through one rotctld session. The site server and the console never open a serial device or a rotator port. **Status:** current heading, target, turning, link → Operate row + roster **Az ant** / **`rotator_moving`** + **Az DX** (§2.10). **Moves, in build order:** (1) read-only heading, (2) manual turn, (3) confirmed rotor-to-instance link, (4) point at a DX cluster spot (prepare only; the roster click still starts the QSO). **Soft az limits (§3.14).** Stop on disconnect, heartbeat, optional no rotation during TX. A human initiates every turn. | Target az, profile limits, claim, operator turns, rotctld session | Rotator commands, live position + moving flag |
 | 3.9 | **Safety / watchdog** | Heartbeats, runaway detector, sanity limits, fail-safe (TX off). Detects faults by comparing live behavior to each instance's **fault baselines (§3.14)** (silence, freq drift, stuck rotator, PTT-duty, comm-loss). On any fault, trigger the §3.4 fast mute on every host before slower Halt Tx/PTT-down | All module health, instance baselines | Alerts, kill signals, fast-mute trigger |
-| 3.10 | **State store / logger** | Single source of truth + audit log of every decision; internal log copy + roster keyed on **`(call, band, grid)`** so rovers aren't collapsed into dupes. **Persistence: own `wims.db` (SQLite, stdlib, WAL)** for queryable state (indexed dupe/mult lookups) + **append-only JSONL** for the raw event/decision stream (replay/audit). SQLite is the derived view, rebuildable from JSONL + N1MM seed. WIMS writes only `wims.db`; never N1MM's `.s3db` | All events | Persisted state, logs |
+| 3.10 | **State store / logger** | Single source of truth + audit log of every decision; internal log copy + roster keyed on **`(call, band, grid)`** so rovers aren't collapsed into dupes. **Persistence: own `wims.db` (SQLite, stdlib, WAL)** for queryable state (indexed dupe/mult lookups) + **append-only JSONL** for the raw event/decision stream (replay/audit). SQLite is the derived view, rebuildable from JSONL + N1MM seed. WS Hub writes only `wims.db`; never N1MM's `.s3db` | All events | Persisted state, logs |
 | 3.11 | **Config** | Per-instance **Instance Profile** (§3.14), strategy/parameter selection, antenna↔rotator map, and the **per-contest scoring model** feeding §3.5 — selects the scoring strategy by name + the per-condition weight sets | Config files / setup form | Runtime config |
-| 3.12 | **Server API / integration hub** (the **server↔console boundary**, §4.5) | The unicast API between the **site server** and **operator consoles** (local or remote): serve live state + accept commands — **band/station subscription** (§2.11 → which decodes fill *this* console’s call roster), **call-roster feed + click-to-work** (→ Reply via §3.2, claim-gated), **click-to-point** (→ rotator §3.8), and **control-claim / instant takeover** (§4.5). Roster rows carry **Az DX**, and **Az ant + rotator_moving** when a remote rotator is mapped. Also **re-publish WIMS's normalized/enriched event stream** (decodes + grid + dupe/mult + priority) so other apps consume WIMS's annotated feed — integration hub, not a closed monolith. Stdlib HTTP + SSE serving the JSON state contract (`state.py`) → static dashboard | State store, claim state, **per-console subscriptions** | Feed to consoles §2, roster/point/claim/subscribe actions, published event feed |
-| 3.13 | **Override interface** | Let the SSB/CW op or 2nd op supervise/override. The **SSB/CW op's small client app** (§Goals) = a lightweight **console** on the SSB/CW main screen showing WIMS activity on their band (reads the **existing SSB/CW N1MM**, no extra logger). Their **agent** detects keying — **PTT read as the USB-serial CTS line** (§3.4.1 Sensor) — and raises the SSB/CW-priority signal → §3.4.1 fast inhibit, **direct peer-to-peer** (§4.5) | Operator input, priority requests | Commands to arbiter, priority signal |
-| 3.15 | **Network discovery & diagnostics** | Be the **protocol-aware network tool so the operator never opens Wireshark**. Passively enumerate live nodes from the multicast WIMS already joins (WSJT-X instances by id/host/group/port/version, N1MM sources, GridTracker); **register N1MM presence from *any* broadcast** (`<RadioInfo>`/`<AppInfo>` beacons, not just `<contactinfo>`, so the link is verifiable at setup with no QSO — capturing StationName + `mycall` + last-seen). Optional active probes (host ping, N1MM:12060, rotator/CAT reachability). **Diff observed vs the declared Instance Profiles (§3.14)** and name every discrepancy. Feeds the §2.5 topology map / health / Wireshark-lite views and the readiness gate | All UDP, profiles, probe results | Live topology, health, discrepancy list |
+| 3.12 | **Server API / integration hub** (the **server↔console boundary**, §4.5) | The unicast API between the **site server** and **operator consoles** (local or remote): serve live state + accept commands — **band/station subscription** (§2.11 → which decodes fill *this* console’s call roster), **call-roster feed + click-to-work** (→ Reply via §3.2, claim-gated), **click-to-point** (→ rotator §3.8), and **control-claim / instant takeover** (§4.5). Roster rows carry **Az DX**, and **Az ant + rotator_moving** when a remote rotator is mapped. Also **re-publish WS Hub's normalized/enriched event stream** (decodes + grid + dupe/mult + priority) so other apps consume WS Hub's annotated feed — integration hub, not a closed monolith. Stdlib HTTP + SSE serving the JSON state contract (`state.py`) → static dashboard | State store, claim state, **per-console subscriptions** | Feed to consoles §2, roster/point/claim/subscribe actions, published event feed |
+| 3.13 | **Override interface** | Let the SSB/CW op or 2nd op supervise/override. The **SSB/CW op's small client app** (§Goals) = a lightweight **console** on the SSB/CW main screen showing WS Hub activity on their band (reads the **existing SSB/CW N1MM**, no extra logger). Their **agent** detects keying — **PTT read as the USB-serial CTS line** (§3.4.1 Sensor) — and raises the SSB/CW-priority signal → §3.4.1 fast inhibit, **direct peer-to-peer** (§4.5) | Operator input, priority requests | Commands to arbiter, priority signal |
+| 3.15 | **Network discovery & diagnostics** | Be the **protocol-aware network tool so the operator never opens Wireshark**. Passively enumerate live nodes from the multicast WS Hub already joins (WSJT-X instances by id/host/group/port/version, N1MM sources, GridTracker); **register N1MM presence from *any* broadcast** (`<RadioInfo>`/`<AppInfo>` beacons, not just `<contactinfo>`, so the link is verifiable at setup with no QSO — capturing StationName + `mycall` + last-seen). Optional active probes (host ping, N1MM:12060, rotator/CAT reachability). **Diff observed vs the declared Instance Profiles (§3.14)** and name every discrepancy. Feeds the §2.5 topology map / health / Wireshark-lite views and the readiness gate | All UDP, profiles, probe results | Live topology, health, discrepancy list |
 
 ### 3.3.1 Seat agent — per-station local process
 
@@ -1658,21 +1658,21 @@ server is briefly unreachable.
 ```
 
 Operator at the seat uses **local agent UI** for “is *this* PC right?”; operator at the console
-uses **WIMS Operate** for the fleet. Same agent binary/roles compose (WSJT-X seat vs SSB/CW seat
+uses **WS Hub Operate** for the fleet. Same agent binary/roles compose (WSJT-X seat vs SSB/CW seat
 enable different modules from the matrix).
 
 ### 3.4.1 SSB/CW priority interlock (gate + fast halt)
 
-Contest rule: **one signal per band.** **Whether WIMS enforces that automatically is per-band
+Contest rule: **one signal per band.** **Whether WS Hub enforces that automatically is per-band
 policy §2.14:**
 
 - **`interlock`** — this section applies in full (KEY → inhibit / mute; preventive no-Work while
   SSB keyed).
-- **`coordinated`** — **no automatic inhibit or mute.** WIMS still **senses and displays**
+- **`coordinated`** — **no automatic inhibit or mute.** WS Hub still **senses and displays**
   SSB/CW and WSJT-X TX state so operators hand off manually (§2.14.2). Skip Mechanism 1 hard
   block and Mechanism 2 actuation; keep status on the state contract.
 
-When policy is **`interlock`**: when an SSB/CW operator transmits, no WIMS-managed WSJT-X may
+When policy is **`interlock`**: when an SSB/CW operator transmits, no WS Hub-managed WSJT-X may
 transmit **on that same band**. Enforced by **two mechanisms** over a **shared SSB/CW
 transmit-state signal**.
 
@@ -1682,10 +1682,10 @@ id) as a small **UDP broadcast/multicast** on the LAN. Sensing mechanism: **read
 USB-serial *CTS* input line** — the rig's PTT/keying line wired to a USB-serial CTS pin; watch CTS
 edges. Hardware-true, sub-millisecond, no rig-CAT round-trip. (Fallbacks if CTS isn't wired:
 DSR/DCD line, VOX/audio detect, or N1MM `RadioInfo IsTransmitting` — the last is fine for the
-*dashboard* but **too slow for the trigger**.) Every WIMS manager subscribes, so **each WIMS knows
+*dashboard* but **too slow for the trigger**.) Every WS Hub manager subscribes, so **each WS Hub knows
 the live TX state of every SSB/CW station, per band.**
 
-**Mechanism 1 — preventive gate (primary; not time-critical).** Before WIMS issues a Reply /
+**Mechanism 1 — preventive gate (primary; not time-critical).** Before WS Hub issues a Reply /
 TX-start to a WSJT-X instance on band X, it **verifies no SSB/CW is keyed on band X** (from the
 tracked state). If one is, it **holds** the command (defers to the next cycle). This stops the
 conflict from ever starting and handles the common case with **no real-time pressure** — a simple
@@ -1765,12 +1765,12 @@ rig); prompt for what we can't (antenna geometry, intended limits).
 - **Radio / TX path** — rig model; **CAT path** (middleware enum + endpoints — not “COM only”);
   **PTT method** (CAT / VOX / RTS / DTR — affects halt behavior); TX audio device; **fast-mute
   mechanism** (volume API / virtual cable / analog-GPIO pin, §1.1); PA/amp id + power.
-  - CAT is **seat-local**, not a WIMS plane: WIMS never opens the radio COM port or speaks CI-V /
+  - CAT is **seat-local**, not a WS Hub plane: WS Hub never opens the radio COM port or speaks CI-V /
     Hamlib to the rig. It only drives WSJT-X over UDP (Reply / Halt). See
     **[wims_networking.md](wims_networking.md) §3.2**.
   - **Frequency the radio reports** — **RF (default)** or **IF**. Flex / SmartSDR
     XVTR and Icom seats with the transverter offset already on report RF;
-    WIMS must not add 404 MHz to a real 28.074 MHz (10 m) dial. Roy 222
+    WS Hub must not add 404 MHz to a real 28.074 MHz (10 m) dial. Roy 222
     (21 MHz CAT) and Roy 432 (28 MHz CAT + transverter) report IF; mark those
     `--rig-name` / N1MM station ids on Setup (`if_seats.json`). Offsets when
     marked: +201 MHz → 222, +404 MHz → 432.
@@ -1820,7 +1820,7 @@ Integration of §3 modules into one supervised, fail-safe controller.
 ### 4.1 Control loop (sketch)
 1. Ingest decodes/status from all instances (§3.1), extracting grid from grid-bearing decodes;
    observe `tx_enabled` / `tx_message` for run-vs-S&P **display** (§2.12).
-2. Look up dupe/new-mult status from WIMS's internal log copy (fed by N1MM `contactinfo`, §3.6,
+2. Look up dupe/new-mult status from WS Hub's internal log copy (fed by N1MM `contactinfo`, §3.6,
    calibrated by `ismultiplier`); decision engine (§3.5) **ranks** CQ targets and may **advise**
    run vs S&P using that status, the `call→grid` map, and strategy params (§3.11) — it does not
    start CQ.
@@ -1828,7 +1828,7 @@ Integration of §3 modules into one supervised, fail-safe controller.
    CQ/QRZ decode.
 4. Arbiter grants **one** transmitter per group, enforcing no overlap / no interleave; controller
    (§3.2) issues **Reply** (or Free Text close / Halt) — never Call CQ.
-5. **Run path (parallel, not WIMS-initiated):** local/RDP op enables CQ in WSJT-X; WIMS only
+5. **Run path (parallel, not WS Hub-initiated):** local/RDP op enables CQ in WSJT-X; WS Hub only
    observes, interlocks, and can Halt.
 6. Watchdog (§3.9) supervises everything; can halt all TX.
 7. Push state to dashboard (§3.12); accept overrides (§3.13).
@@ -1836,26 +1836,26 @@ Integration of §3 modules into one supervised, fail-safe controller.
 
 ### 4.2 Operating modes (per instance — always a human operator, never unattended)
 - **Local-operated** — a local op drives that band's WSJT-X directly (**including run/CQ +
-  autorespond**); WIMS observes + assists (visibility, dupe/mult, calling-us, interlock), and may
+  autorespond**); WS Hub observes + assists (visibility, dupe/mult, calling-us, interlock), and may
   Halt for safety, but does **not** invent CQ over UDP (§2.12).
-- **WIMS-operated (S&P + tailend)** — the WIMS **console operator** works the band via the call
+- **WS Hub-operated (S&P + tailend)** — the WS Hub **console operator** works the band via the call
   roster + **click-to-work → Reply** on a retained decode (CQ or **73** tailend, GT2-style; covers
-  an empty seat); WIMS **ranks/recommends**, the operator **clicks every work**. One console op can
+  an empty seat); WS Hub **ranks/recommends**, the operator **clicks every work**. One console op can
   cover several bands. **Run on an empty seat requires a human in the WSJT-X UI** (local or
-  RDP/KVM to that seat) — not a WIMS autodialer.
-- **Handoff** — transfer of an instance between operators (local⇄WIMS, and **WIMS console⇄WIMS
+  RDP/KVM to that seat) — not a WS Hub autodialer.
+- **Handoff** — transfer of an instance between operators (local⇄WS Hub, and **WS Hub console⇄WS Hub
   console**) via the **soft control claim (§4.5)**: claiming is implicit (act on the instance) and
   takeover is **instant, no release ceremony** (a one-click confirm only if the current controller
   is mid-cycle); claims auto-expire on inactivity. Invariant: **at most one controller per instance
   at any instant** (server-serialized); nobody steering **and** no local Enable Tx → instance is
   RX-only (fail-safe). Local run with Enable Tx still has a human operator at the seat UI.
-- *No automated/unattended TX.* WIMS is a remote operating position, not an autobot. Local CQ with
-  Enable Tx is attended by the seat/RDP operator, not by WIMS automation.
+- *No automated/unattended TX.* WS Hub is a remote operating position, not an autobot. Local CQ with
+  Enable Tx is attended by the seat/RDP operator, not by WS Hub automation.
 
 ### 4.3 Cross-cutting
 - Fail-safe default = transmitters OFF on any fault or lost heartbeat.
 - Deterministic arbiter — overlap must be impossible by construction, not by timing luck.
-- **Distributed split** — WIMS runs on a separate computer from the WSJT-X/SSB-CW hosts; the
+- **Distributed split** — WS Hub runs on a separate computer from the WSJT-X/SSB-CW hosts; the
   time-critical TX inhibit (10 ms) executes in a **local agent on each WSJT-X host** (§3.3),
   triggered **directly by the SSB/CW host agent, peer-to-peer (§3.4.1), not via the server** — one Layer-2 UDP datagram over the gigabit LAN (~1 ms). The wire is not in the inhibit critical path; the
   audio-buffer drain and PTT path on the host are.
@@ -1863,20 +1863,20 @@ Integration of §3 modules into one supervised, fail-safe controller.
   safe. A double-logged QSO happens only when two N1MMs independently ingest the same WSJT-X "QSO
   Logged" (each mints its own `ID`, no dedup). So each instance is assigned exactly one logging
   N1MM:
-  - *Operator stations* (own N1MM): the **local N1MM logs**, 24/7 — including when WIMS drives that
-    instance overnight (WIMS only *drives* WSJT-X via UDP; it does not change the logging path).
-    Operating rule: **leave N1MM running** whenever WIMS may drive the station (avoids risky
+  - *Operator stations* (own N1MM): the **local N1MM logs**, 24/7 — including when WS Hub drives that
+    instance overnight (WS Hub only *drives* WSJT-X via UDP; it does not change the logging path).
+    Operating rule: **leave N1MM running** whenever WS Hub may drive the station (avoids risky
     mid-session logger reassignment).
   - *Go-boxes* (no local N1MM): a **designated networked N1MM** (e.g. the SSB/CW position's, or the
-    server-host's — *not necessarily a dedicated WIMS one*, §3.6) is the logger of record for them
+    server-host's — *not necessarily a dedicated WS Hub one*, §3.6) is the logger of record for them
     — keeps the go-box minimal (WSJT-X + host agent, no N1MM).
   - *Mechanism:* segregate WSJT-X UDP streams (**multicast group/port per band** — see
     [wims_networking.md](wims_networking.md)) so each N1MM ingests only its assigned instances;
-    WIMS subscribes to **all** (it reads, never logs, so cannot double-log). N1MM supports two
+    WS Hub subscribes to **all** (it reads, never logs, so cannot double-log). N1MM supports two
     independent WSJT-X readers (`WSJTJTDXUDPIP/IP2`, `…Port/Port2`,
     `EnableWSJTJTDXUDPReader/Reader2`) for source-specific addressing; many instances may share
     one reader if they share a stream and have distinct UDP ids. All N1MMs network into one
-    merged log; WIMS reads any designated networked N1MM's `DXLOG` plus live `<contactinfo>`.
+    merged log; WS Hub reads any designated networked N1MM's `DXLOG` plus live `<contactinfo>`.
     Declared per-instance in the Instance Profile (§3.14, `logger_of_record`), enforced by
     exactly-one-logger setup validation.
 - **Single flat LAN across vehicles** — `192.168.10.0/24` on **wired L2 switches** = one broadcast
@@ -1891,20 +1891,20 @@ Integration of §3 modules into one supervised, fail-safe controller.
   Internet (Starlink) carries only the console↔server link, never the radio data path. Losing a
   remote console → its instances fail-safe to RX (§4.5).
 - **Open monitoring, single control per device** — the general principle behind the
-  logger/TX/rotator rules. *Monitoring is open:* WSJT-X multicasts, so **any number of apps** (WIMS,
+  logger/TX/rotator rules. *Monitoring is open:* WSJT-X multicasts, so **any number of apps** (WS Hub,
   N1MM, GridTracker, a third-party grid-based rotator program, JTAlert…) can subscribe in parallel
-  — WIMS does **not** monopolize the stream, and may even re-publish an enriched feed (§3.12).
+  — WS Hub does **not** monopolize the stream, and may even re-publish an enriched feed (§3.12).
   *Control is singular:* each controllable device (a **transmitter** §3.4, a **logger** §4.3
-  logger-of-record, a **rotator** §3.8) has exactly **one controller of record** — WIMS or an
+  logger-of-record, a **rotator** §3.8) has exactly **one controller of record** — WS Hub or an
   external program, never both, declared per device in the Instance Profile (§3.14). External
   vendors sit behind normalized backend interfaces (`LogSource` §3.6, `Rotator` §3.8 —
-  rotctld is the rotator path; rig CAT stays seat-local middleware and is not a WIMS
+  rotctld is the rotator path; rig CAT stays seat-local middleware and is not a WS Hub
   plane) so new ones plug in without touching the engine.
-- **Standardize WSJT-X on multicast** — on the LAN, every consumer (N1MM, GridTracker, WIMS)
+- **Standardize WSJT-X on multicast** — on the LAN, every consumer (N1MM, GridTracker, WS Hub)
   **joins the group as a parallel subscriber**; nobody relays. This removes the GridTracker relay
   loop and its §1.2 forward/grid-drop quirks entirely. *GridTracker stays a read-only band viewer;
-  it must NOT be used to initiate TX on a WIMS-managed instance — that bypasses the arbiter (§3.4).
-  WIMS's own call roster (§Goals/§3.12) provides click-to-work through the interlock, so GridTracker
+  it must NOT be used to initiate TX on a WS Hub-managed instance — that bypasses the arbiter (§3.4).
+  WS Hub's own call roster (§Goals/§3.12) provides click-to-work through the interlock, so GridTracker
   is optional, not in the control path.*
 - Config-driven so a contest can be set up without code changes.
 - Screen-share path to manage the remote station.
@@ -1917,14 +1917,14 @@ Integration of §3 modules into one supervised, fail-safe controller.
 
 ## 4.5 Client/server architecture & control claims
 
-**Role:** WIMS is the **digital operating position** ("the WSJT-X wrangler") — one human covering
+**Role:** WS Hub is the **digital operating position** ("the WSJT-X wrangler") — one human covering
 ~3 radios / ~6 instances on 6 m so the SSB/CW op can focus on that. In slow spells one op can run
-SSB/CW and watch the WIMS screen at once.
+SSB/CW and watch the WS Hub screen at once.
 
-**Split WIMS into a site server + operator consoles** — this is *the* architecture (the §3.12
+**Split WS Hub into a site server + operator consoles** — this is *the* architecture (the §3.12
 dashboard API promoted to the system boundary):
 
-- **WIMS server** — runs at the contest site on the LAN. The *single* multicast consumer, state
+- **WS Hub server** — runs at the contest site on the LAN. The *single* multicast consumer, state
   authority (roster, log copy, dupe/mult, fleet health), and the *only* sender of control to
   WSJT-X.
 - **Operator console** — thin client (the dashboard UI) over **one unicast connection** to the
@@ -2011,7 +2011,7 @@ Exercise the program safely with **no RF** and reproducible scenarios.
 - Interlock stress — multiple instances request TX simultaneously; verify zero overlap, no
   interleave.
 - Give-up case — station that never completes.
-- App crash / restart — instance drops and returns; WIMS re-syncs.
+- App crash / restart — instance drops and returns; WS Hub re-syncs.
 - Misconfigured profile — setup validation (§3.14) catches port/ID collision, shared rotator with
   no contention policy, az limits excluding needed directions, missing fast-mute on a TX instance.
 - Forwarded-packet false positive replay (the §1.3 N1MM quirk).
@@ -2052,7 +2052,7 @@ Copy this block for each new scenario.
 - **Context / preconditions:** Pre-contest. Remote station powered; N WSJT-X instances launched,
   one per band/mode. Contest profile loaded (expected fleet — [wims_networking.md §12](wims_networking.md#12-resilience--guided-setup-tired-operators-restarts)).
 - **Trigger:** Operator requests "bring up / arm" (or seat shortcut after reboot).
-- **Walkthrough:** WIMS confirms each **expected** instance's heartbeat, checks N1MM presence
+- **Walkthrough:** WS Hub confirms each **expected** instance's heartbeat, checks N1MM presence
   (plane B), GridTracker optional, and the rotator are reachable, and verifies station readiness
   (PA, 120 V line power, SDR up). Each **seat** turns 🟢/🟡/🔴 on the dashboard with a
   **named fix** when not green; wrangler board shows the same state.
@@ -2067,7 +2067,7 @@ Copy this block for each new scenario.
 
 ### Setup / installation scenarios (per-role onboarding)
 
-WIMS installs from **one package** and is told its **role** for that PC (§4.5 packaging). The
+WS Hub installs from **one package** and is told its **role** for that PC (§4.5 packaging). The
 install/setup wizard (§3.3) collects role + bands, **reads and verifies the existing WSJT-X / N1MM
 config files** against what the operator declared, and configures the interlock interfaces
 (§3.4.1). These run before any operating scenario and feed the readiness gate (S1).
@@ -2076,9 +2076,9 @@ config files** against what the operator declared, and configures the interlock 
 - **Context / preconditions:** A radio-host PC already running **N1MM + one or more WSJT-X
   instances** (and maybe SDR software) for one or more digital bands. Each WSJT-X launches with an
   informative **rig-name** (`6M-TVStation`, `2M-WEST`, …), one per band.
-- **Trigger:** Operator installs WIMS and runs setup; selects role = **WSJT-X station** (a §4.5
+- **Trigger:** Operator installs WS Hub and runs setup; selects role = **WSJT-X station** (a §4.5
   *agent*, optionally + console).
-- **Walkthrough:** WIMS asks which **bands** this station covers. It **reads the WSJT-X and N1MM
+- **Walkthrough:** WS Hub asks which **bands** this station covers. It **reads the WSJT-X and N1MM
   config files** (`wsjtx_config` + N1MM settings), enumerates the WSJT-X instances by rig-name, maps
   **rig-name → band**, and **verifies the config matches** what the operator declared
   (rig-name↔band, UDP multicast group/port, **Outgoing interface = contest LAN NIC**, unique `id`,
@@ -2101,13 +2101,13 @@ config files** against what the operator declared, and configures the interlock 
 #### I2 — Install on an SSB/CW station
 - **Context / preconditions:** A PC running **N1MM** (and maybe SDR) for an **SSB/CW** operating
   position on one or more bands. No WSJT-X TX here.
-- **Trigger:** Operator installs WIMS and runs setup; selects role = **SSB/CW station** (a §4.5
+- **Trigger:** Operator installs WS Hub and runs setup; selects role = **SSB/CW station** (a §4.5
   *agent* + console).
-- **Walkthrough:** WIMS reads which **band(s)** this SSB/CW position operates (from N1MM /
+- **Walkthrough:** WS Hub reads which **band(s)** this SSB/CW position operates (from N1MM /
   operator) so it knows which WSJT-X it must interlock — **same band** (§3.4.1). It configures the
   **TX-state sensor** (PTT read as the **USB-serial CTS** line) and the **announcement** of
-  key-down / key-up (with band) on the LAN, so WIMS on the WSJT-X PCs can gate/halt. A lightweight
-  console shows WIMS activity on this band so the op can wait for an in-progress digital QSO to
+  key-down / key-up (with band) on the LAN, so WS Hub on the WSJT-X PCs can gate/halt. A lightweight
+  console shows WS Hub activity on this band so the op can wait for an in-progress digital QSO to
   finish.
 - **Expected behavior:** Keying the SSB/CW rig is sensed (CTS edge) and announced within budget;
   same-band WSJT-X stations receive it and gate/halt (§3.4.1). The sensor **test-fires during setup
@@ -2117,13 +2117,13 @@ config files** against what the operator declared, and configures the interlock 
 - **Open questions:** CTS wiring per rig/interface; announcement datagram format + multicast group.
 - **Mode:** setup.
 
-#### I3 — Install on the control PC (WIMS server)
-- **Context / preconditions:** The PC that will run the **WIMS server** (§4.5) — the single
+#### I3 — Install on the control PC (WS Hub server)
+- **Context / preconditions:** The PC that will run the **WS Hub server** (§4.5) — the single
   multicast consumer, state authority, and only sender of control to WSJT-X. May be a **dedicated**
   box or **stacked** on a PC that is also a WSJT-X or SSB/CW station (roles compose: server + agent
   + console).
-- **Trigger:** Operator installs WIMS and runs setup; selects role = **server** (control).
-- **Walkthrough:** WIMS comes up as the server, **discovers the fleet** from the multicast (§3.15),
+- **Trigger:** Operator installs WS Hub and runs setup; selects role = **server** (control).
+- **Walkthrough:** WS Hub comes up as the server, **discovers the fleet** from the multicast (§3.15),
   **seeds the log copy** from a designated N1MM `.s3db` (§3.6), and serves the console (Operate /
   Status). If stacked with a station role on the same PC, it also runs that PC's agent
   (sensor/actuator) locally. It **verifies connectivity** to every declared WSJT-X and N1MM
@@ -2140,17 +2140,17 @@ config files** against what the operator declared, and configures the interlock 
 ### Scenario backlog (to write)
 Candidate situations worth covering — rename, add, or cut freely:
 - S1 — Cold start & station readiness check *(example above)*
-- S2 — **S&P on an open band** (click CQ targets, work needed, skip dupes) — primary WIMS path
+- S2 — **S&P on an open band** (click CQ targets, work needed, skip dupes) — primary WS Hub path
 - S2a — **Tailend on 73**: needed mult finishes with someone else (`… 73`); click roster → Reply
   echoes that decode (GT2-equivalent); WSJT-X enables TX toward that call; decode still in Band
   Activity required (§2.12)
-- S2b — **Run on an open band (WSJT-X UI)**: seat/RDP Enable Tx + CQ + Call 1st; WIMS shows
-  `run_local`, calling-us, interlock; **no** WIMS Call CQ; autorespond stays in WSJT-X (§2.12)
+- S2b — **Run on an open band (WSJT-X UI)**: seat/RDP Enable Tx + CQ + Call 1st; WS Hub shows
+  `run_local`, calling-us, interlock; **no** WS Hub Call CQ; autorespond stays in WSJT-X (§2.12)
 - S3 — Interlock contention: two instances want to TX in the same window
 - S4 — Meteor scatter (MSK144): patience and the give-up decision
 - S4b — EME: az/el moon-tracking, long periods, scheduling around moonrise/set
 - S5 — Rare grid / multiplier appears: priority + **click-to-point** (roster Az → rotctld, §2.10)
-- S5b — **Rover in a new grid**: same call worked earlier reappears from a different grid → WIMS
+- S5b — **Rover in a new grid**: same call worked earlier reappears from a different grid → WS Hub
   self-computes "not a dupe, new mult" from the log copy (§3.6) → ranked high; operator may
   re-point via roster Az; stale-grid handling for grid-less decodes
 - S5c — **Rotator status / rotctld**: Operate row (current, target, turning); Az ant
@@ -2172,9 +2172,9 @@ Candidate situations worth covering — rename, add, or cut freely:
 - S10 — Known quirk in the wild (GridTracker grid drop / N1MM false "still running")
 - S11 — Remote control / screen-share link degrades → fail safe
 - S12 — End of contest: auto log export + reconcile across N1MM and GridTracker
-- S13 — **Mixed N1MM fleet**: go-box (no N1MM, logged by WIMS's central N1MM) + operator station
-  (own N1MM) + hybrid 222/432 station (operator by day, WIMS-driven FT8 overnight, local N1MM logs
-  throughout). Verify one-logger-of-record holds, no double-logging, all QSOs reach WIMS's log copy.
+- S13 — **Mixed N1MM fleet**: go-box (no N1MM, logged by WS Hub's central N1MM) + operator station
+  (own N1MM) + hybrid 222/432 station (operator by day, WS Hub-driven FT8 overnight, local N1MM logs
+  throughout). Verify one-logger-of-record holds, no double-logging, all QSOs reach WS Hub's log copy.
   GridTracker running as a viewer on the operator station does not perturb logging or TX.
 
 ---
@@ -2209,7 +2209,7 @@ Candidate situations worth covering — rename, add, or cut freely:
   keep LAN cost trivial). Complementary UDP-native **decode-activity map** needs no capture. Decide
   capture lib + how it coexists with a headless/RDP session.
 - **"Needed vs dupe" path to N1MM — RESOLVED** (§1.3): spot round-trip dead (`<spot>` bare,
-  `lookupinfo` is callbook-only/greyed). WIMS subscribes to N1MM `<contactinfo>` as a log feed and
+  `lookupinfo` is callbook-only/greyed). WS Hub subscribes to N1MM `<contactinfo>` as a log feed and
   self-computes dupe + new-mult (grid×band) using WSJT-X-sourced grid, calibrated by N1MM
   `ismultiplier`.
 - **Grid → WSJT-X for logging — RESOLVED (Work sends a grid-only Configure).**
@@ -2225,7 +2225,7 @@ Candidate situations worth covering — rename, add, or cut freely:
   and Generate Messages false. `remote_configure` does not call `auto_tx_mode`
   and does not click Enable Tx. An empty DX Call is not written. The DX Grid
   box updates `m_hisGrid`, which Log QSO puts in the dialog. The operator still
-  presses OK. WIMS does not write the WSJT-X ADIF file. A square already in the
+  presses OK. WS Hub does not write the WSJT-X ADIF file. A square already in the
   worked decode is left for WSJT-X. Rovers (`/R`, or heard in two squares) use
   one window, `ROVER_WINDOW_S` (10 minutes). Older rover squares stay blank.
   A fixed station's remembered square is its grid: the roster shows it with
@@ -2242,9 +2242,9 @@ Candidate situations worth covering — rename, add, or cut freely:
   `grid remembered` is written only in that case. A fixed station, and a
   rover square from this QSO, are filled without that comment: the square is
   not in doubt. The log copy still records `grid_source=remembered` whenever
-  WIMS filled a blank square, so a later real grid can correct it. That flag
+  WS Hub filled a blank square, so a later real grid can correct it. That flag
   is not copied into the comment. A later decode that carries a grid, while
-  that Work is still the open contact, updates WIMS and sends the new square
+  that Work is still the open contact, updates WS Hub and sends the new square
   to that same instance only. Transmit behavior is unchanged: Work still
   sends the square the log fill would use.
 - Choose dashboard tech stack. *(Resolved: stdlib HTTP + SSE + static HTML — §2.4.)*
@@ -2253,11 +2253,11 @@ Candidate situations worth covering — rename, add, or cut freely:
   Resolve before EME scenarios.
 - **Rotator integration — RESOLVED (§1.4 / §2.10, 2026-10-28).** The seat agent
   speaks hamlib rotctld. GS-232A/B stays the serial dialect behind rotctld, not a
-  client inside WIMS. The earlier “lock the site’s K3NG command table” item is
+  client inside WS Hub. The earlier “lock the site’s K3NG command table” item is
   closed by that decision. Live verify is still required before trusting a turn
   (§1.4).
 - **GridTracker's role — RESOLVED** (§4.3/§1.2/§3.7): under multicast, GridTracker is an optional
-  **parallel read-only viewer**, not a relay and not a TX controller; WIMS's roster (§3.12) is the
+  **parallel read-only viewer**, not a relay and not a TX controller; WS Hub's roster (§3.12) is the
   click-to-work path. Coexists per operator preference; go-boxes run none.
 - **Scoring model source** — per-contest QSO-point + multiplier rules feed §3.5 ranking and §3.11
   config. One original GPL-3.0 JSON file per contest (first file: NY QSO Party, from the
@@ -2277,13 +2277,13 @@ Candidate situations worth covering — rename, add, or cut freely:
   contact is not chased for confirmation; a new place can still be needed. Contest dupes
   ignore confirmation. A GridTracker LoTW file on this PC, when one is present,
   also confirms a matching contact and the grid, state, and DXCC on that record.
-  WIMS does not download LoTW and does not write that file.
+  WS Hub does not download LoTW and does not write that file.
   Detail: [wims_logs_and_rules.md](wims_logs_and_rules.md) §3.8.
 - **Instance profile — format & auto-discovery** — file format for the Instance Profile schema
   (§3.14) and how much the setup wizard can auto-discover (WSJT-X ID/port/rig via UDP/CAT) vs must
   prompt for (antenna geometry, intended az/el limits). Decide the form vs file-edit balance.
-- **ARRL VHF operating rules (no automation)** — WIMS does **not** automate; every QSO is
-  operator-initiated (local or WIMS console op), so the robotic-operation concern is moot. Lighter
+- **ARRL VHF operating rules (no automation)** — WS Hub does **not** automate; every QSO is
+  operator-initiated (local or WS Hub console op), so the robotic-operation concern is moot. Lighter
   check: confirm multi-multi rules on a **console operator working multiple transmitters / remote
   operating positions** within the same site are fine (expected to be, for fixed unlimited
   multi-multi at one site).
@@ -2308,12 +2308,12 @@ Candidate situations worth covering — rename, add, or cut freely:
   contest pace.
 - **Multiple N1MM on one band — RESOLVED (§2.13.4).** Exactly one N1MM may enable the **WSJT
   reader** per band stream (logger-of-record). A second N1MM for SSB/CW that does **not** join
-  that stream is OK for presence/RadioInfo; two WSJT readers = readiness error. WIMS displays
+  that stream is OK for presence/RadioInfo; two WSJT readers = readiness error. WS Hub displays
   all N1MMs it hears; digital dupe/mult follows the active contest log.
 - **What to monitor on browser windows — RESOLVED (§2.13.6).** Session metadata only: identity,
   subscriptions, claims, last action, liveness — not full UI remote-control.
-- **SSB/CW multi-station TX overlap on one band — RESOLVED (out of scope for WIMS) (§2.13.3).**
-  Hardware / external interlock among voice stations; WIMS only maps KEY agents → WSJT inhibit
+- **SSB/CW multi-station TX overlap on one band — RESOLVED (out of scope for WS Hub) (§2.13.3).**
+  Hardware / external interlock among voice stations; WS Hub only maps KEY agents → WSJT inhibit
   targets and keeps lists current as instances churn.
 - **Auto vs manual KEY target assignment** — when a new WSJT-X appears on a band, auto-add to
   every KEY agent on that band vs operator confirm on assignment UI? Prefer auto-add with

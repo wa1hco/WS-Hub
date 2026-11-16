@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -46,7 +46,7 @@ _LEVEL_COLORS = {
 class AgentStatusModel:
     """Snapshot the Tk window redraws from."""
 
-    title: str = "WIMS agent"
+    title: str = "WS Hub agent"
     banner_level: str = "busy"  # ok | warn | err | busy
     banner_text: str = "Starting..."
     fix_text: str = ""
@@ -112,7 +112,7 @@ class AgentStatusWindow:
         # not the generic Tk one. className is only set when we create the root.
         self.root = root or tk.Tk(className="ws-hub")
         self._owns_root = root is None
-        self.root.title("WIMS agent")
+        self.root.title("WS Hub agent")
         # Tall enough for Broadcast + Log + KEY rows without a manual resize.
         self.root.minsize(520, 280)
         self.root.geometry("560x340")

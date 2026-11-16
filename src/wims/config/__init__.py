@@ -1,9 +1,9 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""WIMS config helpers (seat profile and related)."""
+"""WS Hub config helpers (seat profile and related)."""
 
 from wims.config.seat_profile import (
     SHARED_TRX_CLASSES,

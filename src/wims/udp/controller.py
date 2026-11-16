@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -198,7 +198,7 @@ def open_send_socket(iface: str = "0.0.0.0", ttl: int = 3) -> socket.socket:
 def open_unicast_socket(iface: str = "0.0.0.0") -> socket.socket:
     """AF_INET UDP socket for MessageClient unicast.
 
-    ``iface`` is the address WIMS listens on. The socket is left unbound so
+    ``iface`` is the address WS Hub listens on. The socket is left unbound so
     the OS picks the route for each destination. Binding to that listen
     address (``127.0.0.1`` in solo) makes a reply to any other address fail:
     Linux errno 22, Windows 10051 / 10049 / 10065. The socket is already

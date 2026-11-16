@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -117,8 +117,8 @@ class GitHubReleaseCheckTests(unittest.TestCase):
             if url.endswith("/releases/latest"):
                 return {
                     "tag_name": "v1.1.0",
-                    "html_url": "https://github.com/wa1hco/WIMS/releases/tag/v1.1.0",
-                    "name": "WIMS 1.1.0",
+                    "html_url": "https://github.com/wa1hco/WS-Hub/releases/tag/v1.1.0",
+                    "name": "WS Hub 1.1.0",
                     "published_at": "2026-09-11T00:00:00Z",
                 }, ""
             if "/commits/" in url:
@@ -146,8 +146,8 @@ class GitHubReleaseCheckTests(unittest.TestCase):
             if url.endswith("/releases/latest"):
                 return {
                     "tag_name": "v1.0.0",
-                    "html_url": "https://github.com/wa1hco/WIMS/releases/tag/v1.0.0",
-                    "name": "WIMS 1.0.0",
+                    "html_url": "https://github.com/wa1hco/WS-Hub/releases/tag/v1.0.0",
+                    "name": "WS Hub 1.0.0",
                     "published_at": "2026-09-07T00:00:00Z",
                 }, ""
             if "/commits/" in url:
@@ -170,7 +170,7 @@ class GitHubReleaseCheckTests(unittest.TestCase):
                 return {
                     "tag_name": "v1.2.0",
                     "html_url": "https://example.test/rel",
-                    "name": "WIMS 1.2.0",
+                    "name": "WS Hub 1.2.0",
                     "published_at": "2026-09-11T00:00:00Z",
                 }, ""
             if "/commits/" in url:

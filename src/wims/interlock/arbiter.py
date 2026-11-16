@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@
 
 """TX arbiter + overlap detector (plan §3.4 / §5.1 assertion harness).
 
-The safety-critical heart of WIMS. Transmitters are grouped into **resource
+The safety-critical heart of WS Hub. Transmitters are grouped into **resource
 groups** (a transmitter/antenna/PA chain, from the Instance Profile shared-resources
 §3.14). The arbiter grants TX to **at most one instance per group at a time** — by
 construction, not by timing luck — so two instances in the same group can never be

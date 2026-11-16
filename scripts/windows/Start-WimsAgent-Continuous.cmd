@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -41,12 +41,12 @@ for %%I in ("%PYTHON_EXE%") do set "PYDIR=%%~dpI"
 if exist "%PYDIR%python.exe" set "PYTHON_EXE=%PYDIR%python.exe"
 
 echo.
-echo  WIMS Agent — CONTINUOUS (station seat)
+echo  WS Hub Agent — CONTINUOUS (station seat)
 echo  Repo:   %ROOT%
 echo  Python: %PYTHON_EXE%
 echo  Local:  http://127.0.0.1:8790/
 echo  Site:   %WIMS_SERVER%/
-echo  Stop:   close the minimized "WIMS Agent" window
+echo  Stop:   close the minimized "WS Hub Agent" window
 echo.
 
 REM Already running? Do not start a second copy (browser would just hit the first).
@@ -61,7 +61,7 @@ if not errorlevel 1 (
   exit /b 0
 )
 
-start "WIMS Agent" /MIN /D "%ROOT%" "%PYTHON_EXE%" -u -m wims.agent --daemon --local-port 8790 --server "%WIMS_SERVER%" %SEAT_ARGS% %*
+start "WS Hub Agent" /MIN /D "%ROOT%" "%PYTHON_EXE%" -u -m wims.agent --daemon --local-port 8790 --server "%WIMS_SERVER%" %SEAT_ARGS% %*
 
 REM Wait up to ~25s for 8790 (avoids Chrome "Unable to connect" race).
 set /a _n=0
@@ -72,7 +72,7 @@ set /a _n+=1
 if %_n% GEQ 50 (
   echo.
   echo  ERROR: nothing listening on 127.0.0.1:8790 after ~25s.
-  echo  Open the minimized "WIMS Agent" window for a Python traceback.
+  echo  Open the minimized "WS Hub Agent" window for a Python traceback.
   echo  Then on this VM:  git pull
   echo  Confirm: set PYTHONPATH=%ROOT%\src
   pause

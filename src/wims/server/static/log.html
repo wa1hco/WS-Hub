@@ -1,7 +1,7 @@
 <!doctype html>
 
 <!--
-  WIMS — WSJT-X Instance Management System
+  WS Hub
   Copyright (C) 2026 Jeff Millar, WA1HCO
 
   SPDX-License-Identifier: GPL-3.0-or-later
@@ -24,12 +24,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WIMS — Log</title>
+<title>WS Hub — Log</title>
 <link rel="stylesheet" href="/wims.css">
 </head>
 <body>
 <header>
-  <h1>WIMS</h1>
+  <h1>WS Hub</h1>
   <nav>
     <a href="/">Operate</a>
     <a href="/overview">Overview</a>
@@ -45,7 +45,7 @@
 </header>
 <main>
   <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 12px 0">
-    <b>Log</b> is the list of contacts WIMS checks for needed and already worked.
+    <b>Log</b> is the list of contacts WS Hub checks for needed and already worked.
     The goal on <a href="/setup">Setup</a> decides what counts. It does not switch this log.
   </p>
 
@@ -56,7 +56,7 @@
     <span class="advline">
       <label>Log
         <select id="log-pick" style="font:inherit;margin-left:6px"
-          title="The log WIMS checks for needed and already worked. Your choice stays until you change it. Suggested for this goal is used only when you have not chosen.">
+          title="The log WS Hub checks for needed and already worked. Your choice stays until you change it. Suggested for this goal is used only when you have not chosen.">
           <option value="auto">Suggested for this goal</option>
         </select>
       </label>
@@ -85,7 +85,7 @@
 
   <h2>Each radio’s log</h2>
   <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0">
-    Whether WIMS can read the log for each WSJT-X on this computer.
+    Whether WS Hub can read the log for each WSJT-X on this computer.
   </p>
   <div id="contest-logs" style="font-size:12px;line-height:1.45"></div>
 
@@ -93,7 +93,7 @@
     <h2>N1MM contest file</h2>
     <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0">
       Shown when the log above is an N1MM contest. New contacts still arrive on their own.
-      Read the file again when it was updated outside WIMS.
+      Read the file again when it was updated outside WS Hub.
     </p>
     <div class="toolbar" style="margin:6px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button type="button" id="contest-resync"

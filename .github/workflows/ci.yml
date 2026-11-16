@@ -1,4 +1,4 @@
-# WIMS — PR / main quality gate.
+# WS Hub — PR / main quality gate.
 # Runs the same one-command smoke path as local dev: unit suites + import
 # check + interlock bench + live no-RF server/emulator SSE contract.
 # No pip deps (stdlib-only runtime). Failures block the release track.

@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -17,9 +17,9 @@ import subprocess
 
 
 WINDOW_LIBRARY_MESSAGE = (
-    "WIMS needs the Python window library.\n"
+    "WS Hub needs the Python window library.\n"
     "\n"
-    "Install python3-tk, then double-click WIMS again.\n"
+    "Install python3-tk, then double-click WS Hub again.\n"
     "On Fedora, the package is python3-tkinter."
 )
 
@@ -28,7 +28,7 @@ def _have_display() -> bool:
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
-def show_plain_message(text: str, *, title: str = "WIMS") -> bool:
+def show_plain_message(text: str, *, title: str = "WS Hub") -> bool:
     """Show a dialog without Tk. True when a dialog tool was started."""
     if not _have_display():
         return False

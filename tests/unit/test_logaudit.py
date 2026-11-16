@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -68,7 +68,7 @@ def test_match_only_and_grid_clash():
     assert len(report.disagreements) == 1
     assert any(row["call"] == "N1ONLY" for row in report.only)
     assert any(row["call"] == "W1AW" for row in report.only)
-    assert "WIMS log check" in text
+    assert "WS Hub log check" in text
     assert "Disagreements" in text
     assert "[OK]" in text
     blob = to_json(report)

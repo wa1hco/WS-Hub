@@ -1,15 +1,15 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
 
 setlocal EnableExtensions
-set "LNK=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\WIMS at logon.lnk"
+set "LNK=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\WS Hub at logon.lnk"
 
 echo.
-echo  Remove WIMS logon auto-start
+echo  Remove WS Hub logon auto-start
 echo  ============================
 echo  Target: %LNK%
 echo.

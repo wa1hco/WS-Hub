@@ -1,7 +1,7 @@
 # Home testing: H0 Operate + H1 Inhibit
 
 **Audience:** one PC at home (one TRX, often dual RX or TRX+SDR).  
-**Goal:** try WIMS **chunks** without a contest LAN or CAT handoff.  
+**Goal:** try WS Hub **chunks** without a contest LAN or CAT handoff.  
 **Radio control:** unchanged (manual / N1MM / WSJT as you already run). See  
 [`decisions/2026-09-17-shared-trx-radio-ownership.md`](decisions/2026-09-17-shared-trx-radio-ownership.md)  
 and stages H2–H4 in [`plan/wims_home_dual_rx_slice.md`](plan/wims_home_dual_rx_slice.md).
@@ -10,11 +10,11 @@ and stages H2–H4 in [`plan/wims_home_dual_rx_slice.md`](plan/wims_home_dual_rx
 
 **One radio. One WSJT-X. Operate page.**
 
-You want WIMS to **filter and rank decodes** and **click-to-Work** (Reply) — not a fleet, not KEY, not dual RX.
+You want WS Hub to **filter and rank decodes** and **click-to-Work** (Reply) — not a fleet, not KEY, not dual RX.
 
 | Have | Do |
 |------|-----|
-| WSJT-X on air (Reporting → `224.0.0.73:2237`, **Accept UDP ON**) | Double-click **WIMS**, or `Start-Wims-Solo.cmd` / `scripts/start-wims-solo.sh` |
+| WSJT-X on air (Reporting → `224.0.0.73:2237`, **Accept UDP ON**) | Double-click **WS Hub**, or `Start-Wims-Solo.cmd` / `scripts/start-wims-solo.sh` |
 | Browser | `http://localhost:8787/` → **Operate** |
 | Optional N1MM log | Auto-seed needed vs dupe; or `--no-seed` (all look needed) |
 
@@ -38,9 +38,9 @@ Operate is one console. It has **two UDP modes**.
 
 ### Operate modes
 
-| Mode | When | WIMS bind | WSJT-X Reporting |
+| Mode | When | WS Hub bind | WSJT-X Reporting |
 |------|------|-----------|------------------|
-| **Local** | Operate on the **same PC** as WSJT-X | Loopback (`--iface 127.0.0.1`) | Multicast `224.0.0.73:2237` on this PC, **or** unicast to `127.0.0.1` (then add WIMS `--tx-host 127.0.0.1`) |
+| **Local** | Operate on the **same PC** as WSJT-X | Loopback (`--iface 127.0.0.1`) | Multicast `224.0.0.73:2237` on this PC, **or** unicast to `127.0.0.1` (then add WS Hub `--tx-host 127.0.0.1`) |
 | **Network** | Operate (or site server) on a PC that must hear **LAN** digi | Contest LAN NIC (`--iface` = that IPv4) | Multicast `224.0.0.73:2237`, **Outgoing interface = contest LAN NIC** |
 
 Both modes need **Accept UDP requests ON** for Work (Reply).  
@@ -55,7 +55,7 @@ Do not mix them by accident: Local bind will **not** see VM/LAN WSJT traffic.
 
 - WSJT-X with UDP Reporting (Work needs **Accept UDP requests ON**)
 - Optional: N1MM `.s3db` so needed/dupe scoring works (`--no-seed` if none)
-- WIMS install (`Install-Wims.cmd` on Windows)
+- WS Hub install (`Install-Wims.cmd` on Windows)
 
 ### WSJT-X Reporting (Local default)
 
@@ -75,14 +75,14 @@ Do not mix them by accident: Local bind will **not** see VM/LAN WSJT traffic.
 
 Browser: `http://localhost:8787/` — **Operate** tab (roster). Click a line to Work; **Halt TX** to stop.
 
-Setup check: `Check-WimsSetup.cmd`, or the WSJT seat check in the WIMS window.
+Setup check: `Check-WimsSetup.cmd`, or the WSJT seat check in the WS Hub window.
 
 ### Start Operate (Network)
 
 | OS | Action |
 |----|--------|
-| Windows | Double-click **WIMS** and start the site server, or `Start-WimsServer.cmd` |
-| Linux | Double-click **WIMS** and start the site server |
+| Windows | Double-click **WS Hub** and start the site server, or `Start-WimsServer.cmd` |
+| Linux | Double-click **WS Hub** and start the site server |
 
 WSJT-X on each seat: Outgoing interface = contest LAN NIC.  
 Full fleet notes: [`operator_setup.md`](operator_setup.md).
@@ -104,7 +104,7 @@ Footswitch (or KEY sense) holds **local** digi TX. No Operate required. No site 
 
 - **Patched WSJT-X** with TxInhibit (type **18**) — inhibit-3.2-rc1 or later
 - Keyline (or serial CTS) KEY sense — or lab `sim:up` / `sim:down`
-- WIMS on the same PC as the digi instance you will hold
+- WS Hub on the same PC as the digi instance you will hold
 
 ### Type-18 destination (inhibit-3.2-rc1)
 
@@ -148,7 +148,7 @@ Optional GUI seat window: omit `--no-gui` (scripts keep the small seat UI by def
 ### Sister tool
 
 [`inhibit-agent`](plan/inhibit_agent.md) in **wsjtx-inhibit** is the same idea (CTS → localhost gate).  
-For WIMS home docs, prefer **`Start-Wims-Inhibit-Home`** so one install covers H0+H1.
+For WS Hub home docs, prefer **`Start-Wims-Inhibit-Home`** so one install covers H0+H1.
 
 ### Not required for H1
 
@@ -183,7 +183,7 @@ Mark TX-capable vs decode-only on Setup (or `seat-profile.json`) — see [`home_
 |---------|--------|
 | Empty roster | UDP `224.0.0.73:2237`; Solo running; firewall |
 | Work does nothing | Accept UDP ON; correct instance |
-| `ingest: datagram error` / type 17 truncate | WIMS must parse Supported-first type 17 (inhibit-3.2-rc1) |
+| `ingest: datagram error` / type 17 truncate | WS Hub must parse Supported-first type 17 (inhibit-3.2-rc1) |
 | KEY never holds | Patched WSJT; type-18 control port (not stale 22372 on 3.2-rc1); KEY / CTS |
 | Want fleet multi-PC KEY | Use launcher **SSB/CW KEY** + discovery — not the home 22372 override |
 

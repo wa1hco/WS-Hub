@@ -1,10 +1,10 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-title WIMS Seat
+title WS Hub Seat
 color 0A
 
 REM Single entry point for seat PCs — no need to know paths or which .cmd to run.
-REM Double-click this file, or use the Desktop "WIMS" shortcut from Install-WIMS-Desktop-Shortcut.cmd
+REM Double-click this file, or use the Desktop "WS Hub" shortcut from Install-WIMS-Desktop-Shortcut.cmd
 
 cd /d "%~dp0"
 set "HERE=%~dp0"
@@ -12,7 +12,7 @@ set "HERE=%~dp0"
 call :find_root
 if not defined ROOT (
   echo.
-  echo  ERROR: Could not find the WIMS install.
+  echo  ERROR: Could not find the WS Hub install.
   echo  Expected a folder that contains src\wims\agent\app.py
   echo  Tried: scripts\windows\..\.. and %USERPROFILE%\WIMS
   echo.
@@ -30,7 +30,7 @@ REM WIMS_SERVER is optional; if unset, WS Hub finds or starts the site server.
 cls
 echo.
 echo  ============================================================
-echo   WIMS Seat menu
+echo   WS Hub Seat menu
 echo  ============================================================
 echo   Install:  %ROOT%
 echo   Server:   %WIMS_SERVER%
@@ -43,12 +43,12 @@ echo    3.  Start Flex 50 MHz pack     ^(SmartSDR + CAT + DAX + N1MM + WSJT-50^)
 echo    4.  Start IC-9700 144 pack     ^(wfview + N1MM + WSJT-144^)
 echo    5.  Open local agent page      ^(http://127.0.0.1:8790/^)
 echo    6.  Open server Status page    ^(%WIMS_SERVER%/status^)
-echo    7.  Put WIMS on Desktop        ^(launcher icon only^)
-echo    8.  Put WIMS on Desktop        ^(same as 7^)
+echo    7.  Put WS Hub on Desktop        ^(launcher icon only^)
+echo    8.  Put WS Hub on Desktop        ^(same as 7^)
 echo    9.  Auto-start at logon        ^(install Startup for a radio pack^)
 echo    A.  Remove auto-start
 echo    P.  Set contest LAN Private    ^(N1MM Send/Receive / TCP 12070^)
-echo    F.  Contest app firewall       ^(N1MM / WSJT-X / GridTracker / WIMS^)
+echo    F.  Contest app firewall       ^(N1MM / WSJT-X / GridTracker / WS Hub^)
 echo.
 echo    0.  Exit
 echo.
@@ -96,7 +96,7 @@ echo.
 echo  Starting continuous agent in a new window...
 echo  Local page: http://127.0.0.1:8790/
 echo  Stop with Ctrl+C in that window.
-start "WIMS Agent" cmd /k call "%HERE%Start-WimsAgent-Continuous.cmd"
+start "WS Hub Agent" cmd /k call "%HERE%Start-WimsAgent-Continuous.cmd"
 ping -n 2 127.0.0.1 >nul
 goto menu
 
@@ -127,7 +127,7 @@ pause
 goto menu
 
 :do_desktop_agent
-REM Install never creates WIMS Agent / WIMS Server desktop icons.
+REM Install never creates WS Hub Agent / WS Hub Server desktop icons.
 call "%HERE%Install-WIMS-Desktop-Shortcut.cmd" /nopause
 echo.
 pause
@@ -160,10 +160,10 @@ goto menu
 :end
 exit /b 0
 
-REM ---------- locate WIMS repo root ----------
+REM ---------- locate WS Hub repo root ----------
 :find_root
 set "ROOT="
-REM 1) This script lives in ...\WIMS\scripts\windows
+REM 1) This script lives in ...\WS Hub\scripts\windows
 if exist "%HERE%..\..\src\wims\agent\app.py" (
   pushd "%HERE%..\.."
   set "ROOT=!CD!"

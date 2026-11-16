@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -465,7 +465,7 @@ def _mark(src: SourceInfo) -> tuple[str, str]:
 
 def render_text(report: Report) -> str:
     summary = report.summary or format_summary(report)
-    lines = ["WIMS log check", "==============", summary, "", "Sources"]
+    lines = ["WS Hub log check", "==============", summary, "", "Sources"]
     for src in report.sources:
         mark, tail = _mark(src)
         path = f"  {src.path}" if src.path else ""

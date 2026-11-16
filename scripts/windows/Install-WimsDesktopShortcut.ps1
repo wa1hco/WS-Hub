@@ -19,12 +19,12 @@ if (-not (Test-Path -LiteralPath $cmd)) {
     exit 1
 }
 if (-not (Test-Path -LiteralPath $vbs)) {
-    Write-Host "ERROR: Start-WimsLauncher.vbs missing — pull latest WIMS." -ForegroundColor Red
+    Write-Host "ERROR: Start-WimsLauncher.vbs missing — pull latest WS Hub." -ForegroundColor Red
     if (-not $NoPause) { pause }
     exit 1
 }
 if (-not (Test-Path -LiteralPath $ico)) {
-    Write-Host "ERROR: assets\wims.ico missing — pull latest WIMS." -ForegroundColor Red
+    Write-Host "ERROR: assets\wims.ico missing — pull latest WS Hub." -ForegroundColor Red
     if (-not $NoPause) { pause }
     exit 1
 }
@@ -99,7 +99,7 @@ foreach ($folder in @($desk, $startMenu)) {
     }
 }
 
-# Install / refresh never creates WIMS Server or WIMS Agent icons.
+# Install / refresh never creates WS Hub Server or WS Hub Agent icons.
 foreach ($staleName in @("WIMS Server.lnk", "WIMS Agent.lnk")) {
     $stale = Join-Path $desk $staleName
     if (Test-Path -LiteralPath $stale) {
@@ -117,7 +117,7 @@ function Test-OurOldLauncher([string]$Path) {
         $old = $w.CreateShortcut($Path)
         $text = "$($old.TargetPath) $($old.Arguments)"
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($w) | Out-Null
-        return ($text -match 'Start-WimsLauncher|wims\.launcher|WIMS\.cmd')
+        return ($text -match 'Start-WimsLauncher|wims\.launcher|WS Hub\.cmd')
     } catch {
         return $false
     }

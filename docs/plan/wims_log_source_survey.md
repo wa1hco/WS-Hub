@@ -1,4 +1,4 @@
-# WIMS log-source survey (Windows / Linux)
+# WS Hub log-source survey (Windows / Linux)
 
 **Status:** planning survey for standalone Operate  
 **Date:** 2026-09-19  
@@ -11,8 +11,8 @@ the storage-tier ranking.
 ## 1. Why this survey
 
 Standalone Operate must **read** a user-selected logger and detect new QSOs.  
-WIMS keeps a local `LogStore` copy for needed / ranking.  
-WIMS does **not** write the external logger.
+WS Hub keeps a local `LogStore` copy for needed / ranking.  
+WS Hub does **not** write the external logger.
 
 This document ranks popular log programs by:
 
@@ -20,7 +20,7 @@ This document ranks popular log programs by:
 2. How a new contact becomes visible on disk or on the wire  
 3. Fit for a `LogSource` backend
 
-## 2. Detection tiers (WIMS)
+## 2. Detection tiers (WS Hub)
 
 | Tier | Mechanism | Latency | Complexity |
 |------|-----------|---------|------------|
@@ -34,7 +34,7 @@ This document ranks popular log programs by:
 
 ## 3. Contenders
 
-| Program | OS | Role | Typical storage | Best WIMS path |
+| Program | OS | Role | Typical storage | Best WS Hub path |
 |---------|----|------|-----------------|----------------|
 | **N1MM+** | Windows | Contest | SQLite `.s3db` | **T1** Broadcast + DB seed (exists) |
 | **WSJT-X** | Win / Linux | Digi log | `wsjtx_log.adi` | **T2** append watch |
@@ -102,7 +102,7 @@ This document ranks popular log programs by:
 ### 5.5 Ham Radio Deluxe Logbook (Windows)
 
 - **DB:** modern SQLite; older installs may use Access `.mdb`.
-- **UDP:** HRD **receives** digi/contest logs — inbound to HRD, not a WIMS output.
+- **UDP:** HRD **receives** digi/contest logs — inbound to HRD, not a WS Hub output.
 - **Detect:** SQLite poll if path known; else ADIF export watch.
 - **Action:** only if users need it; do not reverse HRD UDP.
 

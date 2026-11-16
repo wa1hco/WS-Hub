@@ -1,11 +1,11 @@
-# WIMS on Windows
+# WS Hub on Windows
 
 ## Roles
 
 | Machine | Needs |
 |---------|--------|
-| **WIMS server** (one per site/lab) | This install + Python; opens TCP **8787** |
-| **Radio seat** (N1MM + WSJT-X) | N1MM / WSJT-X / optional GridTracker; **browser** to the server. WIMS install optional |
+| **WS Hub server** (one per site/lab) | This install + Python; opens TCP **8787** |
+| **Radio seat** (N1MM + WSJT-X) | N1MM / WSJT-X / optional GridTracker; **browser** to the server. WS Hub install optional |
 | **Operator laptop** | Browser only → `http://<server-ip>:8787/` |
 
 ## Home tester (H0 Operate / H1 Inhibit) — start here on one PC
@@ -29,7 +29,7 @@ Setup check anytime: **`Check-WimsSetup.cmd`**.
 ### H1 — Inhibit (KEY → digi hold)
 
 1. Patched WSJT-X with TxInhibit on **UDP 22372**.
-2. In the WIMS window, pick the key port (the COM port on the key line).
+2. In the WS Hub window, pick the key port (the COM port on the key line).
 3. **`Start-Wims-Inhibit-Home.cmd`** — holds `127.0.0.1:22372` (no N1MM RadioInfo needed).
 
 | File | What it does |
@@ -49,19 +49,19 @@ To verify the **needed-vs-dupe** roster: log a callsign in N1MM → its roster r
 
 | File | What it does |
 |------|----------------|
-| **`Install-Wims.cmd`** | **First install** — Python, Git, clone/pull repo, firewall, Desktop **WIMS** + **Update WIMS** only (never **WIMS Server** / **WIMS Agent** icons). |
+| **`Install-Wims.cmd`** | **First install** — Python, Git, clone/pull repo, firewall, Desktop **WS Hub** + **Update WS Hub** only (never **WS Hub Server** / **WS Hub Agent** icons). |
 | **`Start-WimsLauncher.cmd`** | **Desktop GUI launcher** — checkbox agents, site console, Update when behind `main`. |
 | **`Start-WimsConsole-Kiosk.cmd`** | **Operate** in a compact resizable window (Chrome `--app=` style). Firefox dedicated profile; Chrome `--app=`. Uses the live site server on the LAN. |
-| **`Install-WimsConsoleKiosk.ps1`** | Desktop **WIMS Console Kiosk** + logon Startup + user `WIMS_BROWSER` = Firefox. |
+| **`Install-WimsConsoleKiosk.ps1`** | Desktop **WS Hub Console Kiosk** + logon Startup + user `WIMS_BROWSER` = Firefox. |
 | **`Update-Wims.cmd`** | **One-click update** — `git pull --ff-only origin/main` (also offered inside the launcher). |
-| **`Install-WIMS-Desktop-Shortcut.cmd`** | Desktop **WIMS** only (sticky `assets\wims.ico` via wscript+VBS). Removes leftover **WIMS Server** / **WIMS Agent** icons. Re-run if the icon reverts to the default batch glyph. |
+| **`Install-WIMS-Desktop-Shortcut.cmd`** | Desktop **WS Hub** only (sticky `assets\wims.ico` via wscript+VBS). Removes leftover **WS Hub Server** / **WS Hub Agent** icons. Re-run if the icon reverts to the default batch glyph. |
 | **`Install-WimsDesktopShortcut.ps1`** | Same as above (PowerShell; called by the `.cmd`). |
 | **`Install-WimsAgent-Desktop-Shortcut.cmd`** | Lab-only; **not** run by Install. |
 | **`WIMS.cmd`** | Text **seat menu** (packs, Startup, firewall) — still available; not the primary Desktop icon. |
 | **`assets\wims.ico` / `wims-agent.ico`** | Icons for those shortcuts. |
 
-After that, operators only need the Desktop **WIMS** icon (same idea as N1MM / WSJT-X).
-That icon opens the same window as the other WIMS start files.
+After that, operators only need the Desktop **WS Hub** icon (same idea as N1MM / WSJT-X).
+That icon opens the same window as the other WS Hub start files.
 When a release is newer, the window shows a small **update** mark and lists the
 release with its date. Hover a row for what changed. **Check now** looks again.
 **Update WS Hub** (a git copy), **Download update** (a zip copy), **Install this update**, and **Go back** are buttons. Nothing installs
@@ -71,15 +71,15 @@ while the window is open. No network just leaves the list as it was.
 ### Install then update (short)
 
 1. **Once:** `Install-Wims.cmd` (admin preferred on golden images).  
-2. **Daily:** Desktop **WIMS**.  
-3. **When offered:** **Update WS Hub** or **Download update** in the window (one click). Mid-contest you can ignore the banner. The Desktop **Update WIMS** shortcut still runs the git updater.
+2. **Daily:** Desktop **WS Hub**.  
+3. **When offered:** **Update WS Hub** or **Download update** in the window (one click). Mid-contest you can ignore the banner. The Desktop **Update WS Hub** shortcut still runs the git updater.
 
 ### Other scripts (menu calls these; rarely opened by hand)
 
 | File | What it does |
 |------|----------------|
 | **`Install-Wims.cmd`** | Installs Python/Git (winget), gets/updates the repo, firewall TCP 8787. May prompt for UAC. |
-| **`Start-WimsServer.cmd`** | **Site** WIMS server only (not for radio seats). |
+| **`Start-WimsServer.cmd`** | **Site** WS Hub server only (not for radio seats). |
 | **`Start-WimsAgent.cmd`** | One-shot agent check (also menu option 1). |
 | **`Start-WimsAgent-Continuous.cmd`** | Continuous agent (menu option 2). |
 | **`Start-Seat-Flex50.cmd`** | **Flex 50 MHz pack:** SmartSDR → CAT → DAX → N1MM → WSJT-X (`WSJTX-50`) → agent. |
@@ -88,8 +88,8 @@ while the window is open. No network just leaves the list as it was.
 | **`_Start-Seat-Core.cmd`** | Shared engine (N1MM + WSJT + agent); not double-clicked. |
 | **`Find-And-Set-WsjtxRigName.cmd`** | List/fix all WSJT-X shortcuts + radio config `--rig-name`. |
 | **`Install-WimsSeatStartup.cmd`** / **`Remove-WimsSeatStartup.cmd`** | Logon auto-start: `Install-WimsSeatStartup.cmd flex50` or `ic9700-144`. |
-| **`Start-WimsAtLogon.cmd`** / **`.vbs`** | Logon: read launcher **seat intent**, start WSJT-X (and N1MM if that intent) + WIMS. |
-| **`Install-WimsLogonStartup.cmd`** / **`Remove-WimsLogonStartup.cmd`** | Put **WIMS at logon** in the user Startup folder (no admin). |
+| **`Start-WimsAtLogon.cmd`** / **`.vbs`** | Logon: read launcher **seat intent**, start WSJT-X (and N1MM if that intent) + WS Hub. |
+| **`Install-WimsLogonStartup.cmd`** / **`Remove-WimsLogonStartup.cmd`** | Put **WS Hub at logon** in the user Startup folder (no admin). |
 | Grok logon | Developer only. See `tools/dev/windows/`. |
 | **`seat-common.example.cmd`** / **`seat-common.cmd`** | Shared: server URL, N1MM path, agent flags. |
 | **`radio-flex50.example.cmd`** / **`radio-flex50.cmd`** | Flex paths + 50 MHz `WSJTX_RIG_NAME`. |
@@ -101,7 +101,7 @@ while the window is open. No network just leaves the list as it was.
 | **`Check-WimsSetup.cmd`** / **`Start-Wims-Solo.cmd`** / **`Start-Wims-Inhibit-Home.cmd`** | Home H0/H1 (see section above). |
 | **`Set-SeatAfterClone.cmd`** | After cloning a Win10 seat: write common + radio config, hostname, Startup, **Private LAN**. |
 | **`Set-ContestLanPrivate.cmd`** | UAC: set Ethernet to **Private**. N1MM allow-rules only match Private; Public blocks TCP 12070 send/receive. |
-| **`Set-ContestAppFirewall.cmd`** | UAC: inbound **Private** allow for N1MM, WSJT-X (`wsjtx.exe` UDP any port), GridTracker, WIMS 8787/8788/8790. Firewall stays on. |
+| **`Set-ContestAppFirewall.cmd`** | UAC: inbound **Private** allow for N1MM, WSJT-X (`wsjtx.exe` UDP any port), GridTracker, WS Hub 8787/8788/8790. Firewall stays on. |
 
 ### Lab: Proxmox seat clones (optional)
 
@@ -154,22 +154,22 @@ Middleware, N1MM, and WSJT-X are **only started if missing** (never force-killed
 The **agent** defaults to `START_AGENT_RESTART=1` while in development.
 
 Disable auto-start: **`Remove-WimsSeatStartup.cmd`** or delete  
-`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\WIMS Seat.lnk`.
+`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\WS Hub Seat.lnk`.
 
 Steps (seat / fleet VM):
 
-1. Get the repo onto the VM (`git clone …` **or** USB tree), e.g. `C:\Users\W2SZ\WIMS`.
-2. Open `WIMS\scripts\windows\` once → double-click **`Install-Wims.cmd`** (Python) if needed.
-3. Double-click **`Install-WIMS-Desktop-Shortcut.cmd`** → Desktop gets **WIMS** only
-   (GUI launcher + icon). Leftover **WIMS Server** / **WIMS Agent** icons are removed.
-4. Day-to-day: double-click Desktop **WIMS** for Solo / server / agent; for radio packs
+1. Get the repo onto the VM (`git clone …` **or** USB tree), e.g. `C:\Users\W2SZ\WS Hub`.
+2. Open `WS Hub\scripts\windows\` once → double-click **`Install-Wims.cmd`** (Python) if needed.
+3. Double-click **`Install-WIMS-Desktop-Shortcut.cmd`** → Desktop gets **WS Hub** only
+   (GUI launcher + icon). Leftover **WS Hub Server** / **WS Hub Agent** icons are removed.
+4. Day-to-day: double-click Desktop **WS Hub** for Solo / server / agent; for radio packs
    use `Start-Seat-Flex50` / `…-IC9700-144` or the text **`WIMS.cmd`** menu.
    Edit `seat-common.cmd` + the matching `radio-*.cmd`.
 5. **Unique WSJT-X UDP id per band:** set `WSJTX_RIG_NAME` in the radio config **and** fix
    Desktop shortcuts: `Find-And-Set-WsjtxRigName.cmd -RigName WSJTX-144 -Apply` (2m) or
    `WSJTX-50` (6m). Prefer `Start-WSJTX-50.cmd` / `Start-WSJTX-144.cmd` over bare `wsjtx.exe`.
 
-Site server PC (not seats): Desktop **WIMS** → **Site server** (N1MM PC, or no WSJT-X-only
+Site server PC (not seats): Desktop **WS Hub** → **Site server** (N1MM PC, or no WSJT-X-only
 seat). Scripts still have **`Start-WimsServer.cmd`** — it is not put on the Desktop.
 The `.cmd` files run PowerShell with **`-ExecutionPolicy Bypass` for that run only** — you do **not** run `Set-ExecutionPolicy` yourself. Scripts are **not** Authenticode-signed yet.
 
@@ -185,7 +185,7 @@ Release ZIPs from a browser often set Mark of the Web. Symptoms: SmartScreen (�
 4. Forced one-shot run:  
    `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install.ps1`
 
-Do not set permanent `Set-ExecutionPolicy Unrestricted` just for WIMS. See also the main [README.md](../../README.md) Windows section.
+Do not set permanent `Set-ExecutionPolicy Unrestricted` just for WS Hub. See also the main [README.md](../../README.md) Windows section.
 
 ### Offline / USB tree
 
@@ -196,7 +196,7 @@ Double-click Install-Wims.cmd
 Or from an elevated cmd (optional flags passed through to the `.ps1`):
 
 ```bat
-Install-Wims.cmd -RepoPath D:\WIMS -SkipClone
+Install-Wims.cmd -RepoPath D:\WS Hub -SkipClone
 ```
 
 ### Developers only (PowerShell)
@@ -219,7 +219,7 @@ Copy the contest **`.s3db`** into `Documents\N1MM Logger+\Databases` on the **se
 | Component | How |
 |-----------|-----|
 | **Python ≥ 3.10** | 1) `winget` (machine scope if admin) 2) if still missing, **silent download** of python.org 3.12.x |
-| **Git** | `winget` if missing. Required to clone, for **Update WIMS**, and for the launcher GitHub update check (`git fetch origin/main`). Release ZIP trees (no `.git`) skip this. |
+| **Git** | `winget` if missing. Required to clone, for **Update WS Hub**, and for the launcher GitHub update check (`git fetch origin/main`). Release ZIP trees (no `.git`) skip this. |
 | **Firewall TCP 8787** | `New-NetFirewallRule` (admin) |
 | **Start launcher** | Writes `python-path.txt` with the **full path** to `python.exe`. Launchers (`Start-WimsServer.cmd` and the rest) call `_resolve-python.cmd` so PATH refresh is not required. |
 
@@ -237,10 +237,10 @@ Install **ignores** LibreOffice / Office / Store-stub Pythons (LibreOffice's
 4. If the log mentions **LibreOffice**, that is not a usable Python — Install should skip it and download CPython. Re-run after this fix.  
 5. Manual fallback: https://www.python.org/downloads/ — check **Add python.exe to PATH**, then Install-Wims.cmd again.
 
-## Radio seat checklist (no WIMS install)
+## Radio seat checklist (no WS Hub install)
 
 1. WSJT-X: multicast + **Outgoing interface = LAN**
-2. N1MM: Broadcast Data → WIMS host or `224.0.0.73:12060`
+2. N1MM: Broadcast Data → WS Hub host or `224.0.0.73:12060`
 3. Browser → `http://<wims-server-ip>:8787/`
 
 See [docs/plan/wims_networking.md](../../docs/plan/wims_networking.md).

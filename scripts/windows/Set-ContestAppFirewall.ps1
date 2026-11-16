@@ -1,13 +1,13 @@
 #Requires -Version 5.1
 
-# WIMS - WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 <#
 .SYNOPSIS
-  Add Windows Firewall allow-rules for N1MM, WSJT-X, GridTracker, and WIMS
+  Add Windows Firewall allow-rules for N1MM, WSJT-X, GridTracker, and WS Hub
   on the Private profile (contest LAN).
 
   Do NOT turn the firewall off. Keep Ethernet Private, then run this.
@@ -164,7 +164,7 @@ foreach ($exe in $gtCandidates) {
         $gtFound = $true
         $name = [IO.Path]::GetFileNameWithoutExtension($exe)
         Ensure-ProgramPair -Label $name -Exe $exe -Protocols @("UDP")
-        # WIMS optional GT bridge forwards plane A to 22370
+        # WS Hub optional GT bridge forwards plane A to 22370
         Ensure-Rule -DisplayName "WIMS contest - GridTracker UDP 22370" `
             -Direction Inbound -Protocol UDP -LocalPort "22370"
     }
@@ -173,7 +173,7 @@ if (-not $gtFound) {
     Write-Status SKIP "GridTracker not installed (optional)"
 }
 
-# --- WIMS: port rules (python.exe path is not stable) ---
+# --- WS Hub: port rules (python.exe path is not stable) ---
 Ensure-Rule -DisplayName "WIMS contest - console TCP 8787" -Direction Inbound -Protocol TCP -LocalPort "8787"
 Ensure-Rule -DisplayName "WIMS contest - agent TCP 8790" -Direction Inbound -Protocol TCP -LocalPort "8790"
 Ensure-Rule -DisplayName "WIMS contest - presence UDP 8788" -Direction Inbound -Protocol UDP -LocalPort "8788"

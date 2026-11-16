@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -76,7 +76,7 @@ class ScriptsAllowlistTests(unittest.TestCase):
         solo = ROOT / "scripts" / "start-wims-solo.sh"
         front = ROOT / "scripts" / "start-wims.sh"
         desk = ROOT / "scripts" / "add-wims-to-desktop.sh"
-        bat = ROOT / "scripts" / "Add WIMS to Desktop.bat"
+        bat = ROOT / "scripts" / "Add WS Hub to Desktop.bat"
         cmd = ROOT / "scripts" / "windows" / "Start-WimsLauncher.cmd"
         ps1 = ROOT / "scripts" / "windows" / "Install-WimsDesktopShortcut.ps1"
         self.assertTrue(os.access(solo, os.X_OK), "start-wims-solo.sh is not executable")
@@ -120,7 +120,7 @@ class ZeroKnowledgeWordingTests(unittest.TestCase):
             timeout=30,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("usage: WIMS", proc.stdout)
+        self.assertIn("usage: WS Hub", proc.stdout)
         chunks["launcher --help"] = proc.stdout + "\n" + "\n".join(help_bits)
 
         problems = []
@@ -319,8 +319,8 @@ class ZeroKnowledgeWordingTests(unittest.TestCase):
         with mock.patch("builtins.__import__", side_effect=block_tk), mock.patch.dict(
             os.environ, env, clear=True
         ), mock.patch("sys.stdout", buf):
-            show_operator_message("Click the WIMS window if you can see it.")
-        self.assertIn("Click the WIMS window", buf.getvalue())
+            show_operator_message("Click the WS Hub window if you can see it.")
+        self.assertIn("Click the WS Hub window", buf.getvalue())
 
 
 class SoloLauncherPathTests(unittest.TestCase):

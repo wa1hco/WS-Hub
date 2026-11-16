@@ -4,7 +4,7 @@ Two modes:
   --view  (default) parse each datagram and feed the live console Monitor — an
           offline dry-run of the §3.1 parser + monitor over recorded traffic.
   --emit HOST:PORT   re-send the raw datagrams over UDP (optionally at original
-          timing) so the real monitor / WIMS can consume them with no radio.
+          timing) so the real monitor / WS Hub can consume them with no radio.
 
 Run (from the repo root):
     python tools/testbed/replay/replay_capture.py

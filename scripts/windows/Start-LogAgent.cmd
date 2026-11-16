@@ -20,7 +20,7 @@ if not defined PYTHON_EXE (
 )
 
 echo.
-echo  WIMS test log agent
+echo  WS Hub test log agent
 echo  ===================
 echo  Host: %COMPUTERNAME%
 echo  Pin:  trailing -50/-144/… on hostname, or pass --band 6m

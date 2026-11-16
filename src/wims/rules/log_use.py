@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -459,12 +459,12 @@ def warnings_for(
         path = chosen.get("path") or "that file"
         if problem == "locked":
             text = (
-                f"WIMS cannot read this log because another program has it open ({path}). "
+                f"WS Hub cannot read this log because another program has it open ({path}). "
                 "Contacts already logged in this session can still count. Older ones will be missing."
             )
         else:
             text = (
-                f"WIMS cannot read this log ({path}). "
+                f"WS Hub cannot read this log ({path}). "
                 "If it is on a shared drive, connect that drive, or choose another log."
             )
         warns.append({"level": "warn", "message": text})
@@ -507,7 +507,7 @@ def guidance_text(goal: str) -> str:
     if goal == "contest":
         parts.append(
             "A new contest needs a new log in N1MM or your other logger. "
-            "WIMS reads that log and does not create it. When the new log appears, choose it here."
+            "WS Hub reads that log and does not create it. When the new log appears, choose it here."
         )
     parts.append(
         "Whole log counts every contact. Start now counts only contacts you log after you pick it. "

@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -32,13 +32,13 @@ cd /d "%ROOT%"
 
 call "%~dp0_resolve-python.cmd"
 if not exist "%PYTHON_EXE%" if /I not "%PYTHON_EXE%"=="py" if /I not "%PYTHON_EXE%"=="python" (
-  echo Python was not found, so WIMS cannot start.
+  echo Python was not found, so WS Hub cannot start.
   echo Double-click Install-Wims.cmd in this folder, then try again.
   pause
   exit /b 1
 )
 
-REM Same Operate start the WIMS window uses. The port check, messages,
+REM Same Operate start the WS Hub window uses. The port check, messages,
 REM browser, log, and rules live in that start, not in this file.
 "%PYTHON_EXE%" -m wims.solo %*
 set ERR=%ERRORLEVEL%

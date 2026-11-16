@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@
 
 """Experimental GridTracker bridge — merge WSJT-X streams for a remote GT.
 
-WIMS already joins every band port. This module:
+WS Hub already joins every band port. This module:
 
 1. **Forward** — re-send every raw WSJT-X NetworkMessage datagram to one
    ``(host, port)`` where GridTracker is listening (typically a Linux desktop).
@@ -42,7 +42,7 @@ from typing import Callable
 
 from wims.udp import messages as M
 
-# NetworkMessage types WSJT-X *accepts* from external apps (GT / WIMS).
+# NetworkMessage types WSJT-X *accepts* from external apps (GT / WS Hub).
 _CONTROL_TYPES = frozenset({
     M.REPLY,
     M.REPLAY,
@@ -135,7 +135,7 @@ class GridTrackerBridge:
         self._control_addr_for = control_addr_for
         self._log = log or (lambda m: print(m, flush=True))
         # Exclusive bind preferred: sharing the GT receive port with SO_REUSEADDR
-        # steals or loops same-host traffic. Cross-host, GT and WIMS use different
+        # steals or loops same-host traffic. Cross-host, GT and WS Hub use different
         # machines so the same port number is fine.
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:

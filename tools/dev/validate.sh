@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,7 +19,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #
-# WIMS smoke validation — proves the project runs end-to-end on this machine.
+# WS Hub smoke validation — proves the project runs end-to-end on this machine.
 #
 # Honors docs/project_rules.md "verify live, not by assertion": it runs the self-contained
 # unit suites AND a live no-RF run (server ingests the emulator's multicast →
@@ -175,4 +175,4 @@ fi
 hdr "Summary"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
-echo "  WIMS validates on this machine."
+echo "  WS Hub validates on this machine."

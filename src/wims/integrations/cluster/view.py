@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -228,7 +228,7 @@ def status_line(*, enabled: bool, phase: str, host: str, port: int,
     if phase == "extra":
         return (
             "Cluster: the node asked for more than a callsign. "
-            "WIMS only sends your callsign. Pick another node in Setup."
+            "WS Hub only sends your callsign. Pick another node in Setup."
         )
     if phase == "silent" or (phase == "retry" and reason == "silent"):
         return "Cluster: node sent nothing. Try another node on Setup" + _retry_wait(retry_s) + "."
@@ -292,7 +292,7 @@ def status_detail(*, host: str, port: int, callsign: str, qsy_cost: int,
             else "The node has not spoken."
         ),
         _ago(last_spot_age),
-        "Read-only. WIMS sends only your callsign, then listens.",
+        "Read-only. WS Hub sends only your callsign, then listens.",
         "It does not post spots. A click does not transmit or retune a radio.",
         "Some nodes allow one connection per callsign.",
         f"Spots drop off after {max(1, ttl_s // 60)} minutes.",

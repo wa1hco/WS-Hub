@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — shared seat settings (both radios on this PC / template).
+REM WS Hub — shared seat settings (both radios on this PC / template).
 REM Copy to seat-common.cmd and edit (seat-common.cmd is gitignored).
 REM Loaded by Start-Seat-Flex50.cmd and Start-Seat-IC9700-144.cmd before radio config.
 REM
@@ -8,7 +8,7 @@ REM Radio-specific paths and WSJT-X --rig-name live in:
 REM   radio-flex50.cmd        / radio-flex50.example.cmd
 REM   radio-ic9700-144.cmd    / radio-ic9700-144.example.cmd
 
-REM Site WIMS server (agent reports here)
+REM Site WS Hub server (agent reports here)
 REM Optional. Leave unset to discover, or pin e.g. http://192.168.x.y:8787
 REM set "WIMS_SERVER=http://192.168.x.y:8787"
 

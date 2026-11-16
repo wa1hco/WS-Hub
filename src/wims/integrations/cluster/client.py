@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -22,7 +22,7 @@ Login is the callsign and nothing else. A blank line is sent once when the
 socket opens, so a node that waits for the client will speak. Telnet option
 refusals are sent because the socket will not stay in plain text without
 them. No spot, no announcement, no ``set/`` filter, no ``sh/dx``. The node
-streams every spot after login. WIMS chooses bands and modes locally.
+streams every spot after login. WS Hub chooses bands and modes locally.
 
 AR-Cluster asks ``Please enter your call:``. DX-Spider asks ``login:``.
 CC Cluster asks the same kind of call prompt. The match is any case.

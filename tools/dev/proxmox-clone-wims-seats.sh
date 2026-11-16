@@ -27,7 +27,7 @@ FLEX_NAME="${FLEX_NAME:-wims-flex8600m}"
 
 if [[ -z "$SRC_VMID" ]]; then
   echo "Usage: $0 <SOURCE_VMID> [STORAGE]"
-  echo "  SOURCE_VMID = current golden Win10 WIMS guest (must be stopped)"
+  echo "  SOURCE_VMID = current golden Win10 WS Hub guest (must be stopped)"
   exit 1
 fi
 
@@ -94,10 +94,10 @@ echo "  qm start $IC_VMID"
 echo "  qm start $FLEX_VMID"
 echo
 echo "Inside each Windows guest (elevated cmd):"
-echo "  cd C:\\Users\\W2SZ\\WIMS\\scripts\\windows"
+echo "  cd C:\\Users\\W2SZ\\WS Hub\\scripts\\windows"
 echo "  Set-SeatAfterClone.cmd IC9700-50 IC9700-50-FT8"
 echo "  Set-SeatAfterClone.cmd FLEX-8600M FLEX-8600M-FT8"
 echo
 echo "Flex 8600M: point SmartSDR/DAX/CAT at the radio LAN IP; WSJT-X uses DAX audio + Flex CAT,"
 echo "  still with UDP Server 224.0.0.73 and Outgoing interface = Ethernet."
-echo "WIMS server must keep: --iface 192.168.1.119  (and ideally --n1mm-group 224.0.0.73)"
+echo "WS Hub server must keep: --iface 192.168.1.119  (and ideally --n1mm-group 224.0.0.73)"

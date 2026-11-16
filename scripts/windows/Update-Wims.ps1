@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -49,7 +49,7 @@ function Find-RepoPath {
 
 $RepoPath = Find-RepoPath -Hint $RepoPath
 if (-not $RepoPath) {
-    Write-Host "FAIL: WIMS repo not found. Run Install-Wims.cmd first." -ForegroundColor Red
+    Write-Host "FAIL: WS Hub repo not found. Run Install-Wims.cmd first." -ForegroundColor Red
     if (-not $NoPause) { pause }
     exit 2
 }
@@ -57,7 +57,7 @@ if (-not $RepoPath) {
 $win = Join-Path $RepoPath "scripts\windows"
 $script:LogFile = Join-Path $win "update-log.txt"
 try {
-    "===== WIMS update $(Get-Date -Format o) =====" | Set-Content -LiteralPath $script:LogFile -Encoding UTF8
+    "===== WS Hub update $(Get-Date -Format o) =====" | Set-Content -LiteralPath $script:LogFile -Encoding UTF8
 } catch { }
 
 Log "Repo = $RepoPath" "Cyan"
@@ -136,11 +136,11 @@ try {
     Pop-Location
 }
 
-# Refresh Desktop WIMS launcher shortcut (sticky .ico via wscript+VBS).
+# Refresh Desktop WS Hub launcher shortcut (sticky .ico via wscript+VBS).
 $deskPs1 = Join-Path $win "Install-WimsDesktopShortcut.ps1"
 $deskShortcut = Join-Path $win "Install-WIMS-Desktop-Shortcut.cmd"
 if (Test-Path -LiteralPath $deskPs1) {
-    Log "Refreshing Desktop WIMS shortcut..."
+    Log "Refreshing Desktop WS Hub shortcut..."
     try {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $deskPs1 -NoPause |
             ForEach-Object { Log "  $_" }
@@ -148,7 +148,7 @@ if (Test-Path -LiteralPath $deskPs1) {
         Log "WARN: shortcut refresh: $_" "Yellow"
     }
 } elseif (Test-Path -LiteralPath $deskShortcut) {
-    Log "Refreshing Desktop WIMS shortcut..."
+    Log "Refreshing Desktop WS Hub shortcut..."
     try {
         & cmd /c "`"$deskShortcut`" /nopause" | ForEach-Object { Log "  $_" }
     } catch {
@@ -164,14 +164,19 @@ try {
     $updCmd = Join-Path $win "Update-Wims.cmd"
     if ((Test-Path $updCmd) -and (Test-Path $desk)) {
         $wsh = New-Object -ComObject WScript.Shell
-        $lnkPath = Join-Path $desk "Update WIMS.lnk"
+        $lnkPath = Join-Path $desk "Update WS Hub.lnk"
         $lnk = $wsh.CreateShortcut($lnkPath)
         $lnk.TargetPath = $updCmd
         $lnk.WorkingDirectory = $win
-        $lnk.Description = "Pull latest WIMS from GitHub main"
+        $lnk.Description = "Pull latest WS Hub from GitHub main"
         if (Test-Path $ico) { $lnk.IconLocation = "$ico,0" }
         $lnk.Save()
         Log "Desktop shortcut: $lnkPath"
+        $staleUpd = Join-Path $desk "Update WIMS.lnk"
+        if (Test-Path -LiteralPath $staleUpd) {
+            Remove-Item -LiteralPath $staleUpd -Force
+            Log "Removed old Update WIMS icon (now Update WS Hub): $staleUpd"
+        }
     }
 } catch {
     Log "WARN: Update shortcut: $_" "Yellow"
@@ -180,7 +185,7 @@ try {
 if ($Relaunch) {
     $launch = Join-Path $win "Start-WimsLauncher.cmd"
     if (Test-Path $launch) {
-        Log "Relaunching WIMS launcher..."
+        Log "Relaunching WS Hub launcher..."
         Start-Process -FilePath $launch -WorkingDirectory $win
     }
 }

@@ -1,4 +1,4 @@
-# WIMS — GitHub Release track (design: docs/plan/wims_release_packages.md).
+# WS Hub — GitHub Release track (design: docs/plan/wims_release_packages.md).
 # Tag v* → version gate → validate → allow-list packages → GitHub Release.
 #
 # Tag scheme (locked):
@@ -192,7 +192,7 @@ jobs:
             echo "| File | Use |"
             echo "|------|-----|"
             echo "| \`wims-${VERSION}-windows-x86_64.zip\` | Extract to \`C:\\WIMS\` → \`Install-Wims.cmd\`, then WS Hub |"
-            echo "| \`wims-${VERSION}-linux-x86_64.tar.gz\` | Unpack, open scripts, double-click Add WIMS to Desktop, then WS Hub |"
+            echo "| \`wims-${VERSION}-linux-x86_64.tar.gz\` | Unpack, open scripts, double-click Install WS Hub, then WS Hub |"
             echo
             echo "### Install"
             echo

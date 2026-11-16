@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@
 
 """Passive fleet discovery + health + expected-vs-actual (plan §3.15 / §2.5).
 
-WIMS already joins the WSJT-X multicast, so it can enumerate the whole fleet for
+WS Hub already joins the WSJT-X multicast, so it can enumerate the whole fleet for
 free: which instances are alive, on what band, last decode, plus health and
 config problems - the cross-vehicle visibility that currently lives only in chat
 (see Deployment context). Feed it parsed messages with a timestamp + source IP;
@@ -319,7 +319,7 @@ class FleetTracker:
     def observe_n1mm_xml(self, xml_text: str, now: float, src_ip: str | None = None) -> None:
         """Register an N1MM instance from ANY of its broadcasts. `<contactinfo>` is a
         logged QSO; `<RadioInfo>`/`<AppInfo>`/... are periodic presence beacons that
-        let WIMS confirm the N1MM link during setup **without logging a contact**
+        let WS Hub confirm the N1MM link during setup **without logging a contact**
         (the operator's point — see §3.3 setup validation)."""
         try:
             root = ET.fromstring(xml_text)
@@ -540,7 +540,7 @@ def _main() -> None:
         n1mm_where = (f"{args.n1mm_group}:{args.n1mm_port}" if args.n1mm_group
                       else f":{args.n1mm_port}")
         listen += f" + N1MM {n1mm_where}"
-    print("WIMS fleet view - Ctrl-C to stop\n")
+    print("WS Hub fleet view - Ctrl-C to stop\n")
     try:
         while True:
             ready, _, _ = select.select(socks, [], [], 1.0)
@@ -562,7 +562,7 @@ def _main() -> None:
                 last = now
                 clock = time.strftime("%H:%M:%S", time.localtime(now))
                 print("\033[2J\033[H", end="")
-                print(f"WIMS fleet view  {clock}  | listening {listen}"
+                print(f"WS Hub fleet view  {clock}  | listening {listen}"
                       f"  | rx {wsjt_pkts} WSJT-X / {n1mm_pkts} N1MM pkts\n")
                 if not tracker.nodes and not tracker.loggers:
                     print("  waiting for traffic...")

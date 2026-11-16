@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -67,7 +67,7 @@ def test_format_conflict_message():
         "urls": {"status": "http://10.0.0.5:8787/status"},
     }]
     msg = P.format_conflict_message(peers, self_host="me")
-    assert "Another WIMS site server" in msg
+    assert "Another WS Hub site server" in msg
     assert "http://10.0.0.5:8787" in msg
     assert "other-pc" in msg
     assert "this host: me" in msg

@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,7 +19,7 @@
 """LoTW confirmations GridTracker already downloaded.
 
 GridTracker 2 keeps ``LoTW_QSL.adif`` under its config folder. GridTracker 1
-kept ``LogbookOfTheWorld.adif`` in Documents. WIMS finds those files on its
+kept ``LogbookOfTheWorld.adif`` in Documents. WS Hub finds those files on its
 own. The newest file is the one that counts. This module only reads. It
 never writes a LoTW file and it never downloads one.
 
@@ -181,10 +181,10 @@ def format_updated(when: datetime) -> str:
 
 
 def candidate_paths(home: Path, *, platform: str, environ: dict | None = None) -> list[Path]:
-    """Files WIMS looks for. Missing files stay in the list; the caller skips them.
+    """Files WS Hub looks for. Missing files stay in the list; the caller skips them.
 
-    No flag and no WIMS setting. ``APPDATA`` and ``XDG_CONFIG_HOME`` are the
-    platform folders those programs already use, not a WIMS option.
+    No flag and no WS Hub setting. ``APPDATA`` and ``XDG_CONFIG_HOME`` are the
+    platform folders those programs already use, not a WS Hub option.
     """
     env = environ if environ is not None else {}
     paths: list[Path] = []

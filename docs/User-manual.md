@@ -1,6 +1,6 @@
 # WS Hub — User Manual
 
-WS Hub was called WIMS (WSJT-X Instance Management System) before version 1.0.18. Some page titles, folders, and files still say WIMS or `wims`.
+WS Hub was called WIMS before version 1.0.18. The package, folders, and some file names still use `wims` (for example `src/wims` and `C:\WIMS`).
 
 **Audience:** contest operators and seat wranglers (W2SZ multi-multi VHF and similar).  
 **Install:** [INSTALL.md](../INSTALL.md).  

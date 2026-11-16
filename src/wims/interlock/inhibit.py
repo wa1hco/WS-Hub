@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -267,7 +267,7 @@ class KeyAgentScheduler:
             raise ValueError("ttl must comfortably exceed the keepalive period")
         self.controller_id = str(controller_id)
         self.station = str(station) if station else self.controller_id
-        self.band = band  # off-wire only (WIMS routing / logs)
+        self.band = band  # off-wire only (WS Hub routing / logs)
         self.target_id = str(target_id or "")
         self.hang_override = None if hang_s is None else float(hang_s)
         self.keepalive_s = float(keepalive_s)
