@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -22,7 +22,7 @@ Just operating is the checklist. A saved WSJT-X Colors choice is converted
 once into the matching checklist lines. Awards and the checklist use the
 log chosen under Log to use as the already-have list.
 
-County and callsign prefix stay off: WIMS does not ship a county list or a
+County and callsign prefix stay off: WS Hub does not ship a county list or a
 prefix list. ``log/pfx.py`` is a short zone table for N1MM inserts, not a
 prefix award. Continent, CQ zone, and ITU zone need the country file
 (``cty.dat``). When that file is missing those three stay off.
@@ -85,7 +85,7 @@ DETAIL_LABELS = {
 
 DETAIL_TIPS = {
     "contest": (
-        "Which contest. WIMS follows that contest's rules for what counts as a new contact."
+        "Which contest. WS Hub follows that contest's rules for what counts as a new contact."
     ),
     "award": (
         "Which award. A station is new when that place is not already in the log."
@@ -107,7 +107,7 @@ AWARDS = (
         "summary": "Needed when the DXCC entity is not already in the log.",
         "tip": (
             "A new country or DXCC entity. "
-            "WIMS treats contacts already in the log as the entities you have."
+            "WS Hub treats contacts already in the log as the entities you have."
         ),
     },
     {
@@ -137,8 +137,8 @@ AWARDS = (
         "title": "County hunting (coming soon)",
         "available": False,
         "rules_url": "",
-        "summary": "County hunting is not available yet. WIMS does not have a county list.",
-        "tip": "Coming soon. WIMS does not have a county list yet, so this stays off.",
+        "summary": "County hunting is not available yet. WS Hub does not have a county list.",
+        "tip": "Coming soon. WS Hub does not have a county list yet, so this stays off.",
     },
 )
 
@@ -191,13 +191,13 @@ CHECKLIST_KINDS = (
         "id": "county",
         "label": "New county",
         "available": False,
-        "tip": "Coming soon. WIMS does not have a county list yet, so this stays off.",
+        "tip": "Coming soon. WS Hub does not have a county list yet, so this stays off.",
     },
     {
         "id": "prefix",
         "label": "New callsign prefix",
         "available": False,
-        "tip": "Coming soon. WIMS does not have a callsign-prefix list yet, so this stays off.",
+        "tip": "Coming soon. WS Hub does not have a callsign-prefix list yet, so this stays off.",
     },
     {
         "id": "call",
@@ -264,7 +264,7 @@ OPERATING_OPTIONS = (
 # WSJT-X factory color categories, used only when a saved Colors choice has
 # no edited list. New DXCC and New DXCC on Band are the factory pair.
 # Highlight by mode was never read from an ini here: several WSJT-X instances
-# do not share one ini. It is kept only when the operator saved it in WIMS.
+# do not share one ini. It is kept only when the operator saved it in WS Hub.
 _COLOR_KEYS = (
     "new_dxcc",
     "new_dxcc_band",
@@ -282,7 +282,7 @@ DEFAULT_COLOR_CATEGORIES = {
     "new_call_band": False,
 }
 _CTY_MISSING_TIP = (
-    "WIMS could not find the country list (cty.dat) that WSJT-X keeps, so this stays off."
+    "WS Hub could not find the country list (cty.dat) that WSJT-X keeps, so this stays off."
 )
 _PLACE_KINDS = ("dxcc", "continent", "cq", "itu", "grid", "state", "call")
 _MULT_KINDS = frozenset({"dxcc", "continent", "cq", "itu", "grid", "state"})
@@ -652,7 +652,7 @@ class AwardRules:
         line = self._summary
         if self.award_id == "dxcc" and self.dxcc_lookup is None:
             line += (
-                " WIMS does not have a country list for callsigns, "
+                " WS Hub does not have a country list for callsigns, "
                 "so a station counts only when the log stores a country number."
             )
         elif self.award_id == "was":
@@ -697,7 +697,7 @@ class AwardRules:
             return Verdict(
                 True, False,
                 need_reason=(
-                    "County hunting is not available yet. WIMS does not have a county list."
+                    "County hunting is not available yet. WS Hub does not have a county list."
                 ),
                 points=1,
             )
@@ -709,7 +709,7 @@ class AwardRules:
                 return Verdict(
                     True, False,
                     need_reason=(
-                        "WIMS does not know this station's DXCC entity, "
+                        "WS Hub does not know this station's DXCC entity, "
                         "so it is not marked needed."
                     ),
                     points=1,
@@ -747,7 +747,7 @@ class AwardRules:
             return Verdict(
                 True, False,
                 need_reason=(
-                    "WIMS does not know this station's state, so it is not marked as a new state."
+                    "WS Hub does not know this station's state, so it is not marked as a new state."
                 ),
                 points=1,
             )
@@ -1006,7 +1006,7 @@ class ChecklistRules:
                 )
             return Verdict(
                 True, False,
-                need_reason="WIMS cannot tell yet: " + ", ".join(unknowns) + ".",
+                need_reason="WS Hub cannot tell yet: " + ", ".join(unknowns) + ".",
                 points=1,
             )
         if not checked:

@@ -1,4 +1,4 @@
-# WIMS — Fleet networking map (WSJT-X / N1MM / GridTracker)
+# WS Hub — Fleet networking map (WSJT-X / N1MM / GridTracker)
 
 Companion to **[wims_design.md](wims_design.md)** (requirements / design). This document is the
 **authoritative networking layout** for the contest digital fleet: who multicasts what, who
@@ -23,7 +23,7 @@ Related: **[wims_status.md](wims_status.md)** for what the server currently bind
 
 **Critical ops note:** every WSJT-X instance must set **Outgoing interface = contest LAN NIC**
 (§4.8). Multicast address alone is not enough — blank / `@Invalid()` interface is a silent
-failure (decodes work, WIMS never sees UDP).
+failure (decodes work, WS Hub never sees UDP).
 
 ---
 
@@ -38,7 +38,7 @@ than their N1MM as long as they share the **contest LAN** (plane A multicast). N
 
 **Multiple N1MM processes on one band (clarified 2026-08-12 — design §2.13.4):** a second N1MM
 used only for **SSB/CW** (no digi Log path on that PC) may exist for voice logging /
-RadioInfo; WIMS may show both. **Two digi log paths into the same N1MM for one QSO is not
+RadioInfo; WS Hub may show both. **Two digi log paths into the same N1MM for one QSO is not
 supported** (e.g. built-in reader **and** agent Log, or Secondary UDP 2333 **and** agent Log)
 and is a readiness **error**. Digital dupe/mult follows the active contest log.
 
@@ -165,7 +165,7 @@ still applies for the 10 ms mute path (design §3.4.1). On 222/432, SSB/CW and W
   │ WSJT-X TV-50-C  │──mcast:2237──│ N1MM-50 + agent Log      │
   │ own radio/PA    │              │ (reader OFF; sole logger │
   └─────────────────┘              │  for 50 digi)            │
-         ▲                         │ WIMS joins 2237 too      │
+         ▲                         │ WS Hub joins 2237 too      │
          │ contest LAN (same L2)   └──────────────────────────┘
          └──── must NOT use a second N1MM on the TV PC for this band
 ```
@@ -176,11 +176,11 @@ still applies for the 10 ms mute path (design §3.4.1). On 222/432, SSB/CW and W
 | **N1MM-50 agent Log** (one machine) joins **2237** and filters live band = 50 | Sole logger-of-record |
 | N1MM built-in WSJT UDP reader **OFF** | Agent Log owns digi → N1MM |
 | Both PCs: UDP Server = fleet multicast, **Outgoing interface = contest LAN NIC** | Silent-failure trap §4.8 |
-| Same **Contest LAN** (wired L2 or equivalent) between TV site and N1MM/WIMS | Multicast does not cross the public internet |
-| Unique `--rig-name` (e.g. `TV-50-C`) | WIMS / agent distinguish instances |
+| Same **Contest LAN** (wired L2 or equivalent) between TV site and N1MM/WS Hub | Multicast does not cross the public internet |
+| Unique `--rig-name` (e.g. `TV-50-C`) | WS Hub / agent distinguish instances |
 
 If the remote site **cannot** join the contest L2, it is **out of scope for plane A** until a
-relay is designed (not default). Unicast-to-N1MM-only without WIMS is a manual exception, not the
+relay is designed (not default). Unicast-to-N1MM-only without WS Hub is a manual exception, not the
 fleet map.
 
 ### 1.2 Dual PC on one band (144 FT8 + MSK144)
@@ -188,7 +188,7 @@ fleet map.
 ```
   PC-144-FT8 ──WSJT-X──┐
                        ├── 224.0.0.73:2237 ──► N1MM-144 agent Log (reader OFF)
-  PC-144-MSK ──WSJT-X──┘                    ──► WIMS (observer)
+  PC-144-MSK ──WSJT-X──┘                    ──► WS Hub (observer)
 ```
 
 - Separate **radio + PC** per mode is expected; **one N1MM-144** still owns the log via agent.  
@@ -198,7 +198,7 @@ fleet map.
 ### 1.3 Single-PC seats (222 / 432)
 
 - One host runs **N1MM** for that band and, when digital, **one WSJT-X**.  
-- Periods of **SSB/CW only** are normal: N1MM up, no WSJT-X instance (WIMS shows logger via
+- Periods of **SSB/CW only** are normal: N1MM up, no WSJT-X instance (WS Hub shows logger via
   plane B RadioInfo; no digital instance until FT8 starts).  
 - When FT8 is active, same rules as any other band (multicast + unique id + iface).
 
@@ -223,7 +223,7 @@ wired; agent + RadioInfo keep band filtering uniform.
                                                        FT8)          FT8)
 
               ┌──────────────────────────┐
-              │  WIMS SERVER (site)      │
+              │  WS Hub SERVER (site)      │
               │  joins 224.0.0.73:2237   │
               │  serves browser consoles │
               └──────────────────────────┘
@@ -241,7 +241,7 @@ wired; agent + RadioInfo keep band filtering uniform.
 | **N1MM+WSJT 222/432** | Same seat PC | SSB and/or FT8 on that radio |
 
 Optional **GridTracker**: any operator PC that wants a map/viewer; **never** click-to-work on
-WIMS-managed instances (that bypasses the TX arbiter — design §1.2 / §4.3).
+WS Hub-managed instances (that bypasses the TX arbiter — design §1.2 / §4.3).
 
 ---
 
@@ -250,17 +250,17 @@ WIMS-managed instances (that bypasses the TX arbiter — design §1.2 / §4.3).
 | Plane | What | Purpose |
 |-------|------|---------|
 | **A. WSJT-X UDP (multicast)** | WSJT-X Heartbeat / Status / Decode / QSO Logged | Decodes, status, N1MM logging of digital QSOs |
-| **B. Logger UDP (N1MM external)** | `<contactinfo>`, `<RadioInfo>`, … on **:12060** | WIMS log copy, presence, roster dupe/mult |
+| **B. Logger UDP (N1MM external)** | `<contactinfo>`, `<RadioInfo>`, … on **:12060** | WS Hub log copy, presence, roster dupe/mult |
 | **C. N1MM peer network (TCP)** | N1MM “Networked Computer” | One **merged** contest log among the four N1MMs |
-| **D. Console unicast** | HTTP/SSE (later TLS/WS) to WIMS | Operators; never the RF data path over the internet |
-| **E. Site-server presence** | WIMS JSON beacon ~1 Hz multicast | Single-primary lockout + zero-memory console discovery |
+| **D. Console unicast** | HTTP/SSE (later TLS/WS) to WS Hub | Operators; never the RF data path over the internet |
+| **E. Site-server presence** | WS Hub JSON beacon ~1 Hz multicast | Single-primary lockout + zero-memory console discovery |
 
-- WIMS uses **A + B + D + E**.
-- **C** is N1MM↔N1MM only (WIMS does not speak that protocol; it inherits the merge via
+- WS Hub uses **A + B + D + E**.
+- **C** is N1MM↔N1MM only (WS Hub does not speak that protocol; it inherits the merge via
   `.s3db` seed / resync and live `<contactinfo>`).
 - SSB/CW **10 ms** mute is **not** plane B; it is host-agent peer UDP / CTS (design §3.4.1).
-- **Radio CAT / PTT / USB audio** are **not** WIMS planes. They are **seat-local** under the
-  radio host (see **§3.2** / **§3.3**). WIMS never opens the radio’s COM port and never speaks
+- **Radio CAT / PTT / USB audio** are **not** WS Hub planes. They are **seat-local** under the
+  radio host (see **§3.2** / **§3.3**). WS Hub never opens the radio’s COM port and never speaks
   CI-V or Hamlib **rigctld** to the rig; it talks to **WSJT-X over plane A** (and N1MM over
   plane B).
 - **Rotators** are seat-local too, and they are not a fleet plane. The rotor PC’s agent
@@ -307,15 +307,15 @@ can find the server even when **all** UDP presence is blocked.
 **Code:** `src/wims/discovery/presence.py` · server `--presence-*` / `--no-presence` /
 `--force-server` · agent `--no-discover`.
 
-### 3.2 Seat-local radio control (CAT / PTT / audio) — not a WIMS plane
+### 3.2 Seat-local radio control (CAT / PTT / audio) — not a WS Hub plane
 
-WIMS treats **WSJT-X as the radio adapter** for digital:
+WS Hub treats **WSJT-X as the radio adapter** for digital:
 
 | Direction | Mechanism | Who owns it |
 |-----------|-----------|-------------|
-| **Ingest** | Heartbeat / Status / Decode / QSO Logged (plane A) | WSJT-X → WIMS / N1MM / optional GT |
-| **Control** | Reply / Halt Tx (plane A UDP) | WIMS → WSJT-X only |
-| **CAT / PTT / dial QRG** | Serial, TCP, Hamlib, rigctld, manufacturer middleware | **Seat only** — outside WIMS |
+| **Ingest** | Heartbeat / Status / Decode / QSO Logged (plane A) | WSJT-X → WS Hub / N1MM / optional GT |
+| **Control** | Reply / Halt Tx (plane A UDP) | WS Hub → WSJT-X only |
+| **CAT / PTT / dial QRG** | Serial, TCP, Hamlib, rigctld, manufacturer middleware | **Seat only** — outside WS Hub |
 | **TX audio** | Sound device / radio USB codec | Seat WSJT-X host |
 | **Fast 10 ms mute** (fleet later) | Host-agent audio gain / hardware gate | Seat agent — **not** CAT round-trip |
 
@@ -326,25 +326,25 @@ pointing two apps at the same Windows COM device. Rotator control is a different
 path (§3.4). It uses rotctld, not the radio’s CAT port.
 
 **Do not** use N1MM’s built-in **Window → Load WSJT/JTDX** / “DX Lab Suite Commander” rig-proxy
-path on WIMS-managed seats. That path makes N1MM the CAT master for WSJT-X and fights the
-model below (WSJT-X owns digital TX; N1MM owns the log; WIMS owns fleet UDP + arbiter).
+path on WS Hub-managed seats. That path makes N1MM the CAT master for WSJT-X and fights the
+model below (WSJT-X owns digital TX; N1MM owns the log; WS Hub owns fleet UDP + arbiter).
 
 **PTT timing vs design §1.1 / §3.4.1:**
 
-- **Slow path (always):** WIMS **Halt Tx** → WSJT-X stops feeding the audio buffer → PTT drops
+- **Slow path (always):** WS Hub **Halt Tx** → WSJT-X stops feeding the audio buffer → PTT drops
   via whatever path WSJT-X uses (CAT through middleware is fine). Dominated by audio drain +
   PTT release (tens–hundreds of ms), not LAN RTT.
 - **Fast path (SSB/CW priority):** mute **TX audio on the WSJT-X host** (agent), independent of
   CAT middleware. CTS-based SSB/CW sense is also outside the CAT stack.
 
-**Frequency truth for digital roster:** WIMS uses dial frequency primarily from **WSJT-X Status
+**Frequency truth for digital roster:** WS Hub uses dial frequency primarily from **WSJT-X Status
 UDP** (plane A). N1MM RadioInfo (plane B) is for logger presence / SSB seats. CAT through
 middleware must keep WSJT-X Status accurate; N1MM poll lag is secondary for FT8 S&P.
 
 **N1MM units + transverters** ([decision 2026-09-12](../decisions/2026-09-12-transverter-if-and-n1mm-khz.md)):
 RadioInfo `<Freq>` is **10 Hz units**; Network Status / DXLOG `Freq` is **kHz**
-(10 GHz calling **10368090.00** → 10368.090 MHz, Band **10000**). WIMS accepts both.
-**222** may report **21 MHz** IF; **432** may report **28 MHz** IF. WIMS adds
+(10 GHz calling **10368090.00** → 10368.090 MHz, Band **10000**). WS Hub accepts both.
+**222** may report **21 MHz** IF; **432** may report **28 MHz** IF. WS Hub adds
 the LO offset **only when that rig-name or N1MM station is marked** on Setup
 (`if_seats.json`). A Flex / SmartSDR dial is already RF — 28.074 MHz stays
 10m. Microwave RF (MGEF-10-UP) is not run through the 28 MHz IF map.
@@ -362,9 +362,9 @@ wfview  (only process on real radio COM / LAN control)
    ├── RigCtld (Hamlib)  127.0.0.1:4533  ──► WSJT-X   (freq + PTT + mode)
    └── TCP CI-V server   127.0.0.1:<port> ──► N1MM    (frequency / mode poll)
 WSJT-X
-   └── Plane A multicast 224.0.0.73:2237 ──► WIMS + N1MM agent Log + optional GT
+   └── Plane A multicast 224.0.0.73:2237 ──► WS Hub + N1MM agent Log + optional GT
 N1MM (reader OFF)
-   └── Plane B XML 127.0.0.1:12060 ──► N1MM agent ──HTTP──► WIMS
+   └── Plane B XML 127.0.0.1:12060 ──► N1MM agent ──HTTP──► WS Hub
 ```
 
 **Roles:**
@@ -374,10 +374,10 @@ N1MM (reader OFF)
 | **wfview** | Real USB COM (or radio LAN); optional scope/waterfall | Contest log; Reply/Halt fleet control |
 | **WSJT-X** | Digital TX, Fake It / split, plane A UDP, USB audio codec | Exclusive COM if wfview is in use |
 | **N1MM** | Contest log; plane B; optional CAT **freq** via wfview TCP | Digital TX; plane A Reply; dual COM open |
-| **WIMS** | Plane A join + Reply/Halt; plane B log copy; console | Any direct radio CAT / COM |
+| **WS Hub** | Plane A join + Reply/Halt; plane B log copy; console | Any direct radio CAT / COM |
 
-This is **consistent** with WIMS design: middleware is a **seat implementation detail** of the
-instance profile “CAT path” (design §3.14), not a WIMS server feature.
+This is **consistent** with WS Hub design: middleware is a **seat implementation detail** of the
+instance profile “CAT path” (design §3.14), not a WS Hub server feature.
 
 #### 3.3.1 Radio menus (IC-9700 pattern; adapt model names)
 
@@ -432,7 +432,7 @@ Do **not** point Network Server at radio LAN ports (**50001 / 50002 / 50003**).
 |---------|--------|
 | UDP Server | **`224.0.0.73`** |
 | UDP Server port | **`2237`** (all bands — current fleet; §4.3) |
-| Accept UDP requests | **ON** (WIMS Reply / Halt) |
+| Accept UDP requests | **ON** (WS Hub Reply / Halt) |
 | Outgoing interface | Contest LAN NIC (§4.8) — mandatory on multi-homed / fleet seats |
 | Secondary UDP / N1MM Logger+ Broadcasts | **OFF** — N1MM agent Log owns digi → N1MM (avoids double-log) |
 
@@ -445,15 +445,15 @@ Do **not** point Network Server at radio LAN ports (**50001 / 50002 / 50003**).
 | **CAT / frequency** | Port type **TCP**, address **`127.0.0.1:<wfview-tcp-port>`**, radio model = actual rig (e.g. IC-9700). Not COM3/4. |
 | **WSJT UDP reader** | **OFF** — digi → N1MM is the **N1MM agent Log** path, not N1MM joining plane A |
 | **Broadcast Data** | Contacts + Radio → **`127.0.0.1:12060`** (N1MM agent relays to site; plane B) |
-| **Load WSJT/JTDX** | **Do not use** on WIMS-managed digital seats |
+| **Load WSJT/JTDX** | **Do not use** on WS Hub-managed digital seats |
 
 Leave CW/PTT on N1MM’s radio port off when WSJT-X owns digi TX via CAT.
 
-#### 3.3.5 WIMS and GridTracker on a wfview seat
+#### 3.3.5 WS Hub and GridTracker on a wfview seat
 
 | App | Join | Notes |
 |-----|------|--------|
-| **WIMS server** | `--group 224.0.0.73 --ports 2237` | Fleet default is **2237 only** |
+| **WS Hub server** | `--group 224.0.0.73 --ports 2237` | Fleet default is **2237 only** |
 | **GridTracker** | Same group:port as the band being watched | **Viewer only** on managed instances — no click-to-work (bypasses TX arbiter, design §1.2 / §4.3) |
 
 #### 3.3.6 Start order
@@ -461,7 +461,7 @@ Leave CW/PTT on N1MM’s radio port off when WSJT-X owns digi TX via CAT.
 1. **wfview** — connected; RigCtld ON; TCP server ON  
 2. **WSJT-X** — Test CAT green; decoding; plane A `224.0.0.73:2237` applied  
 3. **N1MM** — digi WSJT reader **OFF**; Broadcast → `127.0.0.1:12060`; **N1MM agent** up  
-4. **WIMS** — roster fills; joins **`2237`**  
+4. **WS Hub** — roster fills; joins **`2237`**  
 5. **GridTracker** (optional) — view-only  
 
 #### 3.3.7 Instance profile fields (CAT stack — design §3.14)
@@ -488,17 +488,17 @@ Other valid CAT path enums for profiles: `direct-com` · `wfview-rigctld` · `wi
 | Test CAT fails; using `:50002` | Radio LAN port — use **`127.0.0.1:4533`** only |
 | Radio “only offers 19200 baud” | Looking at REMOTE **CI-V Baud Rate**; set **Unlink** + **CI-V USB Baud Rate** |
 | N1MM cannot open radio | Pointed at COM while wfview holds it — use wfview **TCP** |
-| WIMS roster empty; waterfall full | WSJT-X not on `224.0.0.73:2237`, or §4.8 outgoing iface |
+| WS Hub roster empty; waterfall full | WSJT-X not on `224.0.0.73:2237`, or §4.8 outgoing iface |
 | Double QSOs in N1MM | Built-in WSJT reader and/or Secondary UDP 2333 **and** agent Log both on |
 
 ---
 
-### 3.4 Seat-local rotators (rotctld) — not a WIMS plane
+### 3.4 Seat-local rotators (rotctld) — not a WS Hub plane
 
 Rotators follow the same split as radio CAT: the hardware stays on the seat,
 and the site server never opens it. The difference is the program the seat
-talks to. Radio CAT stays in wfview / rigctld / the radio middleware, and WIMS
-talks to WSJT-X. Rotators are hamlib **rotctld**, and the per-PC WIMS agent
+talks to. Radio CAT stays in wfview / rigctld / the radio middleware, and WS Hub
+talks to WSJT-X. Rotators are hamlib **rotctld**, and the per-PC WS Hub agent
 is the client.
 
 | Direction | Who |
@@ -519,10 +519,10 @@ listen for it.
 
 ---
 
-## 4. Plane A — single fleet stream (WSJT-X → WIMS + N1MM agent Log)
+## 4. Plane A — single fleet stream (WSJT-X → WS Hub + N1MM agent Log)
 
 **Current model (normative for operators):** *all* WSJT-X instances multicast on **one** plane-A
-stream — `224.0.0.73:2237`. Consumers are **WIMS** (roster / Reply), **N1MM agent Log** on each
+stream — `224.0.0.73:2237`. Consumers are **WS Hub** (roster / Reply), **N1MM agent Log** on each
 band’s logger PC (filters by live band → localhost `:52001` / `:2333`), and optional **GT**.
 N1MM’s built-in WSJT/JTDX UDP **reader stays OFF**. Band identity comes from dial / RadioInfo,
 not from UDP port.
@@ -538,7 +538,7 @@ that for W2SZ bring-up — see
 |------|------------|
 | **N WSJT-X per band** (beams, dual-RX modes, remote site) | Distinct radios / PCs / modes |
 | **Log only to that band’s N1MM** | Exactly **one** digi log path per QSO (agent Log; reader OFF) |
-| **All decodes → common WIMS** | One site roster / arbiter / console |
+| **All decodes → common WS Hub** | One site roster / arbiter / console |
 | **Bands 50 → 1296 MHz** | Same plane-A port; agent filters by live band |
 | **Minimal one-band setup looks familiar** | Defaults: `224.0.0.73:2237` + agent |
 | **Ports are hard to remember** | Fleet uses **one** port — no per-band arithmetic |
@@ -551,7 +551,7 @@ There is **one** plane-A stream \(S\) for the fleet:
   WSJT-X (any band / host)  ──┐
                               ├──►  224.0.0.73:2237
   WSJT-X …                    ┘         │
-                         ├──►  WIMS    (roster / Reply; all bands)
+                         ├──►  WS Hub    (roster / Reply; all bands)
                          ├──►  N1MM agent Log on N1MM-B PC (filter band B → log)
                          └──►  optional GT (viewer only)
 ```
@@ -559,18 +559,18 @@ There is **one** plane-A stream \(S\) for the fleet:
 | Consumer | Joins | Writes contest log? | Notes |
 |----------|-------|---------------------|--------|
 | **N1MM agent Log** (on N1MM-B PC) | **2237** | **Yes** (forwards QSO Logged → local N1MM) | Filters by RadioInfo live band; built-in reader **OFF** |
-| **WIMS site server** | **2237** | **No** | Ingest Decode/Status; Reply/Halt by UDP `id` |
-| **GridTracker** (optional) | 2237 (or lab ports) | No | Never click-to-work on WIMS-managed instances |
+| **WS Hub site server** | **2237** | **No** | Ingest Decode/Status; Reply/Halt by UDP `id` |
+| **GridTracker** (optional) | 2237 (or lab ports) | No | Never click-to-work on WS Hub-managed instances |
 | **N1MM built-in WSJT reader** | — | **Must stay OFF** | Would double-log with agent Log |
 
 **Logging path (digital QSO):**  
 WSJT-X (any host) → `224.0.0.73:2237` → **N1MM agent Log** on the matching band’s N1MM PC →
-local N1MM (`:52001` / `:2333`) → plane C peer merge → WIMS sees log via plane B
+local N1MM (`:52001` / `:2333`) → plane C peer merge → WS Hub sees log via plane B
 `<contactinfo>` / `.s3db` seed (design §3.6).  
-WIMS does **not** become a second logger.
+WS Hub does **not** become a second logger.
 
 **Decode path (roster):**  
-WSJT-X → `:2237` → WIMS → SSE consoles.  
+WSJT-X → `:2237` → WS Hub → SSE consoles.  
 Keep Secondary UDP / “Broadcast to N1MM Logger+” (**2333**) **OFF** on WSJT-X — agent Log
 owns the digi path.
 
@@ -618,7 +618,7 @@ NIC — **§4.8** (most common silent failure).
 tooling (`--ports 2237,2238,…`), not the contest bring-up recipe.
 
 **Historical problem this registry solved:** operators had to remember “144 = 2238”; N1MM might
-bind unexpected UDP ports; WIMS had to join exactly the streams that existed.
+bind unexpected UDP ports; WS Hub had to join exactly the streams that existed.
 
 **Design (when multi-port lab is used):** the **site server** (Setup) owns a **Band Stream
 Registry** — the single source of truth for \(S_B\):
@@ -637,16 +637,16 @@ table (§4.3) is lab archaeology only.
 **Guided / automatic assignment:**
 
 1. Operator adds a band seat or WSJT instance in Setup (or agent reports a new host).  
-2. WIMS proposes **`2237`** (fleet), or a free lab port if experimenting with multi-port.  
+2. WS Hub proposes **`2237`** (fleet), or a free lab port if experimenting with multi-port.  
 3. **Agent apply** (future / partial today): write WSJT-X `.ini` (`UDPServer`, `UDPServerPort`,
    `UDPInterface`, Accept UDP); print **N1MM agent** checklist (reader OFF; Log joins 2237;
    Broadcast `127.0.0.1:12060`).  
 4. **Readiness gate:** every declared WSJT-X id appears on the fleet stream; each band has
-   exactly one N1MM agent Log path; WIMS joins **2237**; built-in readers OFF.
+   exactly one N1MM agent Log path; WS Hub joins **2237**; built-in readers OFF.
 
 **Implication:** operators do **not** need per-band ports — only `2237` + unique `--rig-name`.
 
-**WIMS server join policy:**
+**WS Hub server join policy:**
 
 | Mode | Behavior |
 |------|----------|
@@ -670,7 +670,7 @@ table (§4.3) is lab archaeology only.
                           │
           ┌───────────────┼───────────────┐
           ▼               ▼               ▼
-        WIMS      N1MM agent Log     optional GT
+        WS Hub      N1MM agent Log     optional GT
                   (per band PC;
                    reader OFF)
 ```
@@ -685,12 +685,12 @@ table (§4.3) is lab archaeology only.
     N×WSJT N×WSJT  0–1 WSJT             0–1 …   0–1 …   0–1 …
        ▼      ▼       ▼                    ▼       ▼       ▼
     N1MM-50 N1MM-144 N1MM-222           N1MM-432 …  (each reader ON one port)
-    WIMS joined ALL registry streams (skip 2240)
+    WS Hub joined ALL registry streams (skip 2240)
 ```
 
-Control path: WIMS → Reply/Halt to the WSJT-X source address and port, keyed by UDP `id`.
+Control path: WS Hub → Reply/Halt to the WSJT-X source address and port, keyed by UDP `id`.
 Only the **lease holder’s** console commands are honored (design §4.5). The reply socket
-is not bound to the address WIMS listens on. The operating system chooses the route, so
+is not bound to the address WS Hub listens on. The operating system chooses the route, so
 a solo listen on loopback can still answer a WSJT-X packet that came from another address.
 
 ### 4.6 WSJT-X settings (every instance)
@@ -703,7 +703,7 @@ These are **required**, not optional tips. Details for the interface field: **§
 | UDP Server port number | **`2237`** (all bands — §4.3) |
 | **Outgoing interface** | **Contest LAN NIC** — **§4.8** (never blank / `@Invalid()` / loopback) |
 | TTL | Sufficient for the LAN (design baseline: **3**) |
-| Accept UDP requests | **Yes** when WIMS will drive Reply/Halt |
+| Accept UDP requests | **Yes** when WS Hub will drive Reply/Halt |
 | Secondary UDP / “Broadcast to N1MM Logger+” (2333) | **OFF** — N1MM agent Log owns digi → N1MM |
 
 Also: unique `--rig-name` → unique UDP `id`; do **not** use GridTracker as a relay for logging.
@@ -716,13 +716,13 @@ Also: unique `--rig-name` → unique UDP `id`; do **not** use GridTracker as a r
 | N1MM agent **Log** | Joins `224.0.0.73:2237`; filters by live band → `127.0.0.1:52001` / `:2333` |
 | N1MM agent **Broadcast** | Relays plane B from `127.0.0.1:12060` → site (`WIMS_SERVER`) |
 | N1MM agent **KEY** | As needed for SSB/CW inhibit (§3 / operator_setup) |
-| Load WSJT/JTDX (CAT proxy) | **Do not use** on WIMS-managed digital seats (§3.3) |
+| Load WSJT/JTDX (CAT proxy) | **Do not use** on WS Hub-managed digital seats (§3.3) |
 | Broadcast Data (plane B) | Contacts + Radio → **`127.0.0.1:12060`** (agent relays to site) |
 
 **Note:** N1MM may still open **extra UDP sockets** that do not appear as labeled “SO2R port”
 fields in Configurer (runtime bind ≠ UI label) — see **§4.9** (historical multi-port lab).
 With reader OFF and fleet on **2237 only**, accidental N1MM binds of old Scheme A ports are
-usually harmless noise for WIMS.
+usually harmless noise for WS Hub.
 
 ### 4.9 Runtime port ownership conflicts (e.g. `:2240` held by N1MM) — historical lab notes
 
@@ -736,7 +736,7 @@ socket ownership** problem that a multi-port Band Stream Registry and readiness 
 handle.
 
 **Historical design decision (2026-07):** Scheme A **no longer used UDP 2240** for any band
-stream. **432 → 2241**, **902 → 2242**, **1296 → 2243**. Multi-port WIMS join lists **omitted
+stream. **432 → 2241**, **902 → 2242**, **1296 → 2243**. Multi-port WS Hub join lists **omitted
 2240** so a common Windows/N1MM bind of `:2240` did not steal the 432 stream. §4.9 remains for
 lab ports (2237, 2241, …) that may still collide when multi-port is enabled.
 
@@ -744,7 +744,7 @@ lab ports (2237, 2241, …) that may still collide when multi-port is enabled.
 
 | Fact | Detail |
 |------|--------|
-| **Symptom (old map)** | WIMS server stderr: `WSJT-X port 224.0.0.73:2240 bind failed ([WinError 10013] …); skipping` when 432 was still on 2240 |
+| **Symptom (old map)** | WS Hub server stderr: `WSJT-X port 224.0.0.73:2240 bind failed ([WinError 10013] …); skipping` when 432 was still on 2240 |
 | **Owner of UDP :2240** | `N1MMLogger.net.exe` (verified with `Get-NetUDPEndpoint` / `netstat -ano -p udp`) |
 | **Also held by same N1MM** | UDP **2237** (primary digi reader) plus multi-computer **12070/12080**, multi-user **130xx**, ephemeral high ports |
 | **Configurer UI** | Operator may see **no SO2R / no second-reader / no “2240”** field set |
@@ -758,11 +758,11 @@ Same class of issue can hit **any** registry port (2237, 2241, …).
 
 | Effect | Severity |
 |--------|----------|
-| WIMS cannot join a stream if its registry port is taken (e.g. 2241) | **That band’s digi roster empty** for WIMS; server should **keep running** |
+| WS Hub cannot join a stream if its registry port is taken (e.g. 2241) | **That band’s digi roster empty** for WS Hub; server should **keep running** |
 | Old map used 2240 for 432 | Mitigated by **skipping 2240** in defaults (§4.3) |
 | N1MM still logs its own digi path on ports it owns | Logging may be fine for the band N1MM intends |
 | Browser “● disconnected” | **Unrelated** — means HTTP/SSE to `:8787` died (process exit, Defender, dual-primary demote) |
-| Double-log | Built-in reader ON and/or Secondary 2333 **and** agent Log; or two agents claiming one band — not the same as WIMS failing to bind |
+| Double-log | Built-in reader ON and/or Secondary 2333 **and** agent Log; or two agents claiming one band — not the same as WS Hub failing to bind |
 
 Design rule (already in §4.4): **bind failure → loud Status warning + skip that port; do not kill the server** if at least one stream binds.
 
@@ -783,29 +783,29 @@ Do **not** require the operator to find “2240” under SO2R before believing t
 
 | Approach | When | Notes |
 |----------|------|--------|
-| **A. Skip the port in WIMS** | Band not used / temporary | `--ports` without that port, or registry omit band |
-| **B. Reassign stream port in registry** | Lab multi-port only; want band digi while another app holds the port | New free port for \(S_B\); update **all** WSJT-X on B + WIMS `--ports`; keep N1MM reader OFF / agent on 2237 |
+| **A. Skip the port in WS Hub** | Band not used / temporary | `--ports` without that port, or registry omit band |
+| **B. Reassign stream port in registry** | Lab multi-port only; want band digi while another app holds the port | New free port for \(S_B\); update **all** WSJT-X on B + WS Hub `--ports`; keep N1MM reader OFF / agent on 2237 |
 | **C. Free the port in N1MM** | N1MM should not need it | Exit N1MM; if port frees, restart N1MM with digi reader **OFF**; re-check live binds |
-| **D. Readiness UI** | Always | Status/Setup: “UDP :P owned by N1MMLogger.net — WIMS stream B skipped” with deep link to this section |
+| **D. Readiness UI** | Always | Status/Setup: “UDP :P owned by N1MMLogger.net — WS Hub stream B skipped” with deep link to this section |
 | **E. Default map hole** | **2240** | Never assign a band stream to 2240 in Scheme A defaults (already done) |
 
-**WIMS must not** assume Configurer text fields are complete. **Agent / server readiness** should:
+**WS Hub must not** assume Configurer text fields are complete. **Agent / server readiness** should:
 
 1. Attempt bind (or query OS for listeners) on each registry port.  
 2. On failure, resolve **owning process name + path**.  
-3. Surface band, intended consumer (WIMS join vs N1MM logger), and one-click remedies A–C.  
+3. Surface band, intended consumer (WS Hub join vs N1MM logger), and one-click remedies A–C.  
 4. Never require sequential ports after a reassignment (registry is authoritative).
 
 #### 4.9.5 Relation to current consumers (and historical dual-reader)
 
-- **Current:** WIMS + **N1MM agent Log** both join **2237**; N1MM built-in reader **OFF**. Shared multicast bind is expected.  
-- **Historical:** N1MM holding 2237 as a built-in reader while WIMS also joined 2237 was often OK with `SO_REUSEADDR` — both were intended consumers of a Scheme A \(S_{50}\).  
-- **N1MM holding 2240** when WIMS joins only 2237 is **harmless noise**.  
+- **Current:** WS Hub + **N1MM agent Log** both join **2237**; N1MM built-in reader **OFF**. Shared multicast bind is expected.  
+- **Historical:** N1MM holding 2237 as a built-in reader while WS Hub also joined 2237 was often OK with `SO_REUSEADDR` — both were intended consumers of a Scheme A \(S_{50}\).  
+- **N1MM holding 2240** when WS Hub joins only 2237 is **harmless noise**.  
 - If lab multi-port is enabled and N1MM holds a live `--ports` entry without being an intentional consumer, treat as accidental ownership — **registry + readiness**.
 
 ### 4.8 Contest LAN interface (WSJT-X “Outgoing interface”)
 
-This is the **most common silent networking failure** for multi-instance and multi-host WIMS.
+This is the **most common silent networking failure** for multi-instance and multi-host WS Hub.
 (Cross-refs in this doc that said “§4.1” for the NIC field mean **this subsection**.)
 
 #### What it is
@@ -821,7 +821,7 @@ In WSJT-X: **File → Settings → Reporting** (or **Preferences → Reporting**
 `.ini` key: `UDPInterface=...` (per instance file, e.g. `~/.config/WSJT-X - flex.ini` or Windows
 `WSJT-X.ini` configuration block).
 
-WIMS and N1MM **join** a multicast group on a chosen interface. If WSJT-X **sends** on a different
+WS Hub and N1MM **join** a multicast group on a chosen interface. If WSJT-X **sends** on a different
 interface (or none / loopback), receivers on the contest LAN never see the traffic — even when the
 waterfall is full of decodes.
 
@@ -829,7 +829,7 @@ waterfall is full of decodes.
 
 | Outgoing interface value | Fleet status | Notes |
 |--------------------------|--------------|--------|
-| Contest LAN NIC by name (e.g. `enp13s0f1`, `Ethernet`, `eth0`) | **Required** | Must be the wired L2 segment shared with WIMS / other vehicles |
+| Contest LAN NIC by name (e.g. `enp13s0f1`, `Ethernet`, `eth0`) | **Required** | Must be the wired L2 segment shared with WS Hub / other vehicles |
 | Blank / empty | **Error** | Treated as unset |
 | `@Invalid()` (Qt placeholder in `.ini`) | **Error** | Common after install or never-touched Reporting tab |
 | Loopback / `127.0.0.1` / `lo` | **Error** | Traffic never leaves this PC |
@@ -838,7 +838,7 @@ waterfall is full of decodes.
 
 | UDP Server value | Fleet status | Notes |
 |------------------|--------------|--------|
-| `224.0.0.73` (or band group from map) | **Required** | Open monitoring: WIMS + N1MM + optional GT |
+| `224.0.0.73` (or band group from map) | **Required** | Open monitoring: WS Hub + N1MM + optional GT |
 | `127.0.0.1` / `localhost` | **Error** (fleet) | Only this PC; lab-only with `--lab` on the checker |
 | Unicast to one app IP | **Warn** | Single consumer; breaks multi-subscriber model |
 
@@ -850,11 +850,11 @@ still broken.
 | Symptom | Cause |
 |---------|--------|
 | WSJT-X Band Activity full of calls | Decode path is local — **does not prove UDP is correct** |
-| WIMS Operate roster missing that instance | No Heartbeat/Status/Decode arrived on WIMS’s join |
-| One instance on same PC shows in WIMS, another does not | Often: one is `127.0.0.1` (local unicast reaches WIMS bind) while the other is `224.0.0.73` + unset iface (multicast never lands) |
-| GridTracker sees traffic, WIMS does not (or reverse) | Different join interface / port / process; not a substitute for fixing WSJT-X Reporting |
+| WS Hub Operate roster missing that instance | No Heartbeat/Status/Decode arrived on WS Hub’s join |
+| One instance on same PC shows in WS Hub, another does not | Often: one is `127.0.0.1` (local unicast reaches WS Hub bind) while the other is `224.0.0.73` + unset iface (multicast never lands) |
+| GridTracker sees traffic, WS Hub does not (or reverse) | Different join interface / port / process; not a substitute for fixing WSJT-X Reporting |
 
-**Lab case (same host):** 6m instance `UDPServer=127.0.0.1` → visible to WIMS; 2m instance
+**Lab case (same host):** 6m instance `UDPServer=127.0.0.1` → visible to WS Hub; 2m instance
 `UDPServer=224.0.0.73` + `UDPInterface=@Invalid()` → decoding on 144 but **zero** UDP to local
 listeners. Fix: both instances → `224.0.0.73:2237` **and** Outgoing interface =
 LAN NIC (e.g. `enp13s0f1` / `192.168.1.x` segment).
@@ -866,9 +866,9 @@ LAN NIC (e.g. `enp13s0f1` / `192.168.1.x` segment).
 3. **UDP Server** = `224.0.0.73`.  
 4. **Port** = **`2237`** (all bands).  
 5. **Outgoing interface** = dropdown → **contest LAN Ethernet** (not loopback, not Wi‑Fi).  
-6. **Accept UDP requests** = checked if WIMS will control TX later.  
+6. **Accept UDP requests** = checked if WS Hub will control TX later.  
 7. OK → **restart that WSJT-X instance** if the UI does not apply UDP changes live.  
-8. Confirm on WIMS Status / roster within ~15–30 s (heartbeat period).
+8. Confirm on WS Hub Status / roster within ~15–30 s (heartbeat period).
 
 Repeat for **every** instance on the host (multi-instance hosts, remote TV-station 50 PC,
 and the second 144 PC each need their own Reporting setup).
@@ -879,7 +879,7 @@ Radio PCs often have several addresses (LAN, lab switch, VPN, virbr, Wi‑Fi). R
 
 - **WSJT-X Outgoing interface** = contest LAN only (`192.168.10.0/24` in design deployment, or the
   site’s wired digital segment).  
-- **WIMS server `--iface`** = same segment’s IP when joining multicast (e.g.
+- **WS Hub server `--iface`** = same segment’s IP when joining multicast (e.g.
   `--iface 192.168.1.119`), **not** `127.0.0.1` for real hosts.  
 - Label the NIC **CONTEST LAN** where possible; disable Wi‑Fi on radio seats during the event.  
 - Do not send WSJT-X UDP out a VPN — remote ops use console unicast to the server
@@ -915,21 +915,21 @@ Config file audit is not enough after restarts — also watch the wire:
 
 | Observation | Operator-facing fix |
 |-------------|---------------------|
-| Expected instance missing on WIMS; host/process up | “Check Settings → Reporting: Outgoing interface = LAN NIC; re-run `wsjtx_config.py --all`” |
+| Expected instance missing on WS Hub; host/process up | “Check Settings → Reporting: Outgoing interface = LAN NIC; re-run `wsjtx_config.py --all`” |
 | Packets only from `127.0.0.1` | “UDP Server is localhost and/or interface is loopback — set multicast + LAN NIC” |
-| Instance ALIVE on WIMS with LAN source IP | Interface path OK for that instance |
-| Decodes in WSJT-X, no Status/Heartbeat in WIMS | Almost always Reporting UDP/interface — not RF |
+| Instance ALIVE on WS Hub with LAN source IP | Interface path OK for that instance |
+| Decodes in WSJT-X, no Status/Heartbeat in WS Hub | Almost always Reporting UDP/interface — not RF |
 
 Status / readiness (§12.5) should keep a **Config** strip per seat: last `.ini` audit + live
 source-IP class (LAN vs loopback). Wrangler board shows the same string so ops do not need to
 understand multicast.
 
-#### Same requirement for WIMS and N1MM (related)
+#### Same requirement for WS Hub and N1MM (related)
 
 | Component | Interface rule |
 |-----------|----------------|
 | WSJT-X | Outgoing interface = contest LAN (§4.8) |
-| WIMS server | `--iface <LAN-IP>` for multicast join; not `127.0.0.1` for multi-host |
+| WS Hub server | `--iface <LAN-IP>` for multicast join; not `127.0.0.1` for multi-host |
 | N1MM External Broadcast dest | **`127.0.0.1:12060`** + N1MM agent with `WIMS_SERVER` (fleet). Lab: multicast/unicast to site still OK. |
 | N1MM agent Log | Joins `224.0.0.73:2237` on a NIC that receives that multicast (same LAN); built-in reader OFF |
 
@@ -945,7 +945,7 @@ understand multicast.
 - Remote/extra PCs must **not** run a second N1MM digi logger for that band  
 - Multiple instances on `:2237` are distinguished by UDP `id` (`--rig-name`)  
 
-### WIMS server
+### WS Hub server
 
 - Join `224.0.0.73` on **`2237` only** by default (`--ports 2237`)  
 - `--iface` = site LAN address (not loopback) for real hosts  
@@ -954,13 +954,13 @@ understand multicast.
 ### GridTracker (optional)
 
 - Join `224.0.0.73:2237` (same fleet stream)  
-- Viewer only — no Reply/TX on WIMS-managed instances  
+- Viewer only — no Reply/TX on WS Hub-managed instances  
 
 ---
 
-## 5. Plane B — N1MM external broadcast → WIMS
+## 5. Plane B — N1MM external broadcast → WS Hub
 
-All four N1MMs publish activity so WIMS can show logger presence and keep the live log copy:
+All four N1MMs publish activity so WS Hub can show logger presence and keep the live log copy:
 
 | Setting | Value |
 |---------|--------|
@@ -970,7 +970,7 @@ All four N1MMs publish activity so WIMS can show logger presence and keep the li
 
 ```
   N1MM-50 ──┐
-  N1MM-144 ─┼── UDP XML ──► 127.0.0.1:12060 ──► N1MM agent ──HTTP──► WIMS site
+  N1MM-144 ─┼── UDP XML ──► 127.0.0.1:12060 ──► N1MM agent ──HTTP──► WS Hub site
   N1MM-222 ─┤
   N1MM-432 ─┘
 
@@ -992,7 +992,7 @@ Fleet default is **`127.0.0.1:12060`** (identical on every N1MM). See [operator_
             N1MM-222 ◄──► N1MM-432
 
   One contest, one merged DXLOG (unique QSO IDs).
-  WIMS: seed/resync from any one networked N1MM .s3db
+  WS Hub: seed/resync from any one networked N1MM .s3db
         + live <contactinfo> from all (plane B).
 ```
 
@@ -1004,7 +1004,7 @@ logs after local log; it does not replace logger-of-record segregation.
 ## 7. Plane D — operator consoles
 
 ```
-  [WIMS server]
+  [WS Hub server]
        │  HTTP :8787  /  SSE /events
        ├──────────► Browser: 6m wrangler   (filter band=50)
        ├──────────► Browser: 2m wrangler   (filter band=144)
@@ -1013,7 +1013,7 @@ logs after local log; it does not replace logger-of-record segregation.
 
   GridTracker (optional, per seat):
        joins that seat’s WSJT-X multicast only
-       does NOT replace WIMS roster for click-to-work
+       does NOT replace WS Hub roster for click-to-work
 ```
 
 **View is open** (every console can see the fleet). **Control is leased** per instance
@@ -1048,9 +1048,9 @@ Multicast for all: `224.0.0.73:2237`. Band from dial / RadioInfo; logger via **N
 - [ ] **§4.8:** Outgoing interface = contest LAN NIC (not blank / `@Invalid` / loopback)  
 - [ ] **§4.8:** UDP Server is fleet multicast, not `127.0.0.1`  
 - [ ] Secondary UDP / N1MM Logger+ (**2333**) **OFF**  
-- [ ] On **same contest L2** as the band’s N1MM and WIMS  
+- [ ] On **same contest L2** as the band’s N1MM and WS Hub  
 - [ ] `wsjtx_config.py --all` reports **0 errors** on this host  
-- [ ] WIMS sees this instance’s heartbeat (LAN source IP, not only local decode window)  
+- [ ] WS Hub sees this instance’s heartbeat (LAN source IP, not only local decode window)  
 - [ ] Digi logged by **that band’s N1MM agent Log** — **no** built-in WSJT reader on any PC  
 - [ ] **§3.2 / §3.3:** CAT path documented (e.g. `wfview-rigctld`); Test CAT green; not dual-open on radio COM  
 
@@ -1066,11 +1066,11 @@ Multicast for all: `224.0.0.73:2237`. Band from dial / RadioInfo; logger via **N
 - [ ] Broadcast Data → **`127.0.0.1:12060`**  
 - [ ] **N1MM agent** running with `WIMS_SERVER` (Log joins **2237** → `:52001`/`:2333`; Broadcast; KEY as needed)  
 - [ ] Networked into the **same** contest with the other three N1MMs  
-- [ ] Station name unique and stable (WIMS logger id)  
+- [ ] Station name unique and stable (WS Hub logger id)  
 - [ ] 222/432: OK if no WSJT-X this hour (SSB-only); agent can stay up for when FT8 starts  
 - [ ] If CAT used: seat middleware path only (§3.2) — not competing with wfview for COM  
 
-### WIMS server
+### WS Hub server
 - [ ] Join **`2237`** on the LAN iface (`--ports 2237`)  
 - [ ] Solo/lab: `--port 2237` (same fleet port)  
 - [ ] N1MM XML via agents (`127.0.0.1:12060` → site); lab may still join `:12060` multicast  
@@ -1078,7 +1078,7 @@ Multicast for all: `224.0.0.73:2237`. Band from dial / RadioInfo; logger via **N
 
 ### GridTracker (if used)
 - [ ] Same multicast **`224.0.0.73:2237`**  
-- [ ] No TX / “work this call” that bypasses WIMS  
+- [ ] No TX / “work this call” that bypasses WS Hub  
 
 ### Host agents (later)
 - [ ] One agent per radio / SSB-CW host for 10 ms mute and thumbnails (design §3.3 / §3.4.1)  
@@ -1092,8 +1092,8 @@ Multicast for all: `224.0.0.73:2237`. Band from dial / RadioInfo; logger via **N
 | One N1MM (e.g. Windows VM) + agent | Four N1MMs + agents, networked (plane C) |
 | One stream **`2237`** + emulator or few WSJT-X | Multi-host WSJT-X (trailer + remote 50 + dual 144) — still **`:2237`** |
 | Optional wfview + Hamlib NET on the radio PC (§3.3) | Same seat pattern per Icom USB radio |
-| Optional GridTracker on the WIMS PC | Optional GT per seat / remote PC |
-| WIMS with LAN `--iface` + `--ports 2237` | Same server role; join **2237** |
+| Optional GridTracker on the WS Hub PC | Optional GT per seat / remote PC |
+| WS Hub with LAN `--iface` + `--ports 2237` | Same server role; join **2237** |
 | All processes on one machine | N1MM and WSJT-X **may be different machines/sites** on one LAN |
 
 Scale path: start with `224.0.0.73:2237`, one N1MM + agent; **add another N1MM + agent** when a
@@ -1104,18 +1104,18 @@ second band logger comes online (reader stays OFF). Remote 50 / second 144 PC =
 
 ## 11. Design invariants (summary)
 
-1. **Open monitoring** — any number of subscribers on a stream (WIMS, N1MM, GridTracker).  
+1. **Open monitoring** — any number of subscribers on a stream (WS Hub, N1MM, GridTracker).  
 2. **Singular control** — one logger-of-record per WSJT-X; one TX controller (lease) per managed instance; one rotator controller per rotator.  
-3. **WIMS never logs** — path is WSJT-X → N1MM; WIMS reads.  
+3. **WS Hub never logs** — path is WSJT-X → N1MM; WS Hub reads.  
 4. **No unattended TX** — human click + valid lease; else RX-only.  
 5. **One signal per band** — multi-instance same band share one resource group.  
 6. **Server is site-local for radio UDP** — remote consoles are unicast only.  
-7. **CAT is seat-local** — WIMS never owns radio COM/CI-V/Hamlib; middleware (e.g. wfview) is allowed; one owner of the wire (§3.2–§3.3).  
-8. **Plane A port match** — every WSJT-X, WIMS `--ports`, and N1MM agent Log use **`2237`**; N1MM built-in reader **OFF**.  
+7. **CAT is seat-local** — WS Hub never owns radio COM/CI-V/Hamlib; middleware (e.g. wfview) is allowed; one owner of the wire (§3.2–§3.3).  
+8. **Plane A port match** — every WSJT-X, WS Hub `--ports`, and N1MM agent Log use **`2237`**; N1MM built-in reader **OFF**.  
 
 Core idea in one line:
 
-> **WSJT-X multicasts on `224.0.0.73:2237` → WIMS + per-band N1MM agent Log (filter by dial/RadioInfo) → all N1MMs network the log → browsers only talk to WIMS.**  
+> **WSJT-X multicasts on `224.0.0.73:2237` → WS Hub + per-band N1MM agent Log (filter by dial/RadioInfo) → all N1MMs network the log → browsers only talk to WS Hub.**  
 > GridTracker is an optional extra subscriber on the same stream, never the control path.
 
 ---
@@ -1124,8 +1124,8 @@ Core idea in one line:
 
 The networking map in §§1–11 is **correct but brittle** if humans must remember interfaces,
 `2237`, and “keep the N1MM digi reader OFF / run the agent.” Seats such as **222 and 432** are
-often run by operators who are **not steeped in WIMS design**; people get tired; PCs and radios
-get restarted mid-contest. This section is how WIMS stays **safe and diagnosable** under those
+often run by operators who are **not steeped in WS Hub design**; people get tired; PCs and radios
+get restarted mid-contest. This section is how WS Hub stays **safe and diagnosable** under those
 conditions.
 
 Cross-refs: design §2.5 (network health), §3.3 (setup wizard), §3.14 (profiles), §3.15
@@ -1136,19 +1136,19 @@ Cross-refs: design §2.5 (network health), §3.3 (setup wizard), §3.14 (profile
 | Failure | Typical cause after restart / fatigue |
 |---------|--------------------------------------|
 | WSJT-X on `127.0.0.1` | Default / “it worked on this PC” |
-| **UDP Outgoing interface blank / `@Invalid()`** | Never set after install; **decodes work, WIMS sees nothing** |
+| **UDP Outgoing interface blank / `@Invalid()`** | Never set after install; **decodes work, WS Hub sees nothing** |
 | Wrong UDP port (not **2237**) | Config copied from old Scheme A band map |
 | N1MM external broadcast not `127.0.0.1:12060` | Still on LAN multicast or a unicast IP; fleet dest is localhost |
 | N1MM built-in WSJT reader left **ON** | Double-log with agent Log |
 | Two digi log paths for one QSO | Reader ON and/or Secondary 2333 **and** agent Log |
 | Duplicate `--rig-name` | Cloned desktop shortcut |
 | WSJT-X up, N1MM down (or reverse) | Partial restart |
-| WIMS never sees the seat | Server `--iface`, IGMP, wrong port join |
+| WS Hub never sees the seat | Server `--iface`, IGMP, wrong port join |
 | “Fine locally, dead on console” | Loopback server, unset outgoing iface, or host firewall |
 | N1MM Network Status sees peers, **Send/Receive** not OK | Windows network is **Public** — gold-image N1MM rules **Allow** on Private and **Block** on Public. TCP **12070** times out (`SYN_SENT`); UDP discovery still works. Fix: `Set-ContestLanPrivate.cmd` on **each** N1MM PC (or Settings → Network profile → Private) |
 
 **Principle:** operators never configure multicast arithmetic under stress. They pick a **seat
-role** (e.g. `ROY-222`). WIMS applies the profile, verifies the wire, and **names the fix in
+role** (e.g. `ROY-222`). WS Hub applies the profile, verifies the wire, and **names the fix in
 plain language**.
 
 Bulletproof here means two things:
@@ -1176,21 +1176,21 @@ Quietly wrong (double-log, dual-TX, silent loopback) is worse than loudly red.
   profile to apps        actual on wire)         seat 🔴 → RX only;
          │                    │                  double-log → block)
          ▼                    ▼
-  WSJT-X + N1MM  ──UDP──►  WIMS server  ──SSE──►  Status / seat pill
+  WSJT-X + N1MM  ──UDP──►  WS Hub server  ──SSE──►  Status / seat pill
   (plane A/B)            diagnoses              🟢🟡🔴 + fix text
 ```
 
 **Flow in plain language:**
 
-1. **Before the contest**, someone who understands WIMS writes (or loads) a **contest profile**:
+1. **Before the contest**, someone who understands WS Hub writes (or loads) a **contest profile**:
    the seven WSJT-X ids, four N1MM station names, plane A `224.0.0.73:2237`, logger-of-record,
    resource groups. That file *is* the networking map in machine-readable form. Operators do not
    edit it mid-event.
 2. **At a seat** (especially simple 222/432), the op runs **Bring up ROY-222** (wizard or desktop
-   shortcut) — not “configure UDP.” Optionally WIMS/agent **writes or verifies** WSJT-X `.ini` and
+   shortcut) — not “configure UDP.” Optionally WS Hub/agent **writes or verifies** WSJT-X `.ini` and
    N1MM agent / Broadcast settings against the profile (reader OFF).
 3. **Apps start** and emit the usual multicast (plane A) and N1MM XML (plane B via agent).
-4. **WIMS server** — already joining **2237** — **passively compares wire traffic to the
+4. **WS Hub server** — already joining **2237** — **passively compares wire traffic to the
    profile** (design §3.15). No Wireshark; no op-interpreted packet counters as the primary UX.
 5. **Seat readiness** collapses that comparison into a traffic light plus **one named fault and
    one next step** (e.g. “N1MM-222 not heard — is the N1MM agent running with WIMS_SERVER?”).
@@ -1245,7 +1245,7 @@ Target UX for 222/432 — **at most four steps**:
 |------|----------------|
 | 1. Who am I? | Op picks seat from the profile list (`ROY-222`), not free-text ports |
 | 2. Apply / verify | Write or check WSJT-X config (**`224.0.0.73:2237`**, Outgoing interface = LAN NIC, rig-name; Secondary 2333 OFF) and N1MM (digi reader **OFF**; Broadcast Data → `127.0.0.1:12060` + N1MM agent). **Refuse green** if `UDPInterface` is empty/`@Invalid`/loopback or WSJT `UDPServer` is `127.0.0.1` in fleet mode |
-| 3. Live prove (30–60 s) | WIMS must see: (a) heartbeat for expected `wsjtx_id` from a **non-loopback** source IP when seat is multi-host, (b) any N1MM XML from expected StationName, (c) no second logger claiming that id, (d) no id collision |
+| 3. Live prove (30–60 s) | WS Hub must see: (a) heartbeat for expected `wsjtx_id` from a **non-loopback** source IP when seat is multi-host, (b) any N1MM XML from expected StationName, (c) no second logger claiming that id, (d) no id collision |
 | 4. Result | 🟢 READY or 🔴 + **one sentence + one action** |
 
 **Mandatory WSJT-X checks in step 2** (same rules as `wsjtx_config.validate`, fleet mode):
@@ -1255,8 +1255,8 @@ Target UX for 222/432 — **at most four steps**:
 | No UDP Server | “WSJT-X is not reporting over UDP” |
 | UDP Server = `127.0.0.1` | “Set UDP Server to 224.0.0.73 (fleet multicast), not localhost” |
 | Outgoing interface blank / `@Invalid()` | “Select the contest LAN network interface under Settings → Reporting” |
-| Outgoing interface = loopback | “Interface is loopback — pick the Ethernet/LAN NIC so WIMS can see this radio” |
-| Accept UDP requests off | Warning: “WIMS cannot Reply/Halt until Accept UDP requests is on” |
+| Outgoing interface = loopback | “Interface is loopback — pick the Ethernet/LAN NIC so WS Hub can see this radio” |
+| Accept UDP requests off | Warning: “WS Hub cannot Reply/Halt until Accept UDP requests is on” |
 
 Implementation paths (progressively stronger):
 
@@ -1296,7 +1296,7 @@ Readiness is **not** install-only. The server always maintains, per seat / expec
 
 | Signal | Source | Proves |
 |--------|--------|--------|
-| Heartbeat / Status | Plane A, parsed by WIMS | Instance up, id, host, band/freq |
+| Heartbeat / Status | Plane A, parsed by WS Hub | Instance up, id, host, band/freq |
 | Packet **source IP** | Plane A recvfrom | LAN vs loopback — `127.0.0.1` ⇒ iface/server misconfig |
 | Decode stream | Plane A | Not QUIET (RF path alive) |
 | Host `.ini` audit | `wsjtx_config` on agent / setup | UDP Server + **Outgoing interface** before/while live |
@@ -1328,7 +1328,7 @@ dead band opening.
 | No control lease | Instance **RX only** (design §4.5) — no unattended TX |
 | Seat 🔴 BROKEN (missing instance, collision, double-log) | Do not honor click-to-work; banner explains why |
 | N1MM missing, WSJT-X ok | Policy: roster may still show decodes; 🟡 “log may not record”; optional hard-block TX if contest requires logging |
-| WIMS server restart | Re-join multicast, re-seed/resync log, rediscover fleet in seconds; consoles reconnect; **SSB/CW mute path stays on host agents** (not via server) |
+| WS Hub server restart | Re-join multicast, re-seed/resync log, rediscover fleet in seconds; consoles reconnect; **SSB/CW mute path stays on host agents** (not via server) |
 | Zombie console | Stale lease → another console can take over; old commands rejected |
 
 Safety does not depend on every seat staying green forever; it depends on **never silently TX or
@@ -1343,7 +1343,7 @@ double-log while red**.
 | Training | ~2 minutes + wall card | Experienced digital op; remote 50: no second N1MM |
 | Same engine? | Yes — readiness + faults | Yes — more expected rows / hosts |
 
-**Ship guided setup for simple seats first** — highest ROI for operators who do not know WIMS
+**Ship guided setup for simple seats first** — highest ROI for operators who do not know WS Hub
 internals. Complex bands use the same lights and fault language so the site has one diagnostic culture.
 
 ### 12.8 Make misconfig hard (defaults & packaging)
@@ -1365,12 +1365,12 @@ Software readiness still catches failures; packaging reduces how often the light
 When passive wait is not enough (or at end of wizard step 3):
 
 1. Operator clicks **Test seat** (no RF required for network proof).  
-2. WIMS waits up to N seconds for heartbeat + N1MM presence matching the profile.  
+2. WS Hub waits up to N seconds for heartbeat + N1MM presence matching the profile.  
 3. If agent present: optional deeper checks later (mute test-fire, process up).  
 4. Result written as the current readiness state + fix text.
 
 Active probes (ping host, etc.) are secondary; **protocol-aware passive proof** is primary because
-it tests the real path WIMS uses in the contest.
+it tests the real path WS Hub uses in the contest.
 
 ### 12.10 What the tired operator should experience
 
@@ -1408,7 +1408,7 @@ Fleet server already joins **`2237` only** by default. Lab readiness can still v
 Treat S1 (cold start readiness) as a **drill**, not only a design scenario:
 
 1. Full power-down of a simple seat (and later Trailer).  
-2. Cold start with only seat shortcuts + WIMS status.  
+2. Cold start with only seat shortcuts + WS Hub status.  
 3. Measure **time-to-green** and whether a non-author op can clear reds from fix text alone.  
 4. File every failure that required expert folklore back into profile defaults or fix strings.
 
@@ -1417,4 +1417,4 @@ Treat S1 (cold start readiness) as a **drill**, not only a design scenario:
 **Resilience one-liner:**
 
 > **Encode the networking map in a contest profile; give each seat a start action and a continuous
-> green light; make WIMS name the fix; refuse to TX or double-log while red.**
+> green light; make WS Hub name the fix; refuse to TX or double-log while red.**

@@ -3,13 +3,13 @@
 > **Wire protocol superseded (2026-09-02).** Shipped hold datagrams are
 > `NetworkMessage::TxInhibit` **type 18** with **per-Controller ID leases**, not
 > the JSON `{tx_inhibit, ttl_ms, station, band, seq}` examples in §11.3.
-> **WIMS implementation brief:**
+> **WS Hub implementation brief:**
 > [`docs/protocols/wsjtx_tx_inhibit.md`](../protocols/wsjtx_tx_inhibit.md).
 > **Authority:** sister repo `wsjtx-inhibit` `docs/TX_INHIBIT.md`.
 > Product / latency / KEY-sense material below remains useful; treat §11.3 JSON
 > and “single global hold / any release clears” as historical.
 
-**Status: analysis & design for review — gate lives in wsjtx-inhibit; WIMS Key
+**Status: analysis & design for review — gate lives in wsjtx-inhibit; WS Hub Key
 agent still needs the type-18 transfer.** Companion to
 [wims_design.md](wims_design.md) §3.4.1 (SSB/CW priority interlock) and the
 [Switchboard concept](wims_switchboard_concept.md) (F7). This document analyzes the WSJT-X
@@ -33,7 +33,7 @@ was designed around an unmodified WSJT-X.
   `base-3.1.0-improved-AL-PLUS-260522`. Use when rebasing the gate onto Improved for seats
   that run DG2YCB builds until (if) either lineage accepts an equivalent gate.
 
-WIMS keeps the Key agent, assignment UI, and pure-logic tests
+WS Hub keeps the Key agent, assignment UI, and pure-logic tests
 (`src/wims/interlock/inhibit.py`).
 
 **Inhibit generators** (same protocol; three programs):
@@ -41,12 +41,12 @@ WIMS keeps the Key agent, assignment UI, and pure-logic tests
 | Program | Project | Doc |
 |---------|---------|-----|
 | **inhibit-test** | wsjtx-inhibit | Existing lab tool |
-| **inhibit-agent** | wsjtx-inhibit | **[inhibit_agent.md](inhibit_agent.md)** — CTS → localhost gate (doc has no WIMS dependency; copy into wsjtx-inhibit) |
-| **WIMS Key agent** | WIMS | **[wims_key_agent.md](wims_key_agent.md)** — multi-target list from WIMS |
+| **inhibit-agent** | wsjtx-inhibit | **[inhibit_agent.md](inhibit_agent.md)** — CTS → localhost gate (doc has no WS Hub dependency; copy into wsjtx-inhibit) |
+| **WS Hub Key agent** | WS Hub | **[wims_key_agent.md](wims_key_agent.md)** — multi-target list from WS Hub |
 
 Product / latency detail stays in **this** file. **Current wire format** is
 [`docs/protocols/wsjtx_tx_inhibit.md`](../protocols/wsjtx_tx_inhibit.md)
-(not §11.3 JSON). Datagrams are never routed through a WIMS server.
+(not §11.3 JSON). Datagrams are never routed through a WS Hub server.
 
 ---
 
@@ -55,19 +55,19 @@ Product / latency detail stays in **this** file. **Current wire format** is
 One band, two transmitters, one rule (**one radiated signal per band**):
 
 - A WSJT-X seat: its own radio, decoding continuously, making contacts that the WSJT-X
-  operator enables (locally or via WIMS click-to-work). FT8/MSK144 cycles run on the mode's
+  operator enables (locally or via WS Hub click-to-work). FT8/MSK144 cycles run on the mode's
   clock.
 - An SSB/CW station on the **same band**, in run or S&P, whose transmissions have **priority**
   under the contest rule **when the band is in interlock policy**.
 
-**WIMS band-sharing policy** ([wims_design.md](wims_design.md) **§2.14**):
+**WS Hub band-sharing policy** ([wims_design.md](wims_design.md) **§2.14**):
 
 | Policy | This document (TX Inhibit) |
 |--------|----------------------------|
 | **`interlock`** | **In force** — KEY/UDP hold stops WSJT-X RF as designed below |
-| **`coordinated`** | **Not actuated** — operators hand off manually; WIMS shows mutual TX/QSO status only. KEY agents may still report telemetry; they must **not** send holds that gate RF solely for priority |
+| **`coordinated`** | **Not actuated** — operators hand off manually; WS Hub shows mutual TX/QSO status only. KEY agents may still report telemetry; they must **not** send holds that gate RF solely for priority |
 
-This document specifies the **interlock** path (original WIMS mission). Coordinated mode is
+This document specifies the **interlock** path (original WS Hub mission). Coordinated mode is
 not a weaker inhibit — it is **no inhibit for priority**, with information UX in the main design.
 
 **Requirement (interlock policy):** when the SSB/CW operator keys, any WSJT-X emission on that
@@ -75,7 +75,7 @@ band must stop — and must not start — until the band is theirs again. The st
 enough that the overlap is negligible (target: ≤10 ms from key-down to RF gone, per §3.4.1).
 The mechanism must work:
 
-- **standalone at the seat** (no WIMS server involved — the interlock must survive a server
+- **standalone at the seat** (no WS Hub server involved — the interlock must survive a server
   restart, §3.4.1 "trigger path never via the server"), and
 - from **two kinds of trigger**: a locally wired USB-serial **CTS** input carrying the SSB/CW
   PTT state, or a **UDP inhibit datagram** from an agent on the PC connected to the SSB/CW
@@ -182,7 +182,7 @@ long closures (the rig's VOX delay / break-in hang pre-bridges the short gaps). 
 - **Long closures (SSB-PTT / VOX / semi break-in): hang = 0** (revised 2026-08-16 from
   the 2026-08-02 20 ms software debounce, per WA1HCO). These lines carry no CW elements —
   the rig's PTT/VOX/break-in hang already bridged them — so the one problem hang exists
-  for is absent. **inhibit-agent and the WIMS Key agent do not debounce PTT:** the
+  for is absent. **inhibit-agent and the WS Hub Key agent do not debounce PTT:** the
   sense path is designed for **manual switches that already include debounce**
   (Keyline J1 RC, footswitch, hand mic). An earlier 0.5 s hang, then a 20 ms
   software debounce, were solving non-problems: contact bounce is hardware's job,
@@ -196,11 +196,11 @@ override for pathological cases.
 
 **Fail-safe direction.** Wire/agent failure must not silently un-inhibit *or* permanently kill
 the band; the two failure directions get different treatments per source (§4). The invariant:
-**a failed inhibit source is loudly visible** (WSJT-X UI badge + WIMS status), never silent.
+**a failed inhibit source is loudly visible** (WSJT-X UI badge + WS Hub status), never silent.
 
 **What Inhibit is not:** it is not an operator-facing enable/disable (that remains Enable Tx /
-Halt Tx in the WSJT-X UI), not a WIMS lease mechanism (§4.5 of the design), and not a
-replacement for the preventive gate at TX-initiate time (Mechanism 1) — WIMS still declines to
+Halt Tx in the WSJT-X UI), not a WS Hub lease mechanism (§4.5 of the design), and not a
+replacement for the preventive gate at TX-initiate time (Mechanism 1) — WS Hub still declines to
 *start* work on a claimed band. Inhibit is the last, fastest layer.
 
 **Prior art — this is the radio's own TX Inhibit pin, relocated (adopted 2026-08-02).**
@@ -253,7 +253,7 @@ The mapping, stated as familiarity requirements on the implementation:
 - The **badge is the front-panel annunciator**; the read-only Settings → Network line is
   the menu page that names the input (§11.2/§11.4).
 - **Naming follows the radios** (§11.7.4): the feature is "TX Inhibit", the badge says
-  "TX INHIBIT", prose says "inhibit input" — never gate/mute/WIMS-anything in user-facing
+  "TX INHIBIT", prose says "inhibit input" — never gate/mute/WS Hub-anything in user-facing
   text. (`PttGate` remains the internal class name; operators never see it.)
   **Name re-examined and kept (2026-08-02)** after the arbitration-model insight above:
   alternatives (TX Gate, Hold, Mute, Blank, Yield) all lose to the fact that the plain
@@ -347,7 +347,7 @@ for it (PIN diodes or QSK-rated relays). Consequences for this design:
 - In SSB/PTT and semi break-in, the sensed line arrives *pre-hung* by the rig — agent
   hang is **0** on that class (no extra margin, no software debounce).
 - In full QSK with a PIN-switched amp, the line is dit-by-dit — **this is the case that
-  makes the agent-side hang time (§3) mandatory**, since WIMS must treat the whole CW
+  makes the agent-side hang time (§3) mandatory**, since WS Hub must treat the whole CW
   stream as one band occupancy.
 - The Icom early-SEND-drop quirk (~2–3 ms before RF ends) is a station-wiring
   tolerance, not an agent timer. Long-closure hang is 0; do not keep a debounce
@@ -431,7 +431,7 @@ Loss semantics (the deadman design): **keyed state expires** if neither a releas
 keepalive arrives within N × keepalive period (e.g. 3 × 200 ms = 600 ms) — so a crashed agent
 cannot leave the band inhibited forever. The expiry is **logged and alarmed** (it means the
 interlock briefly ran open-loop). Idle-heartbeat loss for >T seconds ⇒ source marked degraded:
-WSJT-X keeps operating, WIMS status shows the interlock is unprotected on that band — the
+WSJT-X keeps operating, WS Hub status shows the interlock is unprotected on that band — the
 station chooses policy (keep going vs. hold digital) rather than the code choosing silently.
 
 Assert is edge-triggered by the first hold datagram (`ttl_ms` > 0); the 200 ms keepalive only maintains
@@ -460,14 +460,14 @@ transports:
 
 **Unicast to an assigned list (recommended).** The Key agent holds a list of
 `instance → ip:port` targets and sends each transition (and keepalive) to all of them. The
-list is **assigned on the WIMS operations dashboard** ("assign WSJT-X inhibit inputs to
+list is **assigned on the WS Hub operations dashboard** ("assign WSJT-X inhibit inputs to
 SSB/CW Key outputs") and pushed to the agent; the agent persists its last assignment so the
-interlock survives a WIMS outage.
+interlock survives a WS Hub outage.
 
 - Keeps the WSJT-X thread maximally dumb: *"obey any valid inhibit datagram arriving on my
   socket"* — no band logic, no station filtering, no assignment knowledge inside WSJT-X. That
   directly serves the minimal-states / minimal-misconfiguration requirement: the only way to
-  mis-wire the interlock is in one visible place (the WIMS assignment screen), not in N
+  mis-wire the interlock is in one visible place (the WS Hub assignment screen), not in N
   per-seat configs.
 - Unicast is robust on Windows and immune to IGMP-snooping pruning — the same reasoning that
   drove the Switchboard's unicast legs.
@@ -513,7 +513,7 @@ exercises the gate code on every transmission with the gate open (behavior ident
 stock, minus the rig-thread latency traps — an improvement on its own merits, Appendix A);
 no configuration exists in which serial PTT bypasses the gate; and the upstream story writes
 itself — "faster, cleaner serial PTT" carries the gate into the base fork where it gets
-tested and cannot be orphaned as a niche WIMS feature.
+tested and cannot be orphaned as a niche WS Hub feature.
 
 Properties of the gate:
 
@@ -593,11 +593,11 @@ Explicit rules, replacing any implied "enable at key-up":
    attended operation continuing, since the operator armed it and the gate merely masked
    the radio. If the sequence expired during a long inhibit, resumption requires the normal
    human action (local UI or leased click-to-work).
-4. **WIMS's preventive gate stays closed until clear.** Mechanism 1 keeps declining new
+4. **WS Hub's preventive gate stays closed until clear.** Mechanism 1 keeps declining new
    click-to-work on the band while any inhibit source is asserted or in hang time; the
    operations dashboard shows band-claimed state and the reason.
 5. **Long-occupancy bands** (SSB/CW run mode): after INHIBIT has been continuously asserted
-   for T_run (e.g. 60 s), WIMS should *suggest* the digital operator subscribe elsewhere —
+   for T_run (e.g. 60 s), WS Hub should *suggest* the digital operator subscribe elsewhere —
    policy/UX, not mechanism.
 
 Action item carried out of this doc: amend design §3.4.1 to state rule 1–3 (it currently
@@ -610,7 +610,7 @@ appears — there is no UDP enable.
 |---------|----------|-----------|
 | PTT/KEY dongle unplugged | **PTT output disappears with the KEY input** (same port, §4.1) — the seat physically cannot transmit; alarm raised | Fail-safe by wiring, not by code: a missing interlock also means a missing PTT |
 | UDP agent crashes while keyed | Keyed state expires after deadman (~600 ms) + alarm | Can't leave the band dead forever on a crash; expiry is visible |
-| UDP agent silent (idle heartbeat lost) | Source marked degraded; TX continues; WIMS status red on that band | Choosing to hold digital is station policy, surfaced not defaulted |
+| UDP agent silent (idle heartbeat lost) | Source marked degraded; TX continues; WS Hub status red on that band | Choosing to hold digital is station policy, surfaced not defaulted |
 | WSJT-X patch absent (stock binary on a seat) | §3.4.1 external mute + Halt path unchanged | The patch is an upgrade, not a new dependency |
 | Both sources configured, one fails | OR semantics keep the surviving source authoritative | |
 | Inhibit chatters (bad hang tuning) | FT8 impact bounded — puncture bench: ≤1.6 s total gap ≈ free | Protocol margin is the safety net, not the design target |
@@ -643,7 +643,7 @@ appears — there is no UDP enable.
 ## 10. Build plan (proposed)
 
 1. Standalone **inhibit watcher module** (CTS + UDP deadman + hang time, pure logic separated
-   from I/O) — testable without WSJT-X; lives in the WIMS repo; the seat agent can host it
+   from I/O) — testable without WSJT-X; lives in the WS Hub repo; the seat agent can host it
    immediately to drive the §3.4.1 external mute (value before any WSJT-X patch ships).
 2. **WSJT-X patch** in the improved_PLUS build
    ([wsjtx-improved-wims](https://github.com/wa1hco/wsjtx-improved-wims) `feature/tx-inhibit`):
@@ -665,7 +665,7 @@ appears — there is no UDP enable.
    WSJT-X **without a Qt/Fortran toolchain** (a Windows source build is a JTSDK project in
    itself); the §11.7 five-minute netcat demo only works if trying the build is also five
    minutes; and the same artifacts are what the upstream offer (§10.5) points reviewers at.
-3. **WIMS integration:** inhibit state onto the state contract (per instance: which source,
+3. **WS Hub integration:** inhibit state onto the state contract (per instance: which source,
    since when, hang remaining) → operations dashboard band state + Mechanism-1 gate input.
 4. **Design-doc amendments:** §3.4.1 release policy (per §7), Halt/enable correction.
 5. Offer the patch upstream to the improved fork (same channel as the port-2333 letter — it
@@ -712,7 +712,7 @@ setting moved out:
 Trust model, stated: any LAN host can inhibit any WSJT-X. On a cooperative contest LAN this
 is the same trust already extended to "Accept UDP requests," and the failure direction is
 RX, alarmed and self-clearing. The complexity this deletes from every seat is the point —
-if WIMS or the Key agent must carry more algorithm to keep WSJT-X state-free, that is the
+if WS Hub or the Key agent must carry more algorithm to keep WSJT-X state-free, that is the
 right trade.
 
 The PTT side (§5) adds no inhibit-specific settings either: the existing DTR/RTS PTT
@@ -755,15 +755,15 @@ The thread announces itself in-band on plane A: WSJT-X UDP message type
 emitted at heartbeat cadence, carrying
 `{inhibit_port, gate_state, source_station (when inhibited), counters}`. Properties:
 
-- WIMS learns *instance → (host, inhibit port)* passively, the same way it learns everything
+- WS Hub learns *instance → (host, inhibit port)* passively, the same way it learns everything
   else about the fleet — no probing, no per-seat registration step. The assignment screen
   (§4.4) simply lists discovered inhibit inputs.
 - **The announcement is what makes the zero-config port (§11.2) workable — and the Key agent
   consumes it directly.** Assignments are by stable **instance id** ("ROY-222-FT8"), not by
   address; the Key agent listens to plane A itself and resolves its assigned ids to live
   `ip:port` from each instance's own InhibitStatus. A WSJT-X restart onto a new ephemeral
-  port heals within one announcement interval, with WIMS not in the loop — the interlock
-  keeps working through a WIMS outage (only *changing* assignments needs the dashboard).
+  port heals within one announcement interval, with WS Hub not in the loop — the interlock
+  keeps working through a WS Hub outage (only *changing* assignments needs the dashboard).
 - Existing consumers are safe: WSJT-X-protocol servers skip unknown message types (verify on
   N1MM + GridTracker in the §11.6 bench — regression risk is low but must be shown, not
   assumed).
@@ -771,12 +771,12 @@ emitted at heartbeat cadence, carrying
   instance in real time, and while a hold is active the badge names the SSB/CW station holding the band.
 
 **Display philosophy (revised 2026-07-31): the seat answers "why is the radio not
-transmitting"; WIMS answers "what is wrong with the plumbing."** In WSJT-X itself the
+transmitting"; WS Hub answers "what is wrong with the plumbing."** In WSJT-X itself the
 inhibit UI is the **badge and nothing else** — large, unmissable, one line: "TX INHIBITED —
 held by ROY-222-SSB". A mechanism this small must be bullet-proof enough to need no local
 debugging surface; a diagnostics popup at the seat would advertise expected failure. The
 counters and per-source ages (`hold_rx / release_rx / expiries / invalid`) therefore live
-**only in the InhibitStatus datagram**, where the WIMS setup/status pages do integration
+**only in the InhibitStatus datagram**, where the WS Hub setup/status pages do integration
 triage (counters flat = firewall/wrong target; `expiries` climbing = keepalive loss;
 `invalid` climbing = version mismatch; permanent local-KEY badge = stuck line). One
 addition at the seat, information not control: a **read-only line in Settings → Network**
@@ -804,7 +804,7 @@ patterns (`m_audioThread`, `transceiver_thread_`):
 
 ### 11.6 Prototype sequence (test before integrate)
 
-1. **Spike, no WSJT-X (days):** two small standalone programs in the WIMS repo —
+1. **Spike, no WSJT-X (days):** two small standalone programs in the WS Hub repo —
    `key_agent_sim` (reads CTS or keyboard, emits §11.3 datagrams to a target list) and
    `inhibit_gate_sim` (binds 22372, drives RTS on a second dongle, implements §11.1 exactly).
    Scope on the two serial lines measures the full UDP path latency distribution and
@@ -814,14 +814,14 @@ patterns (`m_audioThread`, `transceiver_thread_`):
    InhibitStatus + badge, built in the improved_PLUS tree (build infrastructure present).
    **Native code, native tools:** this is a rewrite in WSJT-X's own idiom — C++17/Qt6 in
    the fork's CMake tree, its worker-thread and UDP-message patterns (§11.5) — with the
-   WIMS Python serving as executable specification only (its 23 unit tests define the
+   WS Hub Python serving as executable specification only (its 23 unit tests define the
    semantics; no Python ships in or near WSJT-X). Platform modem-line code (`TIOCMIWAIT`
    / `WaitCommEvent`) is the one part Qt does not cover (§4.1.1).
    Bench: WSJT-X transmitting into a dummy load / audio loopback, `key_agent_sim` firing
    bursts — verify puncture-and-resume on the air with an SDR, N1MM/GridTracker unaffected
    by message type 18, and the §9.2 latency numbers on the real thread.
 3. **Real Key agent** (grows from `key_agent_sim` into a `wims.agent` role: CTS watcher +
-   assignment list from the dashboard + persistence), then the WIMS assignment UI (#5 in the
+   assignment list from the dashboard + persistence), then the WS Hub assignment UI (#5 in the
    design-doc function table).
 
 Order rationale: step 1 de-risks every design decision that does not require WSJT-X (format,
@@ -830,7 +830,7 @@ whose only new risks are Qt-threading and settings plumbing.
 
 ### 11.7 Upstream developer story — least effort for the maintainers, least risk to stock operation
 
-For the improved-fork maintainers the patch must be verifiable **with no WIMS, no Key agent,
+For the improved-fork maintainers the patch must be verifiable **with no WS Hub, no Key agent,
 and no extra hardware** — and its regression surface must be small enough to reason about in
 one sitting. Both are design properties, stated here so the upstream offer (§10.5) can lead
 with them:
@@ -848,7 +848,7 @@ with them:
    just waiting out the TTL — which also proves the deadman + its alarm) → badge off, RF
    resumes mid-waveform. That is the complete acceptance demo, plus `tcpdump`/`nc -lu` to
    watch InhibitStatus. The richer harness (scripted CW keying trains, latency selftest,
-   deadman scenarios) is `tools/testbed/inhibit_bench.py` in the WIMS repo — also the **reference
+   deadman scenarios) is `tools/testbed/inhibit_bench.py` in the WS Hub repo — also the **reference
    lab path**: its unit-tested Python `InhibitGate` defines the semantics the C++
    transplant must match, test case by test case.
 
@@ -863,15 +863,15 @@ with them:
 
 3. **Bench isolation without settings:** the Hold "TX inhibit test" menu item (§11.2) ignores
    datagrams until restart, for benching a seat on a hostile LAN; the InhibitStatus counters
-   (§11.4) give a maintainer the same triage data WIMS uses — on the wire, not on the screen.
+   (§11.4) give a maintainer the same triage data WS Hub uses — on the wire, not on the screen.
 
 4. **House style, neutral naming.** The patch must read as if the fork's own maintainers
    wrote it: match the conventions of each file touched (Qt naming, member style, the
    Network/ pimpl idiom, GPL headers), no reformatting of untouched lines, no new
-   dependencies. And the feature is a **generic fast TX Inhibit — no WIMS reference
+   dependencies. And the feature is a **generic fast TX Inhibit — no WS Hub reference
    anywhere**: not in code, class names, settings text, message names, or the wire protocol
    (the datagram magic is `tx_inhibit`; an earlier draft's `wims_inhibit` was renamed for
-   exactly this reason). WIMS is one client of an open datagram interface that any station
+   exactly this reason). WS Hub is one client of an open datagram interface that any station
    automation — N1MM, a foot switch on an Arduino, another logger — can drive equally.
 
 The pitch to the list writes itself from 1–2 and the §3 prior art: *the TX Inhibit input

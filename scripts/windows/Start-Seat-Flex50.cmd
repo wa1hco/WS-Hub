@@ -1,14 +1,14 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
 REM
 REM FlexRadio 50 MHz seat pack:
-REM   SmartSDR → CAT → DAX → N1MM → WSJT-X (--rig-name for 6 m) → WIMS agent
+REM   SmartSDR → CAT → DAX → N1MM → WSJT-X (--rig-name for 6 m) → WS Hub agent
 REM
-REM Does NOT start the site WIMS server. N1MM is shared with the IC-9700 pack.
+REM Does NOT start the site WS Hub server. N1MM is shared with the IC-9700 pack.
 REM WSJT-X uses a separate named config from the 144 MHz instance.
 REM
 REM Config load order:

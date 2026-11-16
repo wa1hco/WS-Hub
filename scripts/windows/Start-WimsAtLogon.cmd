@@ -1,11 +1,11 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
 REM
-REM Logon: start WSJT-X / N1MM / WIMS from saved seat intent
+REM Logon: start WSJT-X / N1MM / WS Hub from saved seat intent
 REM (%APPDATA%\wims\seat_intent.json). Use /silent from Startup.
 
 setlocal EnableExtensions

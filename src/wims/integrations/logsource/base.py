@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -54,7 +54,7 @@ class LogEvent:
 
 @runtime_checkable
 class LogSource(Protocol):
-    """Narrow backend interface. WIMS never writes the external logger."""
+    """Narrow backend interface. WS Hub never writes the external logger."""
 
     @property
     def kind(self) -> str:

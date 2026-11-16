@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""WIMS host agent — local seat config/network checks + optional export to site server.
+"""WS Hub host agent — local seat config/network checks + optional export to site server.
 
 Local-first: the station operator can verify WSJT-X / N1MM settings on this PC
 without a site server. Default CLI is **one-shot** (print and exit). Continuous

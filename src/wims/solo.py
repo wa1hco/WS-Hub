@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,13 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""WIMS solo launcher — Operate on one PC (`python -m wims.solo`).
+"""WS Hub solo launcher — Operate on one PC (`python -m wims.solo`).
 
 Operate UDP modes (see ``docs/home_h0_h1.md``):
 
   * **Local** (default) — same PC as WSJT-X; ``--iface 127.0.0.1``. WSJT-X uses
     multicast ``224.0.0.73:2237`` with Accept UDP ON (loopback), or unicast
-    ``127.0.0.1`` plus WIMS ``--tx-host 127.0.0.1``.
+    ``127.0.0.1`` plus WS Hub ``--tx-host 127.0.0.1``.
   * **Network** — pass ``--iface <lan-ipv4>`` so this process joins LAN multicast;
     each WSJT-X must set Outgoing interface to the contest LAN NIC.
 
@@ -54,7 +54,7 @@ from wims.launcher.app import open_wims_url  # noqa: E402
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m wims.solo",
-        description="Run WIMS on this PC alongside your local WSJT-X + N1MM "
+        description="Run WS Hub on this PC alongside your local WSJT-X + N1MM "
                     "(single operator, one FT8 frequency, any band).")
     ap.add_argument("--http-port", type=int, default=8787,
                     help="console HTTP port (default 8787)")
@@ -130,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.seat_profile:
         argv += ["--seat-profile", args.seat_profile]
 
-    print(f"WIMS solo — single-PC console. In WSJT-X: Settings → Reporting → UDP Server "
+    print(f"WS Hub solo — single-PC console. In WSJT-X: Settings → Reporting → UDP Server "
           f"224.0.0.73:{args.port}, 'Accept UDP requests' ON.")
 
     if not args.no_open:

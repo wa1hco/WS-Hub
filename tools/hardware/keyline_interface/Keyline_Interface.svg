@@ -21625,8 +21625,8 @@ L138.5660 40.7228
 " />
 </g><text x="94.7420" y="43.6091"
 textLength="52.0913" font-size="1.6933" lengthAdjust="spacingAndGlyphs"
-text-anchor="start" opacity="0" stroke-opacity="0">- Agent interlock connection defined by WIMS Server</text>
-<g class="stroked-text"><desc>- Agent interlock connection defined by WIMS Server</desc>
+text-anchor="start" opacity="0" stroke-opacity="0">- Agent interlock connection defined by WS Hub Server</text>
+<g class="stroked-text"><desc>- Agent interlock connection defined by WS Hub Server</desc>
 <path d="M95.1445 43.0698
 L96.1122 43.0698
 " />

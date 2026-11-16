@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -210,7 +210,7 @@ class CommandLineTests(unittest.TestCase):
         cmd = build_chromium_command(
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             "http://127.0.0.1:8787/?wims_place=1",
-            r"C:\Users\op\AppData\Local\WIMS\console-browser",
+            r"C:\Users\op\AppData\Local\WS Hub\console-browser",
             None,
         )
         joined = " ".join(cmd)

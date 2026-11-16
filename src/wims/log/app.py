@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -323,7 +323,7 @@ def wrap_adif(adif: str, *, operator: str | None = None,
     # ``<call:``. If the ADIF starts at that byte, Call is stored empty
     # while gridsquare/mode/freq/band still parse. A leading space *inside
     # N* fixes it. Confirmed: wrap_adif without space → Call=''; space in N
-    # → Call='W9WIMS'; WSJT ``<EOH>`` blob also works (first byte is not
+    # → Call='W9WS Hub'; WSJT ``<EOH>`` blob also works (first byte is not
     # the ``<`` of ``<call:``). Newline after EOR is not in N.
     raw = b" " + raw
     header = f"<command:3>Log <parameters:{len(raw)}>"
@@ -916,7 +916,7 @@ def rescan(state: LogState) -> None:
 def _status_model(state: LogState) -> AgentStatusModel:
     s = state.snapshot()
     band = s["live_band"]
-    title = f"WIMS log agent · {band or '...'}"
+    title = f"WS Hub log agent · {band or '...'}"
     # Hear = RadioInfo listen (fleet: localhost). Deliver = localhost N1MM ingest.
     radio_dest = (
         f"{s['radio_group']}:{s['radio_port']}" if s.get("radio_group")
@@ -962,7 +962,7 @@ def _status_model(state: LogState) -> AgentStatusModel:
         level, banner = "warn", f"N1MM missed {s['n_unconfirmed']} WSJT QSO(s)"
         fix = (
             "Configurer > WSJT/JTDX Setup > Enable JTDX/Others TCP, then "
-            "log the missed call by hand. WIMS retried TCP+UDP and got no insert."
+            "log the missed call by hand. WS Hub retried TCP+UDP and got no insert."
         )
     else:
         level, banner = "ok", f"Ready — {band}"

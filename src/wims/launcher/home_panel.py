@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -45,19 +45,19 @@ def _ui_font(size: int = 12, weight: str = "normal") -> tuple:
 # intent_id -> (label, agent blurb, tip)
 _INTENT_ROWS = (
     (INTENT_N1MM, "N1MM", "→ N1MM agent Log + Broadcast",
-     "This PC will run N1MM. WIMS starts the N1MM agent: "
+     "This PC will run N1MM. WS Hub starts the N1MM agent: "
      "Broadcast (RadioInfo on 127.0.0.1:12060 → site later) and "
      "Log (fleet digi QSOs → local N1MM). Shared band with KEY if both checked."),
     (INTENT_WSJT, "WSJT-X", "→ WSJT monitor",
      "This PC will run WSJT-X (one or more instances). "
-     "WIMS starts one monitor agent that audits all live instances."),
+     "WS Hub starts one monitor agent that audits all live instances."),
     (INTENT_SSB_CW, "SSB/CW KEY", "→ N1MM agent KEY",
-     "This PC has an SSB/CW KEY/CTS interface. With N1MM, WIMS runs one "
+     "This PC has an SSB/CW KEY/CTS interface. With N1MM, WS Hub runs one "
      "N1MM agent (Broadcast / Log / KEY). Key holds digi seats on the live band "
      "(InhibitStatus discovery, or WIMS_KEY_TARGETS). "
      "Pick the KEY COM/tty below."),
     (INTENT_ANTENNAS, "Antennas", "→ Antenna side of the agent",
-     "This PC has antennas. WIMS reads each rotator’s heading and "
+     "This PC has antennas. WS Hub reads each rotator’s heading and "
      "shows it on the console. It does not turn the antenna."),
     (INTENT_SERVER, "Site server", "→ Site console",
      "Optional: run the fleet site server on this PC (:8787). "
@@ -263,7 +263,7 @@ class AgentHomePanel:
             ant_fr,
             text=(
                 "Each antenna can have a rotator. "
-                "WIMS reads the heading. It does not turn the antenna."
+                "WS Hub reads the heading. It does not turn the antenna."
             ),
             font=_ui_font(10), bg="#f4f4f4", fg="#555555",
             wraplength=500, justify="left", anchor="w",

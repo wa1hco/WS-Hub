@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -138,7 +138,7 @@ def test_dupe_and_rover_and_mult():
 
 
 def test_fixed_station_wrong_logged_grid_is_still_dupe():
-    """WB1GQR logged 2m as EM96, now CQing FN42 — N1MM says dupe, WIMS must too."""
+    """WB1GQR logged 2m as EM96, now CQing FN42 — N1MM says dupe, WS Hub must too."""
     store = LogStore(":memory:")
     store.upsert(_qso("WB1GQR", "2m", "EM96"))
     assert store.is_dupe("WB1GQR", "2m", "FN42") is True

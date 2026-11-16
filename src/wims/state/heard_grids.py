@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -20,7 +20,7 @@
 
 A tail-end reply such as ``W1XX CX4BAN R-10`` carries no grid. WSJT-X then
 offers a log line with a blank grid. This store keeps the last grid seen in a
-standard decode, with the band and the UTC time, so WIMS can fill its own
+standard decode, with the band and the UTC time, so WS Hub can fill its own
 record and the record it forwards.
 
 Grids from free text, other non-standard text, and ``RR73`` are ignored.
@@ -56,7 +56,7 @@ log copy still marks ``grid_source`` ``remembered`` whenever this store
 filled a blank, so a later decode can correct it. That flag is not the
 comment.
 
-The file is JSON next to the other WIMS preferences. ``WIMS_HEARD_GRIDS``
+The file is JSON next to the other WS Hub preferences. ``WIMS_HEARD_GRIDS``
 points at another file; that is for tests. Operator docs do not mention it.
 """
 

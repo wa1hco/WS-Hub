@@ -73,7 +73,7 @@ try:
     except Exception:
         pass
     messagebox.showinfo(
-        os.environ.get("WIMS_SAY_TITLE") or "WIMS",
+        os.environ.get("WIMS_SAY_TITLE") or "WS Hub",
         os.environ.get("WIMS_SAY_TEXT") or "",
     )
     root.destroy()

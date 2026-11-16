@@ -46,7 +46,7 @@ The scripts are not signed yet, so Windows may warn the first time:
 - **"Windows protected your PC"** (SmartScreen): click **More info**, then **Run anyway**, if you trust [wa1hco/WS-Hub](https://github.com/wa1hco/WS-Hub).
 - **The file is blocked:** right-click the `.zip` before extracting (or `Install-Wims.cmd`), choose **Properties**, check **Unblock**, and click **OK**.
 
-To put the icons back later, double-click `C:\WIMS\scripts\Add WIMS to Desktop.bat`.
+To put the icons back later, double-click `C:\WIMS\scripts\Add WS Hub to Desktop.bat`.
 
 **Updating.** A copy installed from the zip opens the release page when an update is available; download the new zip and extract it over `C:\WIMS`. A git clone updates from the **Updates** list in the WS Hub window.
 

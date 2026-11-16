@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -70,7 +70,7 @@ echo Repo=%ROOT%>> "%LOG%"
 echo Server=%WIMS_SERVER% seat_id=!WIMS_SEAT_ID! rig=!WSJTX_RIG_NAME! agent_restart=!START_AGENT_RESTART!>> "%LOG%"
 
 echo.
-echo  WIMS seat startup — !SEAT_LABEL!
+echo  WS Hub seat startup — !SEAT_LABEL!
 echo  =================================
 echo  Repo:    %ROOT%
 echo  Server:  %WIMS_SERVER%
@@ -238,7 +238,7 @@ goto after_wsjtx
 ping -n 3 127.0.0.1 >nul
 
 REM =====================================================================
-REM 4) WIMS seat agent
+REM 4) WS Hub seat agent
 REM =====================================================================
 if not "!START_AGENT!"=="1" (
   echo  Skip agent START_AGENT=0
@@ -253,7 +253,7 @@ if not exist "%HERE%Start-WimsAgent-Continuous.cmd" (
 
 if not "!START_AGENT_RESTART!"=="1" goto agent_maybe_running
 
-echo  Restarting WIMS agent...
+echo  Restarting WS Hub agent...
 for /f "skip=1 tokens=1" %%P in ('wmic process where "CommandLine like '%%wims.agent%%'" get ProcessId 2^>nul') do (
   if not "%%P"=="" if not "%%P"=="ProcessId" (
     echo    kill wims.agent PID %%P
@@ -273,7 +273,7 @@ goto agent_start
 :agent_maybe_running
 wmic process where "CommandLine like '%%wims.agent%%'" get ProcessId 2>nul | findstr /R "[0-9]" >nul
 if not errorlevel 1 (
-  echo  WIMS agent already running - OK
+  echo  WS Hub agent already running - OK
   echo  Local UI: http://127.0.0.1:8790/
   echo agent already running>> "%LOG%"
   goto after_agent
@@ -287,8 +287,8 @@ if not errorlevel 1 (
 )
 
 :agent_start
-echo  Starting WIMS agent continuous - UI http://127.0.0.1:8790/
-start "WIMS Agent" /MIN cmd /c call "%HERE%Start-WimsAgent-Continuous.cmd"
+echo  Starting WS Hub agent continuous - UI http://127.0.0.1:8790/
+start "WS Hub Agent" /MIN cmd /c call "%HERE%Start-WimsAgent-Continuous.cmd"
 echo started agent>> "%LOG%"
 
 :after_agent

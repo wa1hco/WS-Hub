@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -21,10 +21,10 @@ REM along with this program.  If not, see <https://www.gnu.org/licenses/>.
 setlocal EnableExtensions
 REM Remove seat auto-start from this user's Startup folder.
 
-set "LNK=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\WIMS Seat.lnk"
+set "LNK=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\WS Hub Seat.lnk"
 
 echo.
-echo  Remove WIMS seat auto-start
+echo  Remove WS Hub seat auto-start
 echo  ===========================
 echo  Target: %LNK%
 echo.

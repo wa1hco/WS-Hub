@@ -3,7 +3,8 @@
 These are the files you double-click or run. Nothing else belongs in this folder.
 
 <!-- scripts-allowlist -->
-- `Add WIMS to Desktop.bat` — Windows: put a WIMS icon on the Desktop and in the Start menu.
+- `Add WS Hub to Desktop.bat` — Windows: put a WS Hub icon on the Desktop and in the Start menu.
+- `Add WIMS to Desktop.bat` — Same as Add WS Hub to Desktop.bat; kept so an older shortcut still works.
 - `Install WS Hub.desktop` — Linux: double-click to install WS Hub. A download is copied to `~/.local/share/ws-hub` (a git clone stays put), then the WS Hub icon goes on the desktop and in the app menu.
 - `add-wims-to-desktop.sh` — What the Linux desktop file runs.
 - `assets/wims-128.png` — Icon, 128 px.
@@ -28,11 +29,11 @@ These are the files you double-click or run. Nothing else belongs in this folder
 - `windows/install.ps1` — PowerShell install entry for scripted installs (was `install.ps1` at the top of the folder before 1.0.20). Double-click Install-Wims.cmd instead.
 - `windows/Install-WimsAgent-Desktop-Shortcut.cmd` — Lab-only agent icon. Not part of the normal install.
 - `windows/Install-WimsConsoleKiosk.ps1` — Desktop shortcut that opens Operate in a compact window.
-- `windows/Install-WimsDesktopShortcut.ps1` — Helper that writes the WIMS shortcut.
-- `windows/Install-WimsLogonStartup.cmd` — Start WIMS when you sign in.
+- `windows/Install-WimsDesktopShortcut.ps1` — Helper that writes the WS Hub shortcut.
+- `windows/Install-WimsLogonStartup.cmd` — Start WS Hub when you sign in.
 - `windows/Install-WimsLogonStartup.ps1` — Helper used by Install-WimsLogonStartup.cmd.
 - `windows/Install-WimsSeatStartup.cmd` — Start a radio pack when you sign in.
-- `windows/Remove-WimsLogonStartup.cmd` — Stop WIMS from starting at sign-in.
+- `windows/Remove-WimsLogonStartup.cmd` — Stop WS Hub from starting at sign-in.
 - `windows/Remove-WimsSeatStartup.cmd` — Stop the radio pack from starting at sign-in.
 - `windows/Set-ContestAppFirewall.cmd` — Allow contest programs through the Private firewall.
 - `windows/Set-ContestAppFirewall.ps1` — Helper used by Set-ContestAppFirewall.cmd.
@@ -53,18 +54,18 @@ These are the files you double-click or run. Nothing else belongs in this folder
 - `windows/Start-WimsAtLogon.cmd` — What Windows runs at sign-in.
 - `windows/Start-WimsAtLogon.vbs` — Starts the sign-in launcher without a console flash.
 - `windows/Start-WimsConsole-Kiosk.cmd` — Open Operate in a compact browser window.
-- `windows/Start-WimsLauncher.cmd` — Open the WIMS window (the desktop icon runs this). If that window is already open, this brings it forward.
-- `windows/Start-WimsLauncher.vbs` — Starts the WIMS window without a console flash.
+- `windows/Start-WimsLauncher.cmd` — Open the WS Hub window (the desktop icon runs this). If that window is already open, this brings it forward.
+- `windows/Start-WimsLauncher.vbs` — Starts the WS Hub window without a console flash.
 - `windows/Start-WimsSeat.cmd` — Start the radio pack named in the seat config.
 - `windows/Start-WimsServer.cmd` — Start the site server.
-- `windows/Update-Wims.cmd` — Bring this copy of WIMS up to date.
+- `windows/Update-Wims.cmd` — Bring this copy of WS Hub up to date.
 - `windows/Update-Wims.ps1` — Helper used by Update-Wims.cmd.
 - `windows/WIMS.cmd` — Text menu for seat packs, startup, and firewall.
 - `windows/_Start-Seat-Core.cmd` — Shared start sequence used by the radio packs.
 - `windows/_resolve-python.cmd` — Finds Python for the other Windows files.
 - `windows/_resolve-wsjtx.cmd` — Finds wsjtx.exe for the other Windows files.
 - `windows/assets/wims-agent.ico` — Icon for the lab agent shortcut.
-- `windows/assets/wims.ico` — Icon on the WIMS shortcut.
+- `windows/assets/wims.ico` — Icon on the WS Hub shortcut.
 - `windows/radio-flex50.example.cmd` — Example paths for the Flex 50 MHz pack. Copy to radio-flex50.cmd.
 - `windows/radio-ic9700-144.example.cmd` — Example paths for the IC-9700 pack. Copy to radio-ic9700-144.cmd.
 - `windows/README.md` — What each Windows file in this folder does.

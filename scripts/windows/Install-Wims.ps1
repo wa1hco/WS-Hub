@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -20,7 +20,7 @@
 
 <#
 .SYNOPSIS
-  Install WIMS prerequisites on Windows (Python, Git for clone/update check, firewall, launchers).
+  Install WS Hub prerequisites on Windows (Python, Git for clone/update check, firewall, launchers).
 
   Always writes a log: scripts\windows\install-log.txt
   Exit 0 only if python.exe is found AND import wims succeeds.
@@ -33,7 +33,7 @@
 [CmdletBinding()]
 param(
     [string] $RepoPath = "",
-    [string] $RepoUrl = "https://github.com/wa1hco/WIMS.git",
+    [string] $RepoUrl = "https://github.com/wa1hco/WS-Hub.git",
     [string] $LogPath = "",
     [switch] $SkipFirewall,
     [switch] $SkipShortcut,
@@ -85,7 +85,7 @@ function Update-SessionPath {
 function Test-IsVendorPython([string] $Exe) {
     if (-not $Exe) { return $true }
     $n = $Exe.ToLowerInvariant()
-    # Interpreters bundled inside other apps are not a WIMS runtime.
+    # Interpreters bundled inside other apps are not a WS Hub runtime.
     # LibreOffice's python.exe reports sys.executable as python-core-3.x.y (a directory).
     foreach ($frag in @(
         '\libreoffice\',
@@ -497,7 +497,7 @@ try {
         if (-not $RepoPath) { $RepoPath = Join-Path $env:USERPROFILE "src\WIMS" }
     }
 
-    Log "WIMS Windows install starting (elevated child or direct)"
+    Log "WS Hub Windows install starting (elevated child or direct)"
     Log "RepoPath = $RepoPath"
     Log "Admin    = $(Test-IsAdmin)"
     Log "User     = $env:USERNAME"
@@ -512,7 +512,7 @@ try {
 
     $py = Ensure-Python
 
-    Step "WIMS source tree"
+    Step "WS Hub source tree"
     $marker = Join-Path $RepoPath "src\wims\server\app.py"
     $isGit = Test-Path (Join-Path $RepoPath ".git")
     if (Test-Path $marker) {
@@ -529,12 +529,12 @@ try {
             } finally { Pop-Location }
         }
     } elseif ($SkipClone) {
-        throw "No WIMS tree at $RepoPath and -SkipClone set"
+        throw "No WS Hub tree at $RepoPath and -SkipClone set"
     } else {
         Ensure-Git
         $parent = Split-Path -Parent $RepoPath
         if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-        if (Test-Path $RepoPath) { throw "Path exists but is not WIMS: $RepoPath" }
+        if (Test-Path $RepoPath) { throw "Path exists but is not WS Hub: $RepoPath" }
         Log "    git clone $RepoUrl"
         git clone $RepoUrl $RepoPath 2>&1 | ForEach-Object { Log "      $_" }
         if (-not (Test-Path $marker)) { throw "Clone missing $marker" }
@@ -628,17 +628,22 @@ try {
             # One-click update from GitHub main
             $updCmd = Join-Path $launcherDir "Update-Wims.cmd"
             if (Test-Path -LiteralPath $updCmd) {
-                $lnkU = Join-Path $desk "Update WIMS.lnk"
+                $lnkU = Join-Path $desk "Update WS Hub.lnk"
                 $lu = $wsh.CreateShortcut($lnkU)
                 $lu.TargetPath = $updCmd
                 $lu.WorkingDirectory = $launcherDir
-                $lu.Description = "Pull latest WIMS from GitHub main"
+                $lu.Description = "Pull latest WS Hub from GitHub main"
                 if (Test-Path -LiteralPath $icoServer) { $lu.IconLocation = "$icoServer,0" }
                 $lu.Save()
                 Ok $lnkU
+                $staleUpd = Join-Path $desk "Update WIMS.lnk"
+                if (Test-Path -LiteralPath $staleUpd) {
+                    Remove-Item -LiteralPath $staleUpd -Force
+                    Ok "Removed old Update WIMS icon (now Update WS Hub): $staleUpd"
+                }
             }
 
-            # Never install WIMS Server / WIMS Agent desktop icons — launcher only.
+            # Never install WS Hub Server / WS Hub Agent desktop icons — launcher only.
             foreach ($staleName in @("WIMS Server.lnk", "WIMS Agent.lnk")) {
                 $stale = Join-Path $desk $staleName
                 if (Test-Path -LiteralPath $stale) {
@@ -672,7 +677,7 @@ try {
     Log "  Start  : $startCmd" "Green"
     Log "  Firewall 8787: $(if ($fwOk) { 'OK or already set' } else { 'NOT SET - re-run as Admin' })" $(if ($fwOk) { "Green" } else { "Yellow" })
     Log "  Log    : $script:LogFile" "Green"
-    Log "Next: double-click Desktop WIMS" "Green"
+    Log "Next: double-click Desktop WS Hub" "Green"
     exit 0
 }
 catch {

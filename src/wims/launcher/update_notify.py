@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -62,7 +62,7 @@ def notify_no_focus(title: str, body: str) -> bool:
 
     Returns True if a notify attempt was made (not proof the user saw it).
     """
-    title = (title or "WIMS").strip()
+    title = (title or "WS Hub").strip()
     body = (body or "").strip()
     if sys.platform.startswith("win"):
         return _notify_windows(title, body)
@@ -107,7 +107,7 @@ $xml = @"
 $doc = New-Object Windows.Data.Xml.Dom.XmlDocument
 $doc.LoadXml($xml)
 $toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
-$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('WIMS')
+$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('WS Hub')
 $notifier.Show($toast)
 """
     try:

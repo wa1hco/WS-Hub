@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -27,7 +27,7 @@ DEFAULT_HTTP_PORT = 8787
 
 @dataclass(frozen=True)
 class Role:
-    """One startable WIMS role shown in the launcher."""
+    """One startable WS Hub role shown in the launcher."""
 
     id: str
     title: str
@@ -129,7 +129,7 @@ ROLES: tuple[Role, ...] = (
         summary="One per contest LAN: roster, inventory, Work/Halt, Status/Setup. "
                 "May run on the same PC as an N1MM seat.",
         tooltip=(
-            "Central WIMS console for the fleet.\n\n"
+            "Central WS Hub console for the fleet.\n\n"
             "Joins the fleet WSJT UDP stream(s), seeds/mirrors the log, and serves "
             "Operate / Status / Setup in the browser.\n\n"
             "Typical: one server for the site. It can share a box with N1MM + "
@@ -191,7 +191,7 @@ ROLES: tuple[Role, ...] = (
         summary="On a WSJT-X PC: verify UDP/iface/--rig-name for local instances. "
                 "Does not start radios.",
         tooltip=(
-            "WSJT-X PCs often have no N1MM. This check only audits what WIMS needs "
+            "WSJT-X PCs often have no N1MM. This check only audits what WS Hub needs "
             "from those seats: multicast group/port, outgoing interface, Accept UDP, "
             "unique --rig-name per instance, Secondary UDP off when log agent owns logging.\n\n"
             "One PC may host several WSJT-X instances; many instances exist on the LAN. "
@@ -225,7 +225,7 @@ ROLES: tuple[Role, ...] = (
                 "See docs/home_h0_h1.md.",
         tooltip=(
             "Home stage H0 — standalone Operate window.\n\n"
-            "Starts WIMS on this PC and opens the browser. "
+            "Starts WS Hub on this PC and opens the browser. "
             "For several radios, use Site server instead.\n\n"
             "Or double-click Start-Wims-Solo in the scripts folder."
         ),

@@ -34,17 +34,17 @@ bring-up path.
   │   monitor agent     │              │   Log → local N1MM           │
   └─────────────────────┘              │   KEY → same-band holds      │
               │                        └──────────────────────────────┘
-              └──────────── WIMS site server ────────┘
+              └──────────── WS Hub site server ────────┘
                    (roster, Overview / WSJT / N1MM tabs)
 ```
 
 - **Many** WSJT-X instances on the network; **more than one per PC** is normal.
 - N1MM PC → **`wims.seat --log --key`** (N1MM agent).
-- That same PC **may also** run the WIMS site server (one server fleet-wide).
+- That same PC **may also** run the WS Hub site server (one server fleet-wide).
 
 ---
 
-## Config check as a WIMS function
+## Config check as a WS Hub function
 
 | Role | Config check focuses on |
 |------|-------------------------|

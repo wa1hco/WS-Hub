@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,7 +16,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 set "HERE=%~dp0"
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "LNK=%STARTUP%\WIMS Seat.lnk"
+set "LNK=%STARTUP%\WS Hub Seat.lnk"
 
 set "PACK=%~1"
 if /I "%PACK%"=="flex" set "PACK=flex50"
@@ -48,10 +48,10 @@ if "%PACK%"=="" (
 
 if /I "%PACK%"=="flex50" (
   set "SEAT=%HERE%Start-Seat-Flex50.cmd"
-  set "DESC=WIMS Flex-50: SmartSDR CAT DAX N1MM WSJT agent"
+  set "DESC=WS Hub Flex-50: SmartSDR CAT DAX N1MM WSJT agent"
 ) else if /I "%PACK%"=="ic9700-144" (
   set "SEAT=%HERE%Start-Seat-IC9700-144.cmd"
-  set "DESC=WIMS IC9700-144: wfview N1MM WSJT agent"
+  set "DESC=WS Hub IC9700-144: wfview N1MM WSJT agent"
 ) else (
   echo ERROR: pack must be flex50 or ic9700-144 ^(got %PACK%^)
   pause
@@ -67,7 +67,7 @@ if not exist "!SEAT!" (
 if not exist "%STARTUP%" mkdir "%STARTUP%" 2>nul
 
 echo.
-echo  Install WIMS seat auto-start
+echo  Install WS Hub seat auto-start
 echo  ============================
 echo  Pack:     %PACK%
 echo  Launcher: !SEAT!

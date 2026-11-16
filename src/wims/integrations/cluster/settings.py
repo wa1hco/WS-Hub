@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -25,7 +25,7 @@ environment variable.
 The usual node is K1TTT (``k1ttt.net`` port 7373), an AR-Cluster that
 sends a banner and then spots. Setup also lists NC7J, W3LPL, and VE7CC,
 or a host and port the operator types. Spots stay off until Setup turns
-them on. The band set defaults to every amateur band WIMS already names.
+them on. The band set defaults to every amateur band WS Hub already names.
 The mode filter (SSB, CW, FT8, FT4, Other) lives on Operate and is
 saved here too. Other is MSK144, Q65, FM, data, and any unknown mode.
 A file with no modes key is treated as all modes.

@@ -2735,7 +2735,7 @@
 			(embedded_fonts no)
 		)
 	)
-	(text "Keyline Interface to Radio\n- Inhibit, to radio\n- KEY, from radio\n\nUSB Interface FTDI FX230 USB serial\n- RTS, to Radio, Inhibit signal to stop radio from TX\n- CTS, from Radio, Key line, indicates when radio transmitting\n\nOperation\n- Agent software on PC watches for SSB/CW radio to Key\n- Agent softwware on PC asserts Inhibit to WSTJ-X radio\n- Agents communicate via multicast packets\n- Agent interlock connection defined by WIMS Server\n\nRadio Interface\n- K3S: Inhibit IN, KEYOUT_LP\n- Flex: Inhibit IN, Key out\n\n"
+	(text "Keyline Interface to Radio\n- Inhibit, to radio\n- KEY, from radio\n\nUSB Interface FTDI FX230 USB serial\n- RTS, to Radio, Inhibit signal to stop radio from TX\n- CTS, from Radio, Key line, indicates when radio transmitting\n\nOperation\n- Agent software on PC watches for SSB/CW radio to Key\n- Agent softwware on PC asserts Inhibit to WSTJ-X radio\n- Agents communicate via multicast packets\n- Agent interlock connection defined by WS Hub Server\n\nRadio Interface\n- K3S: Inhibit IN, KEYOUT_LP\n- Flex: Inhibit IN, Key out\n\n"
 		(exclude_from_sim no)
 		(at 94.742 36.068 0)
 		(effects

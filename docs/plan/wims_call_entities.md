@@ -8,9 +8,9 @@ DXCC checklist line stays off in that case. `log/pfx.py` is not this list.
 ## What the country file can say
 
 The file is the AD1C layout (https://www.country-files.com/cty-dat-format/).
-WIMS reads it and does not write it.
+WS Hub reads it and does not write it.
 
-| Form | Meaning | WIMS |
+| Form | Meaning | WS Hub |
 | --- | --- | --- |
 | Primary prefix and aliases | Longest prefix wins (`KH6` before `K`) | Used |
 | `=CALL` | This exact call, not a prefix | Used. Wins over every rule below |
@@ -53,7 +53,7 @@ shape, the rule does not invent one.
 handled because they are written in the file, not by an extra rule. A call
 that only puts the island letter in a different place than the file shows
 (`FR5ZQ/J` when the file says `FT/J`) is the limitation the file itself
-documents. WIMS does not guess.
+documents. WS Hub does not guess.
 
 Russia outside those exact prefixes still follows the file. Call areas 0, 8,
 and 9 are not all Asiatic: the file lists the exceptions (`R9X` is European

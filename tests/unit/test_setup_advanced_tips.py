@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -44,7 +44,7 @@ _JARGON = (
     re.compile(r"python\s*-m", re.IGNORECASE),
     re.compile(r"\bpython3?\b", re.IGNORECASE),
     re.compile(r"PYTHONPATH"),
-    re.compile(r"WIMS_[A-Z0-9_]+"),
+    re.compile(r"WS Hub_[A-Z0-9_]+"),
     re.compile(r"(?<![\w])--[A-Za-z]"),
     re.compile(r"\bschema\b", re.IGNORECASE),
     re.compile(r"\bjson\b", re.IGNORECASE),

@@ -10,7 +10,7 @@ process hears the beacon and **refuses to start** (see [wims_networking.md](wims
 ## On the Linux server (do this first)
 
 ```bash
-cd /path/to/WIMS   # your checkout
+cd /path/to/WS Hub   # your checkout
 git pull
 # restart however you normally run the server, e.g.:
 #   python -m wims.server.app --iface <LAN-IP> --n1mm-group 224.0.0.73 --http-port 8787

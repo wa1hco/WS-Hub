@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,18 +16,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Read & validate a WSJT-X.ini for WIMS setup guidance (plan §3.3 / §3.14 / networking §12).
+"""Read & validate a WSJT-X.ini for WS Hub setup guidance (plan §3.3 / §3.14 / networking §12).
 
 WSJT-X stores each named configuration's settings in `WSJT-X.ini`
 (`%LOCALAPPDATA%\\WSJT-X\\` on Windows; `~/.config/WSJT-X*.ini` on Linux, including
-`WSJT-X - <rig-name>.ini` for `--rig-name` instances). The keys WIMS cares about for
+`WSJT-X - <rig-name>.ini` for `--rig-name` instances). The keys WS Hub cares about for
 fleet networking are the UDP reporting settings — especially:
 
   * UDP Server = multicast group (e.g. 224.0.0.73), not 127.0.0.1
   * **Outgoing interface = contest LAN NIC** (never blank / @Invalid / loopback)
 
 A multicast *address* with a missing/invalid interface is a common silent failure:
-the instance decodes locally but WIMS (and other hosts) never see Heartbeat/Status/
+the instance decodes locally but WS Hub (and other hosts) never see Heartbeat/Status/
 Decode. The setup wizard and continuous readiness board must flag this in plain
 language.
 
@@ -171,11 +171,11 @@ def parse_ini(path: str | Path) -> list[WsjtxConfig]:
 
 
 def _validate_solo(cfg: "WsjtxConfig") -> list[tuple[str, str]]:
-    """Single-PC tester lens: N1MM + WSJT-X + WIMS server all on this machine.
+    """Single-PC tester lens: N1MM + WSJT-X + WS Hub server all on this machine.
 
     Here traffic *staying on this PC is the point*, so loopback and a blank outgoing
     interface are not errors (the fleet lens flags them). We only flag what would stop
-    the tester: no UDP output, or 'Accept UDP requests' off (then WIMS can watch but
+    the tester: no UDP output, or 'Accept UDP requests' off (then WS Hub can watch but
     cannot Work/Halt the radio). Messages are plain-language with the exact click path.
     """
     issues: list[tuple[str, str]] = []
@@ -185,18 +185,18 @@ def _validate_solo(cfg: "WsjtxConfig") -> list[tuple[str, str]]:
                  "WSJT-X is not sending decodes over UDP. "
                  "Settings → Reporting → tick 'UDP Server' (use 224.0.0.73, port 2237).")]
 
-    # Both multicast (224.0.0.73) and loopback/unicast (127.0.0.1) reach a local WIMS.
+    # Both multicast (224.0.0.73) and loopback/unicast (127.0.0.1) reach a local WS Hub.
     if cfg.iface_unset and cfg.is_multicast:
         issues.append((
             "warn",
-            "Outgoing interface is blank. On one PC this usually still reaches WIMS — "
-            "but if the WIMS roster stays empty, set Settings → Reporting → "
-            "'Outgoing interface' to the same network adapter WIMS uses (or Loopback)."))
+            "Outgoing interface is blank. On one PC this usually still reaches WS Hub — "
+            "but if the WS Hub roster stays empty, set Settings → Reporting → "
+            "'Outgoing interface' to the same network adapter WS Hub uses (or Loopback)."))
 
     if cfg.g("AcceptUDPRequests").lower() != "true":
         issues.append((
             "warn",
-            "'Accept UDP requests' is OFF — WIMS can watch decodes but cannot Work or "
+            "'Accept UDP requests' is OFF — WS Hub can watch decodes but cannot Work or "
             "Halt this radio. Settings → Reporting → tick 'Accept UDP requests' to transmit."))
 
     if not cfg.g("MyCall"):
@@ -212,7 +212,7 @@ def validate(cfg: WsjtxConfig, *, fleet: bool = True, solo: bool = False) -> lis
     `fleet=True` (default) treats loopback-only / unset LAN interface as **errors** —
     the contest multi-host and multi-consumer setup. `fleet=False` is the single-PC
     lab lens. `solo=True` is the **single-PC tester** lens (this PC runs N1MM + WSJT-X
-    + the WIMS server together): traffic staying on this PC is *correct*, so loopback
+    + the WS Hub server together): traffic staying on this PC is *correct*, so loopback
     and a blank outgoing interface are not errors — see `_validate_solo`. `solo` wins.
     """
     if solo:
@@ -232,13 +232,13 @@ def validate(cfg: WsjtxConfig, *, fleet: bool = True, solo: bool = False) -> lis
             sev,
             f"UDP Server is {server} (loopback) - only this PC receives; "
             "set UDP Server to the fleet multicast (e.g. 224.0.0.73) and "
-            "Outgoing interface to the contest LAN NIC so WIMS/N1MM on the LAN see it",
+            "Outgoing interface to the contest LAN NIC so WS Hub/N1MM on the LAN see it",
         ))
     elif not cfg.is_multicast:
         issues.append((
             "warn",
             f"UDP Server {server} is unicast - only one app receives; "
-            "use multicast (e.g. 224.0.0.73) so N1MM + WIMS + GridTracker all get it",
+            "use multicast (e.g. 224.0.0.73) so N1MM + WS Hub + GridTracker all get it",
         ))
 
     # Outgoing interface — first-class requirement (networking §4 / §12).
@@ -246,7 +246,7 @@ def validate(cfg: WsjtxConfig, *, fleet: bool = True, solo: bool = False) -> lis
         issues.append((
             "error",
             "UDP Outgoing interface is loopback - traffic stays on this PC; "
-            "other vehicles / central WIMS will NOT see it. "
+            "other vehicles / central WS Hub will NOT see it. "
             "Settings → Reporting → set interface to the contest LAN NIC",
         ))
     elif cfg.iface_unset:
@@ -254,7 +254,7 @@ def validate(cfg: WsjtxConfig, *, fleet: bool = True, solo: bool = False) -> lis
             issues.append((
                 "error",
                 "UDP Outgoing interface is blank/invalid (@Invalid) - "
-                "multicast/UDP often never reaches WIMS even when this instance decodes. "
+                "multicast/UDP often never reaches WS Hub even when this instance decodes. "
                 "Settings → Reporting → select the contest LAN NIC explicitly "
                 f"(current value: {iface or '(empty)'})",
             ))
@@ -274,7 +274,7 @@ def validate(cfg: WsjtxConfig, *, fleet: bool = True, solo: bool = False) -> lis
     if cfg.g("AcceptUDPRequests").lower() != "true":
         issues.append((
             "warn",
-            "Accept UDP requests is off - WIMS can read decodes but cannot send "
+            "Accept UDP requests is off - WS Hub can read decodes but cannot send "
             "Reply/Halt to control this instance",
         ))
 
@@ -283,7 +283,7 @@ def validate(cfg: WsjtxConfig, *, fleet: bool = True, solo: bool = False) -> lis
         issues.append((
             "info",
             f"UDP port is {port} (not 2237) - OK if this matches the band stream in the "
-            "contest profile / networking map; WIMS must join this port",
+            "contest profile / networking map; WS Hub must join this port",
         ))
 
     return issues
@@ -318,7 +318,7 @@ def report(configs: list[WsjtxConfig], *, fleet: bool = True) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Validate WSJT-X UDP settings for WIMS fleet use.")
+    ap = argparse.ArgumentParser(description="Validate WSJT-X UDP settings for WS Hub fleet use.")
     ap.add_argument("path", nargs="?", help="path to WSJT-X.ini (default: discover)")
     ap.add_argument(
         "--all", action="store_true",
@@ -353,7 +353,7 @@ def main() -> None:
                 paths = discover_ini_paths()
 
     fleet_label = "lab (loopback tolerated)" if not fleet else "fleet (LAN required)"
-    print(f"WIMS WSJT-X config check  [{fleet_label}]\n")
+    print(f"WS Hub WSJT-X config check  [{fleet_label}]\n")
     all_cfgs: list[WsjtxConfig] = []
     for p in paths:
         if not p.exists():
@@ -367,7 +367,7 @@ def main() -> None:
 
     errors = sum(1 for c in all_cfgs for sev, _ in validate(c, fleet=fleet) if sev == "error")
     if errors:
-        print(f"{errors} error(s) — fix before relying on WIMS multi-host ingest.")
+        print(f"{errors} error(s) — fix before relying on WS Hub multi-host ingest.")
         sys.exit(1)
 
 

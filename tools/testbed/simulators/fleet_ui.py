@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -112,7 +112,7 @@ class SimWsjt:
 class SimN1mm:
     """One N1MM process on the LAN (station name + host identity)."""
 
-    station: str                 # StationName (logger id in WIMS)
+    station: str                 # StationName (logger id in WS Hub)
     band_mhz: float              # radio / primary digital band (MHz)
     host_label: str              # human note only (printed); UDP src is still iface
     mycall: str = MYCALL

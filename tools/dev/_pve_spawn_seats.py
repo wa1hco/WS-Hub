@@ -204,7 +204,7 @@ def main() -> int:
             f"net0={cfg.get('net0')} usb={usbs or '-'}"
         )
     print("\nDone. After Windows boots on clones, RDP/console and run:")
-    print(r"  cd C:\Users\W2SZ\WIMS\scripts\windows")
+    print(r"  cd C:\Users\W2SZ\WS Hub\scripts\windows")
     print(r"  Set-SeatAfterClone.cmd wims-ic9700 wims-ic9700-FT8")
     print(r"  Set-SeatAfterClone.cmd wims-flex8600m wims-flex8600m-FT8")
     return 0

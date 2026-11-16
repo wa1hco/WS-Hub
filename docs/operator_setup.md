@@ -1,6 +1,6 @@
 # Operator setup — WSJT-X, N1MM, Keyline
 
-WS Hub was called WIMS before 1.0.18; some windows and files still say WIMS.
+WS Hub was called WIMS before 1.0.18; the package, folders, and some file names still use `wims`.
 
 **Audience:** contest seat operators and the person wiring the fleet.  
 **Goal:** one place that says **exactly** what to set so WS Hub can see digi, log, and KEY.
@@ -64,16 +64,16 @@ N1MM Network Status **Band 10000 / Freq 10368090.00** is **10 GHz** (kHz), host
 
 - Unique **`--rig-name=`** per instance (fleet-wide), e.g. `TRAILER-144-FT8`. Default name `WSJT-X` collides if two instances use it.  
 - **Secondary UDP / “Broadcast to N1MM”** → **OFF** when the **N1MM agent Log** path owns logging (avoids double-log).  
-- CAT/PTT stays **seat-local** (e.g. Icom + wfview) — not configured in WIMS.
+- CAT/PTT stays **seat-local** (e.g. Icom + wfview) — not configured in WS Hub.
 
-**Check:** the WSJT seat check in the WIMS window, or `Check-WimsSetup.cmd`.  
+**Check:** the WSJT seat check in the WS Hub window, or `Check-WimsSetup.cmd`.  
 **See live:** console **WSJT-X** tab (`/wsjt`).
 
 ---
 
 ## 3. N1MM (every logger PC)
 
-### 3a. Broadcast Data (WIMS presence + live contacts)
+### 3a. Broadcast Data (WS Hub presence + live contacts)
 
 **Config → Configure Ports → Broadcast Data**
 
@@ -84,7 +84,7 @@ N1MM Network Status **Band 10000 / Freq 10368090.00** is **10 GHz** (kHz), host
 | **Destination (both)** | **`127.0.0.1:12060`** only |
 
 Same string on **every** N1MM PC.  
-Do **not** confuse this with N1MM↔N1MM networking (**UDP/TCP 12070** — Network Status); WIMS does not use 12070.
+Do **not** confuse this with N1MM↔N1MM networking (**UDP/TCP 12070** — Network Status); WS Hub does not use 12070.
 
 ### 3b. N1MM WSJT / digi UDP reader — **OFF (obsolete)**
 
@@ -111,7 +111,7 @@ On the same PC as N1MM:
 
 ### 3d. Contest log file (dupe/mult seed)
 
-WIMS reads `.s3db` on the **site server** machine (**N1MM** tab → pick contest / Resync).  
+WS Hub reads `.s3db` on the **site server** machine (**N1MM** tab → pick contest / Resync).  
 Copy the open log onto the server if N1MM runs elsewhere.
 
 ---
@@ -148,7 +148,7 @@ Lab without hardware: device `sim:up` / `sim:down`.
 | Contest log / resync | **Log** `/log` |
 | Band policy / agents | **Overview** `/overview` |
 
-**Work** = click a roster line (answer). **Call CQ** = in WSJT-X, not WIMS.
+**Work** = click a roster line (answer). **Call CQ** = in WSJT-X, not WS Hub.
 
 ---
 
@@ -158,7 +158,7 @@ Lab without hardware: device `sim:up` / `sim:down`.
 |---------|------------|
 | Roster empty, waterfall full | Wrong band **port** or Outgoing interface not LAN |
 | Two digis, one Source | Both using default `--rig-name` / UDP id `WSJT-X` |
-| N1MM Network Status OK, WIMS N1MM tab empty | That is **12070**. Set Broadcast Data to **`127.0.0.1:12060`** and run **N1MM agent** with `WIMS_SERVER` |
+| N1MM Network Status OK, WS Hub N1MM tab empty | That is **12070**. Set Broadcast Data to **`127.0.0.1:12060`** and run **N1MM agent** with `WIMS_SERVER` |
 | N1MM agent “Waiting for Broadcast” | Radio unchecked, dest not `127.0.0.1:12060`, or N1MM agent not running |
 | KEY never holds digi | Wrong COM; digi not on inhibit port / no type-17; band coordinated not interlock |
 | Double QSOs in N1MM | N1MM **WSJT UDP reader** still ON, and/or WSJT Secondary UDP 2333 **and** N1MM agent Log both on |

@@ -12,7 +12,7 @@ venv/
 # Throwaway working files (validation logs, exploratory output)
 scratch/
 
-# WIMS runtime state (derived; rebuildable)
+# WS Hub runtime state (derived; rebuildable)
 wims.db
 *.db-wal
 *.db-shm

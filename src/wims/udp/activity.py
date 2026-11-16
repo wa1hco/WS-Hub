@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -176,7 +176,7 @@ def _main() -> None:
     sock = open_socket(args.host, args.port, args.multicast)
     maps: dict[str, ActivityMap] = {}
     last = 0.0
-    print("WIMS activity map — Ctrl-C to stop\n")
+    print("WS Hub activity map — Ctrl-C to stop\n")
     try:
         while True:
             data, _ = sock.recvfrom(65535)

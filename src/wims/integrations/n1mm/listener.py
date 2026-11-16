@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -25,7 +25,7 @@ WSJT-X's binary protocol these are plain UTF-8 XML, e.g. <contactinfo>, <spot>,
 
 This listener captures them to captures/, prints the root element + key fields, and
 **flags any field whose name hints at dupe / multiplier / needed status** — the
-make-or-break question for the §3.6 spot round-trip (can WIMS read N1MM's
+make-or-break question for the §3.6 spot round-trip (can WS Hub read N1MM's
 contest-rules verdict instead of reimplementing it?).
 
 Enable in N1MM: Config -> "Configure Ports, Telnet Address, Other..." -> "Broadcast

@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Operator goal choice and which log WIMS checks.
+"""Operator goal choice and which log WS Hub checks.
 
 Same directory as ``last_log.json``. ``WIMS_CONTEST_RULES`` and ``WIMS_LOGS``
 exist so tests can point at a temp file. Operator docs do not mention them.

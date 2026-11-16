@@ -96,7 +96,7 @@ If `scripts/windows/` looks crowded, only these matter for home:
 |------|---------|--------|
 | 1. Install prereqs | `Install-Wims.cmd` | Double-click **Install WS Hub**. If a message names a package, install it and follow the message. |
 | 2. Desktop icon | `Install-WIMS-Desktop-Shortcut.cmd` | Same double-click (desktop and app menu) |
-| 3. Open WIMS | Double-click Desktop **WS Hub** | same |
+| 3. Open WS Hub | Double-click Desktop **WS Hub** | same |
 | 4. In the GUI | **Check this PC**, then **Start Solo** | same |
 | 5. Console | GUI **Open Operate** → http://localhost:8787/ | same |
 
@@ -105,7 +105,7 @@ Everything else (seat packs, Startup, Proxmox clones, multi-band fleet server, K
 
 ---
 
-## Plane A UDP (WSJT-X / WIMS must match)
+## Plane A UDP (WSJT-X / WS Hub must match)
 
 ```text
 224.0.0.73:2237

@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -590,7 +590,7 @@ def env_skip_update_check() -> bool:
     )
 
 
-# While the WIMS window is open. A few hours, and never faster than the floor
+# While the WS Hub window is open. A few hours, and never faster than the floor
 # even if a setting asks for a tighter loop. Check now ignores the interval.
 DEFAULT_CHECK_INTERVAL_S = 3 * 60 * 60
 MIN_CHECK_INTERVAL_S = 15 * 60
@@ -1155,7 +1155,7 @@ def list_github_releases(
 
 _NOTICE_TEXT = {
     "offline": "No network. The update list is unchanged.",
-    "rate_limit": "GitHub is limiting checks right now. WIMS will try again later.",
+    "rate_limit": "GitHub is limiting checks right now. WS Hub will try again later.",
     "empty": "No versions to show yet.",
 }
 
@@ -1262,14 +1262,14 @@ def apply_release(
             )
         _say(on_progress, "This copy cannot switch versions by itself.")
         return False, (
-            "This copy was not installed from git, so WIMS cannot switch it "
+            "This copy was not installed from git, so WS Hub cannot switch it "
             "in place. The release page has the download. Keep your seat "
             "files when you replace the folder."
         )
     if _tree_dirty(root):
         _say(on_progress, "Local edits are in the way.")
         return False, (
-            "This copy has local edits. WIMS left it unchanged. "
+            "This copy has local edits. WS Hub left it unchanged. "
             "Install is available after those edits are put away."
         )
     _say(on_progress, f"Getting {wanted}.")
@@ -1315,7 +1315,7 @@ def rollback_release(
     if not saved:
         return False, (
             "There is no saved previous copy yet. "
-            "WIMS remembers one when you install an update."
+            "WS Hub remembers one when you install an update."
         )
     if not (root / ".git").exists():
         if saved.get("kind") == "tree" and _can_replace_tree():
@@ -1323,7 +1323,7 @@ def rollback_release(
         return False, "This copy cannot switch versions by itself."
     if _tree_dirty(root):
         return False, (
-            "This copy has local edits. WIMS left it unchanged."
+            "This copy has local edits. WS Hub left it unchanged."
         )
     sha = str(saved.get("sha") or "").strip()
     branch = str(saved.get("branch") or "").strip()

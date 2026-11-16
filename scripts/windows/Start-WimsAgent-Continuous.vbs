@@ -1,4 +1,4 @@
-' WIMS — Desktop "WIMS Agent" entry (sticky green icon; no visible cmd).
+' WS Hub — Desktop "WS Hub Agent" entry (sticky green icon; no visible cmd).
 Option Explicit
 Dim sh, fso, here
 Set sh = CreateObject("WScript.Shell")

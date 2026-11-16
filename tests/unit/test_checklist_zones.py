@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -302,7 +302,7 @@ def test_uncertain_zone_is_not_called_needed():
     zone_only = _store("cq", "overall", [], cty=cty)
     missing = zone_only.classify("ZZ9ZZZ", "20m", "FN42", "FT8")
     assert missing.is_dupe is True and missing.is_new_mult is False
-    assert missing.need_reason.startswith("WIMS cannot tell yet")
+    assert missing.need_reason.startswith("WS Hub cannot tell yet")
     assert "zone uncertain" not in missing.need_reason
 
 

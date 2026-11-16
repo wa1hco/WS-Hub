@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -61,7 +61,7 @@ from wims.udp import messages as M  # noqa: E402
 GROUP_DEFAULT = "224.0.0.73"
 PORT_DEFAULT = 2237
 N1MM_CONTACT_PORT = 12060
-MID = "WIMS-2237-PROBE"
+MID = "WS Hub-2237-PROBE"
 
 _CALL_RE = re.compile(r"<call>([^<]+)</call>", re.I)
 _STATION_RE = re.compile(r"<StationName>([^<]+)</StationName>", re.I)

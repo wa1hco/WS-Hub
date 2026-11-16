@@ -151,7 +151,7 @@ jobs:
 
           NOTES=$(mktemp)
           {
-            echo "## WIMS tester package ${VERSION}"
+            echo "## WS Hub tester package ${VERSION}"
             echo
             echo "Lab/prerelease allow-list packages. Not a GA cut."
             echo "Windows zip is tree-only until bundled CPython+Tk lands."
@@ -169,7 +169,7 @@ jobs:
             gh release edit "$TAG" --notes-file "$NOTES" --prerelease
           else
             gh release create "$TAG" "$LIN" "$WIN" "$SUMS" \
-              --title "WIMS ${VERSION} (tester)" \
+              --title "WS Hub ${VERSION} (tester)" \
               --notes-file "$NOTES" \
               --prerelease
           fi

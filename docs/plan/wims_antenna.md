@@ -1,4 +1,4 @@
-# WIMS antenna agent — implementation brief
+# WS Hub antenna agent — implementation brief
 
 **Status:** Step 1 is implemented: read-only rotator heading on an antenna.
 Tuner and switch are named and not built. Step 1 sends no motion and no set.  
@@ -29,9 +29,9 @@ The rest of this file is the rotator device: the rotctld session, safety,
 and the four rotator build steps. Tuner and switch do not add a second
 program. They are further devices on the same antenna list.
 
-## What WIMS talks to
+## What WS Hub talks to
 
-WIMS turns antennas itself.
+WS Hub turns antennas itself.
 
 | Path | Role |
 |------|------|
@@ -89,7 +89,7 @@ Suggested copy:
 |--|--|
 | Label | **Antennas** |
 | Blurb | → Antenna side of the agent |
-| Tip | This PC has antennas. WIMS reads each rotator’s heading and shows it on the console. |
+| Tip | This PC has antennas. WS Hub reads each rotator’s heading and shows it on the console. |
 
 Intent id: `antennas`, beside `n1mm`, `wsjt`, `ssb_cw`, and `server`.
 Remembered in the same seat-intent file. Checking it turns on the antenna
@@ -225,7 +225,7 @@ is not written. Add this, and nothing larger.
 
 **Stored name.** One nonvolatile label, up to 24 characters (letters,
 digits, spaces, hyphen). Example: `6m beam`. Set from the controller’s own
-setup. WIMS only reads it, so a client cannot rename the antenna during a
+setup. WS Hub only reads it, so a client cannot rename the antenna during a
 contest.
 
 **rotctld dialect.** Speak the hamlib rotctld command lines the agent
@@ -246,7 +246,7 @@ know `ID` answers `?>`, and the agent asks the operator for the name once.
 ASCII line, IPv4 subnet broadcast, UDP port **4534**:
 
 ```
-WIMS-ROT 1 name=6m beam az=212.0 moving=0 rotctld=4535
+WS Hub-ROT 1 name=6m beam az=212.0 moving=0 rotctld=4535
 ```
 
 `moving` is `0` or `1`. `rotctld` is the TCP port of this board’s rotctld

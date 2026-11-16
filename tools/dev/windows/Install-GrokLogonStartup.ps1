@@ -1,4 +1,4 @@
-# User Startup shortcut: Grok CLI in the WIMS tree, --always-approve (no tool prompts).
+# User Startup shortcut: Grok CLI in the WS Hub tree, --always-approve (no tool prompts).
 param(
     [switch]$NoPause
 )
@@ -34,12 +34,12 @@ $s.TargetPath = $wscript
 $s.Arguments = "//nologo `"$vbsAbs`""
 $s.WorkingDirectory = $here
 $s.WindowStyle = 7
-$s.Description = "Grok CLI at logon (always-approve, cwd WIMS tree)"
+$s.Description = "Grok CLI at logon (always-approve, cwd WS Hub tree)"
 $s.Save()
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null
 
 Write-Host " Startup: $lnk"
-Write-Host " Logon starts: grok --always-approve --cwd <WIMS repo>"
+Write-Host " Logon starts: grok --always-approve --cwd <WS Hub repo>"
 Write-Host " Tools run without permission prompts. Deny rules still apply."
 Write-Host " Remove: del `"$lnk`""
 if (-not $NoPause) { pause }

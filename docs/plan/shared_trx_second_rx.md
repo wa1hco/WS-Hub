@@ -11,7 +11,7 @@ lands. This file does **not** replace the dual-radio fleet default
 | Field | Value |
 |-------|--------|
 | **Title** | Two station classes: one transceiver + separate RX, or one transceiver with dual RX. CAT profile handoff. |
-| **Author** | WIMS design |
+| **Author** | WS Hub design |
 | **Date** | 2026-09-12 |
 | **Revised** | 2026-09-13 |
 | **Status** | Draft |
@@ -21,7 +21,7 @@ lands. This file does **not** replace the dual-radio fleet default
 
 ## 1. Two new station classes
 
-WIMS adds **two** station classes. Both use **one transceiver** for TX.
+WS Hub adds **two** station classes. Both use **one transceiver** for TX.
 Both keep digital decode during voice. They differ in the **second
 receiver**.
 
@@ -56,9 +56,9 @@ Only the last two enable `--cat`.
 
 ## 2. Why these classes exist
 
-WIMS today assumes dual-radio: an SSB/CW transmitter and a WSJT-X
+WS Hub today assumes dual-radio: an SSB/CW transmitter and a WSJT-X
 transmitter, antenna-split so both receive. Inhibit gates digital PTT so
-only one signal radiates. WIMS does not send CAT on dual-radio.
+only one signal radiates. WS Hub does not send CAT on dual-radio.
 
 On a typical 222 / 432 seat there is **one** transceiver.
 
@@ -86,11 +86,11 @@ a second RX, `--cat`, RTS PTT, mute, and SEND wiring are declared.
 
 ---
 
-## 3. What WIMS must do
+## 3. What WS Hub must do
 
-WIMS must keep **one radiated signal** on this transceiver.
+WS Hub must keep **one radiated signal** on this transceiver.
 
-WIMS must:
+WS Hub must:
 
 1. Stop digital RF first (inhibit + mute).
 2. Then switch the radio to the voice profile.
@@ -98,17 +98,17 @@ WIMS must:
 4. On unkey: wait CAT dwell, then restore the digital profile, then
    release digital TX.
 
-WIMS must **not**:
+WS Hub must **not**:
 
 - Open the radio COM / CI-V port. wfview owns that port.
 - Key SSB or CW. The human keys the radio.
 - Start CAT on a dual-radio seat.
 - Replace WSJT-X, N1MM, or the logger.
-- Drive SDR tuning as a WIMS product.
+- Drive SDR tuning as a WS Hub product.
 - Put CAT on the site server.
 
 On shared-trx only, a seat-local coordinator is a **Hamlib NET client**
-of named middleware (wfview RigCtld). WIMS is still not a server-plane
+of named middleware (wfview RigCtld). WS Hub is still not a server-plane
 CAT protocol.
 
 ---
@@ -119,7 +119,7 @@ CAT protocol.
 Antenna ── T/R / amp ── Transceiver (one TX path)
                │            │
                │            │  wfview owns COM → RigCtld :4533
-               │            │  WIMS proxy :4532 is the only Hamlib peer
+               │            │  WS Hub proxy :4532 is the only Hamlib peer
                │            └── Seat PC: wfview, N1MM, one TX WSJT-X,
                │                wims.seat --log --key --cat
                │
@@ -140,7 +140,7 @@ handoff are the same. Protection and audio are not.
 | Class | Second RX hardware | Protection | Decode audio |
 |-------|--------------------|------------|--------------|
 | **`shared_trx_second_rx`** | Separate SDR only | External T/R or limiter (`sequencer`) | Virtual audio / IQ from the SDR. Many modes at the same time. |
-| **`shared_trx_dual_rx`** | Same transceiver dual RX | Radio T/R (`radio_tr`). Do not hot-switch RX2. | Radio 2nd-RX USB / codec. WIMS does **not** tune RX2. |
+| **`shared_trx_dual_rx`** | Same transceiver dual RX | Radio T/R (`radio_tr`). Do not hot-switch RX2. | Radio 2nd-RX USB / codec. WS Hub does **not** tune RX2. |
 
 Do **not** set `shared_trx_dual_rx` on a radio that has only one RX.
 Do **not** set `shared_trx_second_rx` if the only second RX is the
@@ -174,7 +174,7 @@ type-17 inhibit port. Do **not** send holds to decode-only instances.
 | Inhibit | Necessary and sufficient | N/A | **Necessary, not sufficient** |
 | TX-audio mute | Fallback | n/a | **Mandatory with first hold** |
 | Human SEND | Keys the voice radio | Manual | **AND-gate: footswitch × Keyline J3** |
-| CAT from WIMS | Forbidden | Unused | **Seat-local Hamlib client** |
+| CAT from WS Hub | Forbidden | Unused | **Seat-local Hamlib client** |
 
 ---
 
@@ -249,14 +249,14 @@ Not N1MM `IsTransmitting`. Not a console button in v1.
 
 ### KEY down
 
-1. WIMS samples CTS (today: poll about 50 ms).
-2. WIMS sends inhibit to the TX-capable WSJT-X (`{host}-key` and
+1. WS Hub samples CTS (today: poll about 50 ms).
+2. WS Hub sends inhibit to the TX-capable WSJT-X (`{host}-key` and
    `{host}-cat`). Two Controller IDs. Gate OR is already tested.
-3. WIMS mutes TX USB audio.
+3. WS Hub mutes TX USB audio.
 4. Voice permit stays **down**. Radio SEND cannot close yet.
 5. UI shows **HANDOFF**. Do **not** talk yet. This is **RF-safe**.
-6. Proxy goes to COORD. WIMS applies the voice CAT profile.
-7. If readback is good: UI shows **VOICE**. WIMS asserts J3. Held PTT
+6. Proxy goes to COORD. WS Hub applies the voice CAT profile.
+7. If readback is good: UI shows **VOICE**. WS Hub asserts J3. Held PTT
    keys the radio. This is **voice-shaped**.
 8. If CAT takes more than 500 ms, or mute fails: UI shows **FAULT**.
    Digital TX stays inhibited. Permit stays down.
@@ -273,7 +273,7 @@ The second RX continues to decode during all of this.
 4. After dwell: permit down. Apply digital CAT. Digital VFO = WSJT-X
    Status **dial**, not Fake-It TX offset.
 5. If readback is good: unmute. Release CAT inhibit. UI shows DIGITAL.
-6. WSJT-X transmits again only if Enable Tx was already on. WIMS does
+6. WSJT-X transmits again only if Enable Tx was already on. WS Hub does
    not start a new QSO.
 
 ### Force / Retry
@@ -320,11 +320,11 @@ stateDiagram-v2
 
 ## 7. CAT (shared-trx classes only)
 
-WIMS does **not** open COM. A seat-local coordinator is a **Hamlib
-client** of wfview RigCtld, through a **WIMS proxy**.
+WS Hub does **not** open COM. A seat-local coordinator is a **Hamlib
+client** of wfview RigCtld, through a **WS Hub proxy**.
 
 ```
-WSJT-X  →  WIMS proxy :4532  →  wfview RigCtld :4533
+WSJT-X  →  WS Hub proxy :4532  →  wfview RigCtld :4533
 Coordinator → same proxy
 N1MM CI-V  →  wfview (not through the proxy)
 ```
@@ -393,7 +393,7 @@ Voice memory = N1MM RadioInfo **only while** `handoff.state==VOICE`.
 RadioInfo during DIGITAL must **not** update voice memory.
 
 Transverter: 222 CAT 21 MHz + 201 MHz LO; 432 CAT 28 MHz + 404 MHz.
-Store CAT Hz + RF Hz. Apply CAT Hz. WIMS adds that offset only for ids
+Store CAT Hz + RF Hz. Apply CAT Hz. WS Hub adds that offset only for ids
 marked IF-reporting
 ([decision 2026-10-14](../decisions/2026-10-14-if-reporting-seats.md));
 a Flex XVTR dial is already RF.
@@ -523,7 +523,7 @@ Dual-RX seat: set `"station_class": "shared_trx_dual_rx"`,
 `"sdr_protection": "radio_tr"`, `"second_rx": {"label": "IC-9700-RX2"}`.
 CAT and KEY stay the same. Decode audio comes from radio RX2.
 
-`ptt_device` is **WSJT-X’s** gated PTT port. WIMS never opens it.
+`ptt_device` is **WSJT-X’s** gated PTT port. WS Hub never opens it.
 `j3_role` must be `voice_permit`. `tx_inh` is a readiness error.
 Observed Status `tx_role` (`idle` / `snp_wims` / `run_local` / `qso`)
 must **not** appear in this profile.
@@ -628,8 +628,8 @@ No new plane-A types. Type-18 unchanged. No SQLite change.
 
 - Replace Trailer-50 / Trailer-144 dual-radio.
 - Put CAT on the site server.
-- Let WIMS key SSB/CW.
-- Drive SDR tuning as a WIMS product.
+- Let WS Hub key SSB/CW.
+- Drive SDR tuning as a WS Hub product.
 - Flex SmartSDR CAT in v1.
 - Guarantee 250 ms voice-shaped before the IC-9700 dummy-load bench.
 - Support parallel footswitch-to-SEND.
@@ -643,7 +643,7 @@ No new plane-A types. Type-18 unchanged. No SQLite change.
 | # | Decision |
 |---|----------|
 | **KD1** | Two classes: `shared_trx_second_rx` and `shared_trx_dual_rx`. Dual-radio remains default. Unset class = no CAT. Do not infer from hostname. Class is the discriminator, not `second_rx.kind`. |
-| **KD2** | Invariant 7 rewrite for shared-trx only: WIMS never opens COM/CI-V. Seat-local Hamlib **client** of named middleware. Never keys SSB/CW. `--cat` hard error if class is neither shared-trx value. |
+| **KD2** | Invariant 7 rewrite for shared-trx only: WS Hub never opens COM/CI-V. Seat-local Hamlib **client** of named middleware. Never keys SSB/CW. `--cat` hard error if class is neither shared-trx value. |
 | **KD3** | Handoff order: KEY → inhibit TX-capable → mute → park WSJT CAT → voice CAT → voice-shaped. Reverse: RF hang → CAT dwell → digital CAT from Status dial → drop CAT lease. |
 | **KD4** | Two type-18 IDs: `{host}-key` and `{host}-cat`. CAT lease is level-triggered on its own thread. KEY sense never waits on CAT sockets. |
 | **KD5** | Digital PTT = gated serial RTS/DTR, not CAT PTT. |
@@ -715,7 +715,7 @@ Tests (stdlib): `test_handoff.py`, `test_audio_mute.py`, `test_key_cts.py`
 
 | Option | Result |
 |--------|--------|
-| Keep CAT in wfview macros; WIMS only inhibits | Reject as product. Keep as FAULT fallback. |
+| Keep CAT in wfview macros; WS Hub only inhibits | Reject as product. Keep as FAULT fallback. |
 | N1MM owns CAT; WSJT-X VOX | Reject. |
 | Dual-radio only (no feature) | Reject as the product answer. Keep as fleet default. |
 | Disconnect WSJT-X CAT (no proxy) | Reject. Proxy is the disconnect. |

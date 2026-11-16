@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,7 +19,7 @@
 """CQ and ITU zone from a Maidenhead grid. Stdlib only.
 
 The boxes are the interior of a zone, not the legal boundary. A square whose
-sample points are not all inside the same box is zone uncertain. WIMS then
+sample points are not all inside the same box is zone uncertain. WS Hub then
 does not claim that zone is needed.
 
 Sources, for the published boundaries these boxes approximate:

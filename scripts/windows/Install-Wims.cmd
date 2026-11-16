@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -29,7 +29,7 @@ set "LOG=%~dp0install-log.txt"
 set "ELEV=%TEMP%\wims-elevate-install.ps1"
 
 echo.
-echo  WIMS Windows install
+echo  WS Hub Windows install
 echo  ====================
 echo  Repo:   %REPO%
 echo  Script: %PS1%
@@ -37,9 +37,9 @@ echo  Log:    %LOG%
 echo.
 
 if not exist "%REPO%\src\wims\server\app.py" (
-  echo  ERROR: Not a full WIMS checkout:
+  echo  ERROR: Not a full WS Hub checkout:
   echo    %REPO%
-  echo  git clone https://github.com/wa1hco/WIMS.git
+  echo  git clone https://github.com/wa1hco/WS-Hub.git
   echo.
   pause
   exit /b 1

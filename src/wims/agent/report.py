@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -518,7 +518,7 @@ def probe_windows_firewall() -> dict:
             ),
         })
 
-    # Named WIMS contest rules.
+    # Named WS Hub contest rules.
     for name in _WIMS_FW_RULES:
         rc, out = _run_capture(
             ["netsh", "advfirewall", "firewall", "show", "rule", f"name={name}"],
@@ -542,7 +542,7 @@ def probe_windows_firewall() -> dict:
                 "message": f"Firewall rule present but disabled: {name}",
             })
 
-    # Soft check: any WIMS contest WSJT-X / N1MM Logger *program* rule (paths vary).
+    # Soft check: any WS Hub contest WSJT-X / N1MM Logger *program* rule (paths vary).
     # Avoid `show rule name=all` (huge); filter names via findstr.
     rc, hit_out = _run_capture(
         [
@@ -562,7 +562,7 @@ def probe_windows_firewall() -> dict:
         issues.append({
             "severity": "warn",
             "message": (
-                "No WIMS contest WSJT-X/N1MM program firewall rules — "
+                "No WS Hub contest WSJT-X/N1MM program firewall rules — "
                 "UDP control may be blocked. Run scripts/windows/"
                 "Set-ContestAppFirewall.ps1 (elevated)."
             ),
@@ -572,7 +572,7 @@ def probe_windows_firewall() -> dict:
         issues.append({
             "severity": "warn",
             "message": (
-                f"Missing {len(missing)} WIMS contest firewall rule(s) "
+                f"Missing {len(missing)} WS Hub contest firewall rule(s) "
                 f"(e.g. {missing[0]}). Run Set-ContestAppFirewall.ps1."
             ),
         })
@@ -587,7 +587,7 @@ def probe_windows_firewall() -> dict:
     if sev == "ok":
         msg = (
             f"Windows Firewall: {len(rules) - len(missing)}/"
-            f"{len(rules)} core WIMS rules present"
+            f"{len(rules)} core WS Hub rules present"
             + (f"; Private={private_state}" if private_state else "")
         )
     else:
@@ -976,7 +976,7 @@ def build_report(
     rotator_reports: list | None = None,
 ) -> dict:
     """Full agent report (local UI and server POST body). `solo` = single-PC tester
-    lens (this PC runs N1MM + WSJT-X + the WIMS server)."""
+    lens (this PC runs N1MM + WSJT-X + the WS Hub server)."""
     host_name = _hostname()
     aid = (agent_id or os.environ.get("WIMS_AGENT_ID") or host_name).strip()
     sid = (seat_id or os.environ.get("WIMS_SEAT_ID") or "").strip() or None
@@ -1257,7 +1257,7 @@ def format_report_text(report: dict, *, skip_wsjtx: bool = False) -> str:
     lines: list[str] = []
     h = report.get("host") or {}
     s = report.get("summary") or {}
-    lines.append("WIMS agent — seat configuration check")
+    lines.append("WS Hub agent — seat configuration check")
     lines.append("=" * 48)
     lines.append(f"agent_id : {report.get('agent_id')}")
     if report.get("seat_id"):
@@ -1453,13 +1453,13 @@ def _solo_body(report: dict) -> tuple[list[str], int, int]:
         accept = (c.get("accept_udp") or "").lower() == "true"
         call, grid = c.get("my_call") or "", c.get("my_grid") or ""
         if server:
-            add(OK, f"Sending decodes to {server}:{port} — WIMS will see them.")
+            add(OK, f"Sending decodes to {server}:{port} — WS Hub will see them.")
         else:
             add(BAD, "Not sending decodes over UDP (Settings → Reporting → tick 'UDP Server').")
         if accept:
-            add(OK, "'Accept UDP requests' is ON — WIMS can Work/Halt this radio.")
+            add(OK, "'Accept UDP requests' is ON — WS Hub can Work/Halt this radio.")
         else:
-            add(WARN, "'Accept UDP requests' is OFF — WIMS can watch but cannot transmit "
+            add(WARN, "'Accept UDP requests' is OFF — WS Hub can watch but cannot transmit "
                       "until you tick it (Settings → Reporting).")
         if call and grid:
             add(OK, f"Station: {call} / {grid}")
@@ -1521,7 +1521,7 @@ def format_report_solo(report: dict) -> str:
     [OK]/[! ]/[XX] line per thing that matters, each with the exact WSJT-X/N1MM fix.
     No jargon, no site-server hunt — this PC runs everything."""
     body, err, warn = _solo_body(report)
-    out = ["WIMS setup check — this PC", "=" * 34]
+    out = ["WS Hub setup check — this PC", "=" * 34]
     if err:
         out.append(f"{BAD} {err} thing{'s' if err != 1 else ''} to fix before testing.")
     elif warn:
@@ -1534,6 +1534,6 @@ def format_report_solo(report: dict) -> str:
     if err:
         out.append("Fix the [XX] item(s) above, then run this check again.")
     else:
-        out.append("Next: double-click the WIMS icon, or Start-Wims-Solo.cmd")
+        out.append("Next: double-click the WS Hub icon, or Start-Wims-Solo.cmd")
         out.append("      then open  http://localhost:8787/  and watch the roster.")
     return "\n".join(out)

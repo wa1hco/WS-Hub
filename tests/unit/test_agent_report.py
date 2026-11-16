@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -51,7 +51,7 @@ def test_build_report_shape():
     assert r["summary"]["severity"] in ("ok", "warn", "error")
     assert isinstance(r["summary"]["message"], str)
     text = format_report_text(r)
-    assert "WIMS agent" in text
+    assert "WS Hub agent" in text
     assert "WSJT-X" in text
     assert "Windows Firewall" in text
     assert "Keyline (FTDI)" in text
@@ -366,7 +366,7 @@ def test_firewall_probe_windows_missing_rules():
         if "show" in cmd and "allprofiles" in cmd:
             return 0, "Private Profile Settings:\nState                                 ON\n"
         if "show" in cmd and "rule" in cmd and "name=all" in cmd:
-            return 1, ""  # no WIMS program rules
+            return 1, ""  # no WS Hub program rules
         if "show" in cmd and "rule" in cmd:
             return 1, "No rules match with the specified criteria.\n"
         return 1, "unexpected"

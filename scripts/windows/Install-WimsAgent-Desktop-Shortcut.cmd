@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-REM Lab-only: Desktop "WIMS Agent" shortcut. Install does NOT run this.
+REM Lab-only: Desktop "WS Hub Agent" shortcut. Install does NOT run this.
 
 cd /d "%~dp0"
 set "HERE=%~dp0"
@@ -18,12 +18,12 @@ if not exist "%TARGET%" (
   exit /b 1
 )
 if not exist "%VBS%" (
-  echo ERROR: Start-WimsAgent-Continuous.vbs missing — pull latest WIMS.
+  echo ERROR: Start-WimsAgent-Continuous.vbs missing — pull latest WS Hub.
   if /I not "%~1"=="/nopause" pause
   exit /b 1
 )
 if not exist "%ICON%" (
-  echo ERROR: assets\wims-agent.ico missing — pull latest WIMS.
+  echo ERROR: assets\wims-agent.ico missing — pull latest WS Hub.
   if /I not "%~1"=="/nopause" pause
   exit /b 1
 )
@@ -39,7 +39,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$s.Arguments = '//nologo \"' + $vbs + '\"'; " ^
   "$s.WorkingDirectory = '%HERE%'; " ^
   "$s.WindowStyle = 1; " ^
-  "$s.Description = 'WIMS seat agent — local UI http://127.0.0.1:8790/'; " ^
+  "$s.Description = 'WS Hub seat agent — local UI http://127.0.0.1:8790/'; " ^
   "$s.IconLocation = $ico + ',0'; " ^
   "$s.Save(); " ^
   "Write-Host 'Created:' $lnk; Write-Host 'Icon:' $ico"
@@ -51,7 +51,7 @@ if not exist "%LNK%" (
 )
 
 echo.
-echo  Desktop shortcut ready: WIMS Agent
+echo  Desktop shortcut ready: WS Hub Agent
 echo  Double-click to run the continuous seat agent.
 echo  Local page: http://127.0.0.1:8790/
 echo  Icon: assets\wims-agent.ico

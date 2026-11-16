@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -573,7 +573,7 @@ def make_handler(state: AgentState):
                 state.discover_server(duration_s=1.5)
             if not state.server_url:
                 self._send(400, "text/plain",
-                           b"No site server yet. Double-click WIMS on the contest PC and start the site server, then try again.")
+                           b"No site server yet. Double-click WS Hub on the contest PC and start the site server, then try again.")
                 return
             rep = state.refresh()
             result = export_report(rep, state.server_url)
@@ -683,7 +683,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         pass
     ap = argparse.ArgumentParser(
-        description="WIMS host agent — local seat config check + optional export to site server. "
+        description="WS Hub host agent — local seat config check + optional export to site server. "
                     "Default: one-shot (exit). Use --daemon for continuous report to the server.",
     )
     mode = ap.add_mutually_exclusive_group()
@@ -718,7 +718,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--lab", action="store_true",
                     help="lab mode: loopback WSJT-X UDP is warn, not error")
     ap.add_argument("--solo", action="store_true",
-                    help="single-PC tester: this PC runs N1MM + WSJT-X + the WIMS server. "
+                    help="single-PC tester: this PC runs N1MM + WSJT-X + the WS Hub server. "
                          "Plain-language check, no site-server search (implies --no-discover).")
     args = ap.parse_args(argv)
 
@@ -753,7 +753,7 @@ def main(argv: list[str] | None = None) -> int:
             print("(presence module not installed — git pull latest; scan still runs)",
                   flush=True)
             return
-        print("Looking for site WIMS server (no IP required)…", flush=True)
+        print("Looking for site WS Hub server (no IP required)…", flush=True)
         print(f"  1) UDP presence {P.DEFAULT_GROUP}:{P.DEFAULT_PORT} "
               f"+ LAN broadcast (~{P.STARTUP_LISTEN_S:.0f}s)", flush=True)
         if http_fallback:
@@ -777,7 +777,7 @@ def main(argv: list[str] | None = None) -> int:
                     flush=True,
                 )
         else:
-            print("  NOT FOUND yet. On the contest PC, double-click WIMS and start "
+            print("  NOT FOUND yet. On the contest PC, double-click WS Hub and start "
                   "the site server, then run this check again.",
                   flush=True)
         print(flush=True)
@@ -862,7 +862,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     ui = f"http://{args.bind}:{args.local_port}/"
-    print(f"WIMS agent UI ready: {ui}", flush=True)
+    print(f"WS Hub agent UI ready: {ui}", flush=True)
     print("  (config scan continues in background — refresh the page in a few seconds)",
           flush=True)
 
@@ -914,7 +914,7 @@ def _print_next_steps(state: AgentState) -> None:
     print("  Seat config check only (WSJT-X / N1MM on THIS PC).")
     print("  It is not the site console and does not open a browser by itself.")
     print()
-    print("Open the site WIMS console (roster / status)")
+    print("Open the site WS Hub console (roster / status)")
     print("-------------------------------------------")
     p = state.get_presence()
     base = None
@@ -928,9 +928,9 @@ def _print_next_steps(state: AgentState) -> None:
         print(f"  Setup:    {base}/setup")
         print("  (paste into a browser on any machine that can reach that host)")
     else:
-        print("  No server URL yet. On the site PC, double-click WIMS and start the site server.")
+        print("  No server URL yet. On the site PC, double-click WS Hub and start the site server.")
         print("  and confirm it prints: presence announce 224.0.0.73:8788")
-        print("  Or open the WIMS window on this seat and check N1MM.")
+        print("  Or open the WS Hub window on this seat and check N1MM.")
         print("  Then open that URL in the browser.")
     print()
     print("Clickable links on this seat (zero memory)")

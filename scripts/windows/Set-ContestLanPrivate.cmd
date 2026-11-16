@@ -19,7 +19,7 @@ if not exist "%PS1%" (
 )
 
 echo.
-echo  WIMS - set contest LAN to Private
+echo  WS Hub - set contest LAN to Private
 echo  =================================
 echo  N1MM allow-rules apply on Private; Public blocks TCP 12070 send/receive.
 echo.

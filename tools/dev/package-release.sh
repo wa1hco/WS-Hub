@@ -90,7 +90,7 @@ copy_tree() {
 
     # Tired-op extract steps
     cat > "$dest_root/README-INSTALL.txt" <<EOF
-WIMS ${DISPLAY} — quick install
+WS Hub ${DISPLAY} — quick install
 ================================
 
 Windows (contest seat):

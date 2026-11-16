@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -135,7 +135,7 @@ def assess(instance: str, path: Path) -> LogAccess:
     if not parent_ok:
         return LogAccess(
             instance, str(parent), "missing_dir",
-            f"WIMS hears {instance} but cannot find its WSJT-X folder ({parent}). "
+            f"WS Hub hears {instance} but cannot find its WSJT-X folder ({parent}). "
             "Contacts from this radio will be missing from dupe checking. "
             "Set the log file on the Log page.",
         )
@@ -158,8 +158,8 @@ def assess(instance: str, path: Path) -> LogAccess:
     if problem == "locked":
         return LogAccess(
             instance, shown, "locked",
-            f"WSJT-X has {shown} open so WIMS cannot read it. WIMS will use contacts "
-            "logged while WIMS is running, and will miss older ones.",
+            f"WSJT-X has {shown} open so WS Hub cannot read it. WS Hub will use contacts "
+            "logged while WS Hub is running, and will miss older ones.",
         )
     if problem:
         return LogAccess(
@@ -186,7 +186,7 @@ def discover_access(
 
     ``heard_ids`` are UDP ids. Installed data directories are always listed so
     a rig that is not on the air yet still shows up. A shared path replaces
-    per-instance files as the log WIMS reads; the per-instance rows stay so
+    per-instance files as the log WS Hub reads; the per-instance rows stay so
     the operator can see each radio.
     """
     logs = logs or {}
@@ -238,7 +238,7 @@ def discover_access(
                 "shared",
                 real,
                 "ok",
-                f"{label} write the same log file. WIMS counts each contact once.",
+                f"{label} write the same log file. WS Hub counts each contact once.",
             ))
     return rows
 

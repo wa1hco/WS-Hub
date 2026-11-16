@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -25,7 +25,7 @@ def _load_bench():
     if not _BENCH.is_file():
         raise FileNotFoundError(
             f"KEY inhibit bench not found at {_BENCH}. "
-            "Clone the full WIMS tree (include tools/testbed/)."
+            "Clone the full WS Hub tree (include tools/testbed/)."
         )
     spec = importlib.util.spec_from_file_location("wims_inhibit_bench", _BENCH)
     if spec is None or spec.loader is None:
@@ -41,7 +41,7 @@ def _load_bench():
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m wims.key",
-        description="WIMS KEY agent. Lab: inhibit bench (gate/agent/selftest). "
+        description="WS Hub KEY agent. Lab: inhibit bench (gate/agent/selftest). "
                     "Daemon: long-running stub. Not required for Solo FT8.",
     )
     sub = ap.add_subparsers(dest="cmd")

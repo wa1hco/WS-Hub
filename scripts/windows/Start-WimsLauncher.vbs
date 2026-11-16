@@ -1,4 +1,4 @@
-' WIMS — Desktop shortcut entry (keeps custom .ico; no visible cmd window).
+' WS Hub — Desktop shortcut entry (keeps custom .ico; no visible cmd window).
 ' Delegates to Start-WimsLauncher.cmd for PYTHONPATH / pythonw / seat-local.
 Option Explicit
 Dim sh, fso, here, cmd

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,5 +16,5 @@ export PYTHONPATH="$ROOT/src"
 PY="${PYTHON:-python3}"
 TARGETS="${WIMS_KEY_TARGETS:-127.0.0.1:22372}"
 
-echo "WIMS home Inhibit (H1): targets=${TARGETS} device=${WIMS_KEY_DEVICE:-'(unset)'}"
+echo "WS Hub home Inhibit (H1): targets=${TARGETS} device=${WIMS_KEY_DEVICE:-'(unset)'}"
 exec "$PY" -m wims.seat --key --targets "$TARGETS" "$@"

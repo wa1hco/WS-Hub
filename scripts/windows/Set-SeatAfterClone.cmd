@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-REM After cloning the Win10 WIMS template, personalize this guest for one radio seat.
+REM After cloning the Win10 WS Hub template, personalize this guest for one radio seat.
 REM Usage (elevated recommended for rename):
 REM   Set-SeatAfterClone.cmd SEAT-ID [WSJT-RIG-NAME] [flex50|ic9700-144]
 REM Examples:
@@ -12,7 +12,7 @@ REM
 REM What it does:
 REM   1) Writes seat-common.cmd + radio-*.cmd
 REM   2) Renames the computer to SEAT-ID (needs reboot)
-REM   3) Ensures Startup\WIMS Seat.lnk for the chosen pack
+REM   3) Ensures Startup\WS Hub Seat.lnk for the chosen pack
 REM   4) Points Desktop / Start Menu WSJT-X shortcuts at Start-WSJTX.cmd
 REM Does NOT change Proxmox USB/network or radio drivers.
 
@@ -52,12 +52,12 @@ if not "%HOST15:~15,1%"=="" (
 )
 
 echo.
-echo  Personalize cloned WIMS seat
+echo  Personalize cloned WS Hub seat
 echo  ============================
 echo  Seat / hostname: %HOST15%
 echo  WSJT-X rig-name:  %RIG%
 echo  Radio pack:       %PACK%
-echo  WIMS server:       http://192.168.x.y:8787
+echo  WS Hub server:       http://192.168.x.y:8787
 echo.
 
 set "WSJTX_WRITE=C:\WSJT\wsjtx\bin\wsjtx.exe"
@@ -95,7 +95,7 @@ if /I "%PACK%"=="flex50" (
   ) > "%HERE%radio-flex50.cmd"
   echo  Wrote radio-flex50.cmd
   set "LAUNCH=%HERE%Start-Seat-Flex50.cmd"
-  set "DESC=WIMS Flex-50 seat pack at logon"
+  set "DESC=WS Hub Flex-50 seat pack at logon"
 ) else (
   (
     echo @echo off
@@ -108,7 +108,7 @@ if /I "%PACK%"=="flex50" (
   ) > "%HERE%radio-ic9700-144.cmd"
   echo  Wrote radio-ic9700-144.cmd
   set "LAUNCH=%HERE%Start-Seat-IC9700-144.cmd"
-  set "DESC=WIMS IC9700-144 seat pack at logon"
+  set "DESC=WS Hub IC9700-144 seat pack at logon"
 )
 
 REM Contest LAN must be Private or N1MM's existing allow-rules do not match
@@ -117,11 +117,11 @@ if exist "%HERE%Set-ContestLanPrivate.cmd" (
   call "%HERE%Set-ContestLanPrivate.cmd" /nopause
 )
 if exist "%HERE%Set-ContestAppFirewall.cmd" (
-  echo  Adding N1MM / WSJT-X / WIMS firewall rules...
+  echo  Adding N1MM / WSJT-X / WS Hub firewall rules...
   call "%HERE%Set-ContestAppFirewall.cmd" /nopause
 )
 
-REM Desktop WIMS menu
+REM Desktop WS Hub menu
 if exist "%HERE%Install-WIMS-Desktop-Shortcut.cmd" (
   call "%HERE%Install-WIMS-Desktop-Shortcut.cmd" /nopause
 )
@@ -131,7 +131,7 @@ if exist "%HERE%Install-WSJTX-RigNameShortcuts.cmd" (
 )
 
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "LNK=%STARTUP%\WIMS Seat.lnk"
+set "LNK=%STARTUP%\WS Hub Seat.lnk"
 if not exist "%STARTUP%" mkdir "%STARTUP%" 2>nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%LNK%'); $s.TargetPath = '!LAUNCH!'; $s.Arguments = '/silent'; $s.WorkingDirectory = '%HERE%'; $s.WindowStyle = 7; $s.Description = '!DESC!'; $s.Save(); Write-Host 'Startup OK'"
@@ -149,14 +149,14 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo  Reboot now so the new hostname applies, then log on and confirm:
-echo    - WIMS agent reports seat %SEAT% on http://192.168.x.y:8787/status
+echo    - WS Hub agent reports seat %SEAT% on http://192.168.x.y:8787/status
 echo    - WSJT-X Outgoing interface = Ethernet, UDP 224.0.0.73:band-port
 echo    - N1MM Broadcast = 224.0.0.73:12060
 echo    - Ethernet = Private ^(N1MM Send/Receive / TCP 12070^)
 echo.
 choice /C YN /M "Reboot now"
 if errorlevel 2 goto done
-shutdown /r /t 5 /c "WIMS seat rename to %HOST15%"
+shutdown /r /t 5 /c "WS Hub seat rename to %HOST15%"
 exit /b 0
 
 :done

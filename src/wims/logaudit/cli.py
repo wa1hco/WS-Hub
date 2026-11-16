@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -19,7 +19,7 @@
 """Compare logs. With no arguments, use the logs already on this PC.
 
 Operators start this from Check logs or from Setup. The flags below are for
-people changing WIMS.
+people changing WS Hub.
 """
 
 from __future__ import annotations
@@ -142,7 +142,7 @@ def _add_n1mm(candidates: list[Candidate], notes: list[str]) -> None:
     except Exception:
         pref = None
     if not pref or not (pref.get("db_path") or "").strip():
-        notes.append("N1MM was not checked. Choose the contest log in WIMS, then check again.")
+        notes.append("N1MM was not checked. Choose the contest log in WS Hub, then check again.")
         return
     nr = pref.get("contest_nr")
     try:

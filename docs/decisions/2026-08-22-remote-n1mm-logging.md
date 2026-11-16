@@ -12,11 +12,11 @@
 
 ## Problem
 
-Fleet WSJT-X instances share **one** multicast decode stream (`224.0.0.73:2237`) so WIMS
+Fleet WSJT-X instances share **one** multicast decode stream (`224.0.0.73:2237`) so WS Hub
 (and optionally GridTracker) can see all bands. The band’s N1MM must **not** join that
 group as a WSJT reader — it would log every instance / every band.
 
-Need: **WSJT-X on PC A logs to N1MM on PC B**, without putting logging through WIMS.
+Need: **WSJT-X on PC A logs to N1MM on PC B**, without putting logging through WS Hub.
 
 ## Port facts
 
@@ -72,7 +72,7 @@ W3SZ PackRats beginner PDF and many guides still describe Secondary UDP → N1MM
 3. Don’t add another WSJT-X TCP log setting if a helper suffices; Secondary “deprecated” ≠ removal.
 4. Low odds N1MM will fix remote-2333.
 
-## Jeff follow-up / WIMS tilt (2026-08-23)
+## Jeff follow-up / WS Hub tilt (2026-08-23)
 
 Ops risk: silent failure if helper isn’t up after reboot. Prefer agent that:
 
@@ -128,4 +128,4 @@ Roger’s architecture (helper on N1MM PC) stands either way; only the **localho
 
 - **52001** = TCP log API on N1MM (preferred agent delivery).
 - **2333** = UDP ADIF ingest (same-PC tradition; remote inserts untrusted).
-- **2237** = fleet decode/control multicast for WIMS — not the remote-log unicast to N1MM.
+- **2237** = fleet decode/control multicast for WS Hub — not the remote-log unicast to N1MM.

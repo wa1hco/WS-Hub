@@ -1,13 +1,13 @@
-# WSJT-X TX Inhibit wire protocol — WIMS implementation brief
+# WSJT-X TX Inhibit wire protocol — WS Hub implementation brief
 
 **Status:** design transfer for implementation (2026-09-02).  
 **Authority (wire + gate):** sister repo
 [`wsjtx-inhibit`](https://github.com/wa1hco/wsjtx-inhibit)
 [`docs/TX_INHIBIT.md`](https://github.com/wa1hco/wsjtx-inhibit/blob/main/docs/TX_INHIBIT.md).  
-**This file:** what WIMS must change so `wims-key-agent` and the inhibit bench
+**This file:** what WS Hub must change so `wims-key-agent` and the inhibit bench
 speak the **shipped** protocol. Do not treat older WIMS JSON examples as current.
 
-WIMS still owns: target-list assignment, InhibitStatus discovery, band policy
+WS Hub still owns: target-list assignment, InhibitStatus discovery, band policy
 (`interlock` vs `coordinated`), and fleet UX. The datagram on UDP **22372** is
 defined by wsjtx-inhibit.
 
@@ -15,7 +15,7 @@ defined by wsjtx-inhibit.
 
 ## 1. Why this transfer
 
-Early WIMS lab design used a compact **JSON** hold on `:22372`:
+Early WS Hub lab design used a compact **JSON** hold on `:22372`:
 
 ```json
 {"tx_inhibit":1,"ttl_ms":600,"station":"ROY-222-SSB","band":"222","seq":4711}
@@ -23,12 +23,12 @@ Early WIMS lab design used a compact **JSON** hold on `:22372`:
 
 That is **obsolete**. Shipped wsjtx-inhibit (PR #61 direction) accepts only
 `NetworkMessage::TxInhibit` **type 18** (QDataStream schema 3). Legacy JSON is
-**ignored**. A WIMS KEY agent that still emits JSON will not hold any patched
+**ignored**. A WS Hub KEY agent that still emits JSON will not hold any patched
 WSJT-X station.
 
 Two algorithmic changes came with the new wire:
 
-| Old WIMS lab / `wims_tx_inhibit.md` §11.3 | Current (wsjtx-inhibit) |
+| Old WS Hub lab / `wims_tx_inhibit.md` §11.3 | Current (wsjtx-inhibit) |
 |---------------------------------------------|-------------------------|
 | JSON UTF-8 object | Binary `NetworkMessage` type **18** |
 | One global hold; any release clears | **Per-Controller ID leases**, OR’d |
@@ -38,7 +38,7 @@ Two algorithmic changes came with the new wire:
 
 Semantics that **did not** change: TTL-only message (`ttl_ms > 0` = hold/keepalive,
 `ttl_ms = 0` = release); hang lives in the KEY agent only; direct UDP agent → gate
-(never through the WIMS server); fail-open via lease expiry (deadman).
+(never through the WS Hub server); fail-open via lease expiry (deadman).
 
 ---
 
@@ -49,7 +49,7 @@ assert PTT  ⇔  want_tx  and  not hold
 hold        ⇔  any live per-controller lease
 ```
 
-| Term | Meaning for WIMS implementers |
+| Term | Meaning for WS Hub implementers |
 |------|-------------------------------|
 | **hold** | Station must not assert RTS/DTR PTT |
 | **lease** | One row keyed by **Controller ID**, with an expiry time |
@@ -86,7 +86,7 @@ Type-18 body after Id:
 | **Station** | utf8 | recommended | Badge text |
 
 On dedicated port 22372 the target **Id is parsed but not used for matching** —
-addressing is by unicast `host:port` (WIMS target list / discovery).
+addressing is by unicast `host:port` (WS Hub target list / discovery).
 
 ### Hold / keepalive
 
@@ -143,12 +143,12 @@ def encode_tx_inhibit(controller_id: str, ttl_ms: int,
 
 ## 4. Multi-op / multi-KEY implications (why leases)
 
-Fleet pattern WIMS cares about:
+Fleet pattern WS Hub cares about:
 
 - Several WSJT-X seats on one band (separate antennas).
 - Separate SSB and CW priority stations on that band.
 - Either SSB or CW KEY agent may hold **all** digi seats on the band.
-- Digi-vs-digi “only one WSJT-X TX” remains a **WIMS arbiter** concern (Halt/Reply
+- Digi-vs-digi “only one WSJT-X TX” remains a **WS Hub arbiter** concern (Halt/Reply
   claim), not this wire.
 
 **Receiver-side OR of leases** is required so two KEY agents do not clobber each
@@ -160,9 +160,9 @@ other. Example:
 4. CW releases → hold ends.
 
 Old global-hold + “any release clears” is **unsafe** for that topology. Do not
-reintroduce it in WIMS lab gate code.
+reintroduce it in WS Hub lab gate code.
 
-WIMS still ORs KEY *sources* into destination lists as needed; the station gate
+WS Hub still ORs KEY *sources* into destination lists as needed; the station gate
 must also OR leases so two independent agents remain correct without a single
 merged KEY line.
 
@@ -185,7 +185,7 @@ listen-port field):
 | t_rx_ns / t_pin_ns | quint64 ×2 | Optional timing (f75ae) |
 
 Type **18** goes to the **MessageClient UDP source port** learned from plane-A
-traffic (same ephemeral port as Reply/Halt). WIMS Key discovery stores that
+traffic (same ephemeral port as Reply/Halt). WS Hub Key discovery stores that
 source port as the type-18 destination when Supported is true.
 
 **Cadence (wsjtx-inhibit):** type 17 on capability/hold changes and with Heartbeat
@@ -194,7 +194,7 @@ Heartbeat intervals.
 
 ---
 
-## 6. What WIMS must implement
+## 6. What WS Hub must implement
 
 ### 6.1 Code
 
@@ -238,10 +238,10 @@ hold** claims are wrong.
 
 ### 6.4 Explicit non-goals for this transfer
 
-- Do not route holds through the WIMS server.
+- Do not route holds through the WS Hub server.
 - Do not dual-accept JSON on the WSJT-X gate (already decided upstream: type 18 only).
 - Do not put hang on the wire.
-- Digi-vs-digi single-TX arbitration stays in WIMS arbiter / Halt path.
+- Digi-vs-digi single-TX arbitration stays in WS Hub arbiter / Halt path.
 
 ---
 
@@ -253,8 +253,8 @@ hold** claims are wrong.
    live; one release does not clear the other.  
 3. **Deadman:** kill agent without release → seat opens after TTL.  
 4. **Old JSON agent:** seat does **not** inhibit (invalid counter may climb).  
-5. **Plane A:** InhibitStatus still visible to WIMS; type-18 never on 2237.  
-6. **Coordinated band policy:** WIMS must not send holds (sense/report only).
+5. **Plane A:** InhibitStatus still visible to WS Hub; type-18 never on 2237.  
+6. **Coordinated band policy:** WS Hub must not send holds (sense/report only).
 
 ---
 
@@ -265,7 +265,7 @@ hold** claims are wrong.
 3. Wire `wims.key` daemon / Key agent UI to emit type-18 with required Controller ID.  
 4. Consume InhibitStatus port in target resolution (if not already).  
 5. Align hang constants with TX_INHIBIT.md.  
-6. One live run: patched WSJT-X + WIMS Key agent (or inhibit bench) on LAN.
+6. One live run: patched WSJT-X + WS Hub Key agent (or inhibit bench) on LAN.
 
 Reference packets / tools in wsjtx-inhibit: `tools/send_inhibit_hold.py`,
 `tools/Send-InhibitHold.ps1`, `inhibit-agent`, unit tests under `tests/test_tx_inhibit_*`.
@@ -278,7 +278,7 @@ Reference packets / tools in wsjtx-inhibit: `tools/send_inhibit_hold.py`,
 |-----|------|
 | wsjtx-inhibit `docs/TX_INHIBIT.md` | **Authority** — wire, leases, hang, glossary |
 | wsjtx-inhibit `docs/INHIBIT_AGENT.md` | Standalone KEY agent |
-| [wims_tx_inhibit.md](../plan/wims_tx_inhibit.md) | WIMS product / latency / KEY design (wire § superseded) |
-| [wims_key_agent.md](../plan/wims_key_agent.md) | WIMS Key agent differences (target list, discovery) |
+| [wims_tx_inhibit.md](../plan/wims_tx_inhibit.md) | WS Hub product / latency / KEY design (wire § superseded) |
+| [wims_key_agent.md](../plan/wims_key_agent.md) | WS Hub Key agent differences (target list, discovery) |
 | [wims_design.md](../plan/wims_design.md) §2.14, §3.4.1 | Band policy + interlock |
 | [wims_networking.md](../plan/wims_networking.md) | Plane A (2237) vs inhibit plane (22372) |

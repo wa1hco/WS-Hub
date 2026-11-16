@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -590,7 +590,7 @@ def probe_n1mm() -> dict:
             "severity": "info",
             "message": (
                 f"N1MM user data under {where} — verify Broadcast Data "
-                "sends Contacts + Radio to WIMS host or 224.0.0.73:12060 "
+                "sends Contacts + Radio to WS Hub host or 224.0.0.73:12060 "
                 "(default 127.0.0.1 stays local-only)"
             ),
         })
@@ -625,8 +625,8 @@ def probe_n1mm() -> dict:
             issues.append({
                 "severity": "warn",
                 "message": (
-                    "Config text mentions 127.0.0.1 with broadcast/UDP — multi-host WIMS "
-                    "needs External Broadcast to the WIMS host or 224.0.0.73:12060"
+                    "Config text mentions 127.0.0.1 with broadcast/UDP — multi-host WS Hub "
+                    "needs External Broadcast to the WS Hub host or 224.0.0.73:12060"
                 ),
             })
             break

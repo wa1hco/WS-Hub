@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     rest = argv[1:]
     if role in ("-h", "--help", "help"):
         print(
-            "WIMS — WSJT-X Instance Management System\n\n"
+            "WS Hub\n\n"
             "Usage:\n"
             "  python -m wims                 Open the desktop GUI launcher\n"
             "  python -m wims gui             Same as above\n"
@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
             "  python -m wims key [cmd]       Key agent / inhibit tools\n"
             "  python -m wims seat [--log] [--key]  N1MM/SSB-CW seat agent\n"
             "  python -m wims version         Print version\n\n"
-            "Desktop: use Put WIMS on Desktop inside the GUI, or\n"
+            "Desktop: use Put WS Hub on Desktop inside the GUI, or\n"
             "  python -m wims --install-shortcut\n"
         )
         return 0

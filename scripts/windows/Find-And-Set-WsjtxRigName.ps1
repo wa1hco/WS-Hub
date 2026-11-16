@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Scans Desktop, Startup, Start Menu, common ProgramData, and this scripts folder.
-  Use this when two VMs both show as UDP id "WSJT-X" in WIMS.
+  Use this when two VMs both show as UDP id "WSJT-X" in WS Hub.
 
   List only (default):
     powershell -ExecutionPolicy Bypass -File Find-And-Set-WsjtxRigName.ps1
@@ -13,7 +13,7 @@
   Apply on this PC (e.g. 2m seat):
     powershell -ExecutionPolicy Bypass -File Find-And-Set-WsjtxRigName.ps1 -RigName W10VM-144 -Apply
 
-  Also prints where WIMS seat boot gets the name (seat-local.cmd WSJTX_RIG_NAME).
+  Also prints where WS Hub seat boot gets the name (seat-local.cmd WSJTX_RIG_NAME).
 
 .NOTES
   Does not change Task Scheduler or registry Run keys unless present as .lnk in
@@ -48,10 +48,10 @@ Write-Info "=== WSJT-X launcher scan ==="
 Write-Host "PC: $env:COMPUTERNAME  User: $env:USERNAME"
 Write-Host ""
 
-# --- seat-local.cmd (WIMS boot path) ---
+# --- seat-local.cmd (WS Hub boot path) ---
 $seatLocal = Join-Path $scriptDir "seat-local.cmd"
 $seatEx = Join-Path $scriptDir "seat-config.example.cmd"
-Write-Info "WIMS seat boot (Start-WimsSeat / Startup 'WIMS Seat'):"
+Write-Info "WS Hub seat boot (Start-WimsSeat / Startup 'WS Hub Seat'):"
 if (Test-Path $seatLocal) {
     $txt = Get-Content -LiteralPath $seatLocal -Raw -ErrorAction SilentlyContinue
     if ($txt -match 'WSJTX_RIG_NAME=(.+)') {
@@ -77,7 +77,7 @@ if (Test-Path $seatLocal) {
         }
         if (-not $found) {
             $new += ""
-            $new += "REM UDP id for WIMS (unique per radio/VM)"
+            $new += "REM UDP id for WS Hub (unique per radio/VM)"
             $new += "set `"WSJTX_RIG_NAME=$RigName`""
         }
         Set-Content -LiteralPath $seatLocal -Value $new -Encoding ASCII
@@ -187,7 +187,7 @@ Write-Host ""
 Write-Host "After Apply:"
 Write-Host "  1. Exit all wsjtx.exe (Task Manager if needed)"
 Write-Host "  2. Reboot OR run Start-WimsSeat.cmd"
-Write-Host "  3. On WIMS Status: two different instance ids, one host each"
+Write-Host "  3. On WS Hub Status: two different instance ids, one host each"
 Write-Host ""
 if (-not $Apply) {
     Write-Host "List-only mode. To write changes, re-run with -RigName NAME -Apply" -ForegroundColor Yellow

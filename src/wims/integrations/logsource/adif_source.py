@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -31,7 +31,7 @@ class WsjtxAdifLogSource:
     """Cold-start and poll for one or more ``wsjtx_log.adi`` files.
 
     A shared path is the only file. Otherwise each instance file is read once
-    per resolved path. WIMS never writes these files.
+    per resolved path. WS Hub never writes these files.
     """
 
     kind = "wsjtx_adif"

@@ -1,12 +1,12 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""One start path for the WIMS window and for Operate.
+"""One start path for the WS Hub window and for Operate.
 
 The desktop icon, ``scripts/start-wims.sh``, and the Windows shortcuts open
-the WIMS window (``wims.launcher``). Operate, whether the window starts it
+the WS Hub window (``wims.launcher``). Operate, whether the window starts it
 or a script starts it, comes through :func:`guard_console` and
 :func:`operate_banner` so the port check, seat reading, network default,
 log and rules, browser, messages, and log file match.
@@ -46,7 +46,7 @@ def repo_root() -> Path:
 
 
 def startup_log_path(repo: Path | None = None) -> Path:
-    """Same file the WIMS window writes its Details log to."""
+    """Same file the WS Hub window writes its Details log to."""
     root = Path(repo) if repo is not None else repo_root()
     return root / "scratch" / "launcher-details.log"
 
@@ -54,7 +54,7 @@ def startup_log_path(repo: Path | None = None) -> Path:
 def log_startup(message: str, *, repo: Path | None = None) -> None:
     """Print a start line and append it to the shared log.
 
-    When the WIMS window starts Operate, it captures the child's output and
+    When the WS Hub window starts Operate, it captures the child's output and
     writes the log itself (``WIMS_CAPTURED_LOG=1``), so this does not write
     the file a second time.
     """
@@ -100,12 +100,12 @@ def console_action(probe: str, *, port: int = CONSOLE_PORT) -> tuple[str, str]:
     if probe == "free":
         return "start", ""
     if probe == "wims":
-        return "reuse", "WIMS is already open. Showing the console."
+        return "reuse", "WS Hub is already open. Showing the console."
     return (
         "busy",
-        f"Port {int(port)} is in use, but it is not WIMS.\n"
-        "Close the other program, or open the WIMS window if it is already running.\n"
-        f"The console, when WIMS is up, is http://localhost:{int(port)}/",
+        f"Port {int(port)} is in use, but it is not WS Hub.\n"
+        "Close the other program, or open the WS Hub window if it is already running.\n"
+        f"The console, when WS Hub is up, is http://localhost:{int(port)}/",
     )
 
 
@@ -155,7 +155,7 @@ def guard_console(port: int, *, open_browser: bool) -> int | None:
     """Reuse an existing console, or refuse a foreign listener.
 
     Returns ``None`` when Operate should continue (port free). Returns ``0``
-    when the console was already WIMS, ``1`` when something else has the port.
+    when the console was already WS Hub, ``1`` when something else has the port.
     """
     action, message = console_action(probe_console(port), port=port)
     if action == "start":

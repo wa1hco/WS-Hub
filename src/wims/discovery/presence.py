@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""WIMS site-server presence (plane E) — zero-memory discovery.
+"""WS Hub site-server presence (plane E) — zero-memory discovery.
 
 Goals:
   * Operators never type the site server IP.
@@ -526,7 +526,7 @@ def listen_for_peers(
 def format_conflict_message(peers: list[dict], *, self_host: str = "") -> str:
     """Plain-language diagnostic when another site server is already primary."""
     lines = [
-        "Another WIMS site server is already running on this LAN.",
+        "Another WS Hub site server is already running on this LAN.",
         "This process will NOT start a second site server.",
         "",
     ]
@@ -541,7 +541,7 @@ def format_conflict_message(peers: list[dict], *, self_host: str = "") -> str:
             lines.append(f"        Status: {urls['status']}")
     lines += [
         "",
-        "Open the peer URL above, or stop that WIMS process if THIS machine",
+        "Open the peer URL above, or stop that WS Hub process if THIS machine",
         "should be the primary site server, then restart here.",
     ]
     if self_host:
@@ -560,7 +560,7 @@ def _http_probe_one(ip: str, http_port: int, timeout: float) -> dict | None:
         return None
     if not isinstance(obj, dict) or not obj.get("ok"):
         return None
-    # Accept new role field or legacy {"ok":true} only if host serves WIMS pages —
+    # Accept new role field or legacy {"ok":true} only if host serves WS Hub pages —
     # prefer role when present.
     role = obj.get("role")
     if role and role != ROLE:
@@ -632,7 +632,7 @@ def http_discover_site_server(
     timeout: float = HTTP_PROBE_TIMEOUT_S,
     extra_ips: list[str] | None = None,
 ) -> dict | None:
-    """Scan local /24s (and extra hints) for a WIMS site server on TCP :http_port.
+    """Scan local /24s (and extra hints) for a WS Hub site server on TCP :http_port.
 
     Two phases: likely hosts first (.1/.119/…), then full /24. Skips CGNAT
     100.x and libvirt default nets for the full scan (still try preferred only).
@@ -733,7 +733,7 @@ class DiscoverResult:
         elif self.udp_heard and not self.http_found:
             lines.append("  HTTP probe:    the announced site console did not answer")
         else:
-            lines.append(f"  HTTP probe:    no WIMS on local /24s on port {DEFAULT_HTTP_PORT}")
+            lines.append(f"  HTTP probe:    no WS Hub on local /24s on port {DEFAULT_HTTP_PORT}")
 
         if self.via == "udp":
             lines.append("  Result: FOUND via UDP and the site console answered")

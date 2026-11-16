@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@ REM
 REM You should have received a copy of the GNU General Public License
 REM along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-REM Double-click to check this PC's WSJT-X + N1MM setup for solo WIMS testing.
+REM Double-click to check this PC's WSJT-X + N1MM setup for solo WS Hub testing.
 REM Plain-language [OK]/[! ]/[XX] report; does not start anything.
 
 setlocal EnableExtensions

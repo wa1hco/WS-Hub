@@ -19,7 +19,7 @@
 # Sets up:
 #   - Python ≥ 3.10 check
 #   - import smoke for the wims package
-#   - Desktop "WIMS" shortcut (unless --no-shortcut)
+#   - Desktop "WS Hub" shortcut (unless --no-shortcut)
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -43,7 +43,7 @@ for arg in "$@"; do
 done
 
 if [ ! -f "$REPO_DIR/src/wims/__init__.py" ]; then
-    echo "ERROR: not a WIMS tree (missing src/wims/__init__.py)." >&2
+    echo "ERROR: not a WS Hub tree (missing src/wims/__init__.py)." >&2
     echo "  Keep this script in the scripts folder of a WS Hub tree." >&2
     exit 1
 fi
@@ -59,7 +59,7 @@ fi
 "$PYTHON_CMD" -c '
 import sys
 if sys.version_info < (3, 10):
-    sys.exit(f"Python {sys.version_info[:3]} found; WIMS needs >= 3.10.")
+    sys.exit(f"Python {sys.version_info[:3]} found; WS Hub needs >= 3.10.")
 print(f"Python {sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]} OK")
 '
 
@@ -72,7 +72,7 @@ fi
 
 export PYTHONPATH="$REPO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 VER="$("$PYTHON_CMD" -c 'import wims; print(wims.__version__)')"
-echo "WIMS import OK (version $VER)"
+echo "WS Hub import OK (version $VER)"
 
 if [ "$WANT_SHORTCUT" = "1" ]; then
     if [ -x "$REPO_DIR/scripts/add-wims-to-desktop.sh" ]; then

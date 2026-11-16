@@ -1,16 +1,16 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Logon boot: start WSJT-X / N1MM / WIMS from this PC's saved seat intent.
+"""Logon boot: start WSJT-X / N1MM / WS Hub from this PC's saved seat intent.
 
 Reads ``%APPDATA%\\wims\\seat_intent.json`` (launcher checkboxes). If none is
 saved, seeds from apps detected on the PC. Then starts:
 
 * WSJT-X when intent ``wsjt`` (``--rig-name`` from seat cmd files or named configs)
 * N1MM when intent ``n1mm``
-* Desktop WIMS launcher always (it starts agents / site server from the same intent)
+* Desktop WS Hub launcher always (it starts agents / site server from the same intent)
 
 Does not start radio middleware (SmartSDR / wfview); use the seat packs for that.
 """
@@ -197,9 +197,9 @@ def resolve_boot_plan(
         notes.append("N1MM intent is on but N1MMLogger.net.exe was not found")
         start_n1mm = False
     if intent.get(INTENT_SERVER):
-        notes.append("Site server intent on — WIMS launcher will start it")
+        notes.append("Site server intent on — WS Hub launcher will start it")
     if intent.get(INTENT_SSB_CW):
-        notes.append("SSB/CW KEY intent on — WIMS launcher starts N1MM agent --key")
+        notes.append("SSB/CW KEY intent on — WS Hub launcher starts N1MM agent --key")
     if intent.get(INTENT_ANTENNAS):
         notes.append("Antennas intent on — the seat agent reads rotator headings")
 
@@ -267,7 +267,7 @@ def apply_boot_plan(plan: BootPlan, *, dry_run: bool = False) -> list[str]:
         if plan.start_n1mm:
             lines.append(f"would start N1MM {plan.n1mm_exe}")
         if plan.start_wims:
-            lines.append("would start WIMS launcher")
+            lines.append("would start WS Hub launcher")
         return lines
 
     if plan.start_wsjtx and plan.wsjtx_exe:
@@ -287,7 +287,7 @@ def apply_boot_plan(plan: BootPlan, *, dry_run: bool = False) -> list[str]:
 
     if plan.start_wims:
         if _wims_launcher_running():
-            lines.append("WIMS launcher already running — leave it")
+            lines.append("WS Hub launcher already running — leave it")
         else:
             root = Path(__file__).resolve().parents[3]
             env = os.environ.copy()
@@ -306,7 +306,7 @@ def apply_boot_plan(plan: BootPlan, *, dry_run: bool = False) -> list[str]:
                     if sys.platform.startswith("win") else {}
                 ),
             )
-            lines.append("started WIMS launcher")
+            lines.append("started WS Hub launcher")
     return lines
 
 

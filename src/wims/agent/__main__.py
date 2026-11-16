@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -20,7 +20,7 @@
 
 Requires the ``src`` directory on sys.path, e.g.::
 
-    set PYTHONPATH=C:\\path\\to\\WIMS\\src
+    set PYTHONPATH=C:\\path\\to\\WS Hub\\src
     python -m wims.agent
 
 Or use the path-safe launcher (preferred on seats)::
@@ -44,8 +44,8 @@ try:
 except ModuleNotFoundError as e:
     if e.name == "wims" or (e.name and e.name.startswith("wims")):
         print(
-            "ERROR: WIMS could not start from this folder.\n"
-            "  Double-click the WIMS icon, or scripts\\windows\\Start-WimsAgent.cmd.\n"
+            "ERROR: WS Hub could not start from this folder.\n"
+            "  Double-click the WS Hub icon, or scripts\\windows\\Start-WimsAgent.cmd.\n"
             "  Or double-click: scripts\\windows\\Start-WimsAgent.cmd",
             file=sys.stderr,
         )

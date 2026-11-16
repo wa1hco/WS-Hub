@@ -19,7 +19,7 @@ and masks PTT. Programs that **send** those datagrams are inhibit generators:
 | **inhibit-agent** | **This document.** Production-simple sense of SSB/CW KEY (CTS) → holds to **localhost**. |
 
 Both speak the same **type-18** hold protocol (Controller ID + TTL ms + Station).
-In this WIMS tree see
+In this WS Hub tree see
 [`docs/protocols/wsjtx_tx_inhibit.md`](../protocols/wsjtx_tx_inhibit.md);
 authority lives in wsjtx-inhibit `docs/TX_INHIBIT.md`. Early JSON `tx_inhibit` is obsolete.
 

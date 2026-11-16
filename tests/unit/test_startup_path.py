@@ -1,9 +1,9 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Every front door opens the WIMS window. Operate shares one start."""
+"""Every front door opens the WS Hub window. Operate shares one start."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ class OperatePlanTests(unittest.TestCase):
         self.assertIn("already open", message.lower())
         action, message = console_action("busy", port=8787)
         self.assertEqual(action, "busy")
-        self.assertIn("not WIMS", message)
+        self.assertIn("not WS Hub", message)
         self.assertIn("http://localhost:8787/", message)
 
     def test_iface_and_banner(self):

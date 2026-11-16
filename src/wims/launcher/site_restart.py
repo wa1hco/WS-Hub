@@ -1,19 +1,19 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Restart the WIMS site server on this PC, and leave every other PC alone.
+"""Restart the WS Hub site server on this PC, and leave every other PC alone.
 
 A launcher only starts or restarts a server on its own machine. Restart may
 stop a process only when both of these are true:
 
 * ``/healthz`` answers with role ``wims-site-server``
-* the process id is a local process, from the pid file in the WIMS state
-  directory or from the local port owner, and that process is WIMS
+* the process id is a local process, from the pid file in the WS Hub state
+  directory or from the local port owner, and that process is WS Hub
 
 A server on another PC is refused. The window names that PC and leaves
-Restart needed up. A process that is not WIMS is left alone. After a stop
+Restart needed up. A process that is not WS Hub is left alone. After a stop
 that did happen, the window starts the site server the usual way and waits
 until ``server_rev`` matches the checkout.
 
@@ -41,7 +41,7 @@ from wims.launcher.server_rev import (
     revisions_match,
 )
 
-# Same directory as the other per-user WIMS files (last log, launcher lock).
+# Same directory as the other per-user WS Hub files (last log, launcher lock).
 PID_FILENAME = "site-server.pid"
 SITE_ROLE = "wims-site-server"
 
@@ -55,10 +55,10 @@ FAILED_DETAIL = (
 )
 
 NOT_WIMS_MESSAGE = (
-    "That port is not the WIMS site server, so it was left running."
+    "That port is not the WS Hub site server, so it was left running."
 )
 NOT_WIMS_PROCESS_MESSAGE = (
-    "The process on this port did not look like WIMS, so it was left running."
+    "The process on this port did not look like WS Hub, so it was left running."
 )
 NOT_IDENTIFIED_MESSAGE = (
     "The site server answered, but its process could not be identified, "
@@ -139,7 +139,7 @@ def handle_shutdown_request(handler) -> bool:
 
 
 def site_server_pid_path(path: Path | str | None = None) -> Path:
-    """Pid file in the WIMS state directory, unless ``path`` is given.
+    """Pid file in the WS Hub state directory, unless ``path`` is given.
 
     ``WIMS_SITE_SERVER_PID`` overrides the directory lookup for tests.
     An explicit ``path`` wins over the environment variable.
@@ -480,7 +480,7 @@ def _accept_pid(
     from_port: bool,
     argv_of: Callable[[int], list[str] | None],
 ) -> bool | None:
-    """True = WIMS site server, False = some other program, None = unknown.
+    """True = WS Hub site server, False = some other program, None = unknown.
 
     A listener whose command line cannot be read is still the process that
     answered ``/healthz``. A pid-file number with no command line is not
@@ -506,7 +506,7 @@ def identify_site_server(
     argv_of: Callable[[int], list[str] | None] | None = None,
     alive: Callable[[int], bool] | None = None,
 ) -> IdentifyResult:
-    """PID of the WIMS site server on ``port``, or a refusal.
+    """PID of the WS Hub site server on ``port``, or a refusal.
 
     ``health`` is the ``/healthz`` body. ``listener_pids`` is who owns the
     port (injected in tests; otherwise pass None and the OS is asked).
@@ -556,7 +556,7 @@ def identify_site_server(
             accepted = [pid for pid in accepted if pid == claimed]
         return IdentifyResult(pids=tuple(accepted), source="port")
     if saw_port and saw_other:
-        # The port lookup named a process, and it is not WIMS. Do not fall
+        # The port lookup named a process, and it is not WS Hub. Do not fall
         # through to a pid file that might name something else.
         return IdentifyResult(reason="not-wims-process")
     if saw_port and not accepted:

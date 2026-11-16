@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -11,7 +11,7 @@ A missing DXCC or COUNTRY field is skipped, not treated as a disagreement.
 
     python3 tools/dev/audit_entities.py LOG.adi [--cty cty.dat] [--s3db x.s3db]
 
-The country file defaults to the cty.dat WIMS would read on this PC.
+The country file defaults to the cty.dat WS Hub would read on this PC.
 Without one, the builtin prefix list is the resolver and the report says so.
 """
 
@@ -322,7 +322,7 @@ def format_report(report: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("adif", help="ADIF log to read")
-    parser.add_argument("--cty", help="country file (default: the one WIMS would find)")
+    parser.add_argument("--cty", help="country file (default: the one WS Hub would find)")
     parser.add_argument("--s3db", help="optional N1MM log database")
     args = parser.parse_args(argv)
     report = audit(args.adif, cty_path=args.cty, s3db_path=args.s3db)

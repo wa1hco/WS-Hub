@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -92,7 +92,7 @@ def _status_model(log_state: LogState, key: KeyRuntime | None, *, do_log: bool, 
     if do_key:
         parts.append("key")
     # Product name: N1MM agent — sections Broadcast / Log / KEY.
-    title = f"WIMS N1MM agent · {band or '...'}"
+    title = f"WS Hub N1MM agent · {band or '...'}"
 
     details: list[str] = []
     rows: list[tuple[str, str, str]] = []
@@ -137,7 +137,7 @@ def _status_model(log_state: LogState, key: KeyRuntime | None, *, do_log: bool, 
             fix = (
                 f"Cannot POST RadioInfo to {site}/api/n1mm/broadcast"
                 f"{f' ({site_err})' if site_err else ''}. "
-                "Start the site server on the contest PC (double-click WIMS). "
+                "Start the site server on the contest PC (double-click WS Hub). "
                 "This PC finds it on the network. "
                 "127.0.0.1 works only when this PC hosts the console."
             )

@@ -1,6 +1,6 @@
 # WS Hub — Tester quick start
 
-WS Hub was called WIMS before 1.0.18; some file names and windows still say WIMS.
+WS Hub was called WIMS before 1.0.18; the package, folders, and some file names still use `wims`.
 
 **Goal:** evaluate WS Hub at home or in the lab without needing a full multi-multi contest.
 

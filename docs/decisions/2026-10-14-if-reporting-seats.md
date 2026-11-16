@@ -7,13 +7,13 @@ unit rules in that decision are unchanged).
 
 ## Context
 
-WIMS mapped every 28.000–29.700 MHz dial to 432 and every 21.000–24.000 MHz
+WS Hub mapped every 28.000–29.700 MHz dial to 432 and every 21.000–24.000 MHz
 dial to 222 (`WIMS_TRANSVERTER` defaulted on). That matches Roy’s 222 radio
 (CAT at 21 MHz) and 432 transverter (CAT at 28 MHz). It does **not** match a
 Flex / SmartSDR seat: an XVTR slice already reports RF, so a real 10 m dial
 at 28.074 MHz was labeled 70 cm.
 
-The owner ran 2 m and 10 m WSJT-X on one Flex. WIMS showed the 10 m decodes
+The owner ran 2 m and 10 m WSJT-X on one Flex. WS Hub showed the 10 m decodes
 as 70 cm. No environment variable should be required to get the common case
 right.
 

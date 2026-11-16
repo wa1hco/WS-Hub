@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -144,7 +144,7 @@ def main() -> None:
 
     sock = open_socket(args.host, args.port, args.multicast)
     where = f"{args.multicast} (multicast)" if args.multicast else args.host
-    print(f"WIMS monitor — listening on {where}:{args.port}  (Ctrl-C to stop)\n")
+    print(f"WS Hub monitor — listening on {where}:{args.port}  (Ctrl-C to stop)\n")
 
     mon = Monitor()
     try:

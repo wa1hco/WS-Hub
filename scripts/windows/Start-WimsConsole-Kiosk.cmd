@@ -1,6 +1,6 @@
 @echo off
 
-REM WIMS — WSJT-X Instance Management System
+REM WS Hub
 REM Copyright (C) 2026 Jeff Millar, WA1HCO
 REM
 REM SPDX-License-Identifier: GPL-3.0-or-later
@@ -36,7 +36,7 @@ if not defined FF if not defined CHROME (
   exit /b 1
 )
 
-echo  WIMS console kiosk
+echo  WS Hub console kiosk
 echo.
 
 set "URL="
@@ -53,7 +53,7 @@ if /I "%PROBE%"=="OK" (
   echo  Console: %URL%
 ) else (
   echo  No site server reachable yet. Opening %URL% anyway.
-  echo  If this PC should HOST the server, use Desktop WIMS then Site server.
+  echo  If this PC should HOST the server, use Desktop WS Hub then Site server.
 )
 
 set "PROFILE=%LOCALAPPDATA%\WIMS\kiosk-profile"

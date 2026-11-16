@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,7 +18,7 @@
 
 """Server state -> JSON — the durable console API contract (plan §3.12).
 
-This is the stable boundary between the WIMS server and any operator console. It
+This is the stable boundary between the WS Hub server and any operator console. It
 is deliberately a plain dict/JSON shape with no framework or rendering assumptions,
 so the frontend can be rewritten (plain HTML today, anything later) while this
 contract — and everything behind it — stays put. Keep it additive and versioned.
@@ -392,7 +392,7 @@ def live_wsjt_bands(nodes: dict | None, now: float) -> list[str]:
     """Operate checkboxes for live WSJT-X (Heartbeat), even if quiet.
 
     Heartbeat is periodic and has **no frequency**. Status (dial → band) is
-    event-driven — an idle radio may only heartbeat after WIMS starts. Known
+    event-driven — an idle radio may only heartbeat after WS Hub starts. Known
     bands come first (Status dial); heartbeat-only instances fall back to the
     UDP id so Operate is not stuck on "none yet". DEAD drops off; STALE stays.
     """
@@ -557,7 +557,7 @@ def n1mm_sync_to_dict(now: float, *, n1mm_pkts: int, last_n1mm: float | None,
 
     N1MM has **no heartbeat** — it only broadcasts on activity (logged QSO, spot,
     lookup) — so 'no recent packet' means quiet, not necessarily broken; the console
-    wording reflects that. `qso_count`/`last_qso` describe WIMS's own log copy that
+    wording reflects that. `qso_count`/`last_qso` describe WS Hub's own log copy that
     feeds the roster's dupe/mult; `seed` records the startup `.s3db` read (count +
     source file) so the operator can see the existing log was pulled in even before
     any live broadcast.

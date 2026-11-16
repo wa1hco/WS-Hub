@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -403,7 +403,7 @@ def _windows_screens() -> list[Screen]:
 
 
 def visible_screens() -> list[Screen]:
-    """Displays WIMS can see right now. Empty when the OS will not say."""
+    """Displays WS Hub can see right now. Empty when the OS will not say."""
     if sys.platform.startswith("win"):
         return _windows_screens()
     for args in (["xrandr", "--query"], ["xrandr", "--listmonitors"]):
@@ -509,7 +509,7 @@ def build_chromium_command(
     ``--user-data-dir`` is what stops Chromium from handing the URL to the
     everyday browser ("Opening in existing browser session."). The profile
     also remembers the window on its own. ``--window-size`` and
-    ``--window-position`` apply the spot WIMS saved.
+    ``--window-position`` apply the spot WS Hub saved.
     """
     cmd = [
         executable,

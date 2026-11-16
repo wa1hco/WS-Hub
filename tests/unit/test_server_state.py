@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -854,7 +854,7 @@ def test_resync_log_reconciles_from_file():
             "<contestname>ARRLVHFJUN</contestname></contactinfo>",
             now=2.0, src_ip="10.0.0.2")
         assert live._log.count() == 4
-        # Operator deleted BB2B in N1MM (file updated; no contactdelete reached WIMS).
+        # Operator deleted BB2B in N1MM (file updated; no contactdelete reached WS Hub).
         con.execute("DELETE FROM DXLOG WHERE Call=?", ("BB2B",))
         con.commit()
         r = live.resync_log(now=10.0)

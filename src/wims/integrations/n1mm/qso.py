@@ -1,4 +1,4 @@
-# WIMS — WSJT-X Instance Management System
+# WS Hub
 # Copyright (C) 2026 Jeff Millar, WA1HCO
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -136,7 +136,7 @@ class LoggedQso:
     my_county: str | None = None
     dxcc: str | None = None
     contest_id: str | None = None
-    # "logged" when the QSO datagram carried a grid. "remembered" when WIMS
+    # "logged" when the QSO datagram carried a grid. "remembered" when WS Hub
     # filled a blank grid from a decode. Never written back to the WSJT-X file.
     grid_source: str | None = None
     cqz: str | None = None

@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 
-REM Windows Firewall allow-rules for N1MM, WSJT-X, GridTracker, WIMS
+REM Windows Firewall allow-rules for N1MM, WSJT-X, GridTracker, WS Hub
 REM on the Private profile. Keep the firewall ON. Ethernet must be Private.
 REM This .cmd only launches the .ps1; the .ps1 handles UAC itself.
 
@@ -18,9 +18,9 @@ if not exist "%PS1%" (
 )
 
 echo.
-echo  WIMS - contest app firewall (Private)
+echo  WS Hub - contest app firewall (Private)
 echo  =====================================
-echo  N1MM, WSJT-X, GridTracker, WIMS inbound allow on Private only.
+echo  N1MM, WSJT-X, GridTracker, WS Hub inbound allow on Private only.
 echo  Click YES on UAC. Watch the new PowerShell window for [OK] lines.
 echo.
 

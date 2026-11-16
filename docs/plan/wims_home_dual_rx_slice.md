@@ -8,14 +8,14 @@
 
 ## 1. Why this is ahead of the bus
 
-Home operators can test **chunks** of WIMS without a fleet LAN.
+Home operators can test **chunks** of WS Hub without a fleet LAN.
 
 Target hardware: **one transceiver**, **dual RX** (IC-9700-style) or one TRX + SDR.  
 Not the dual-radio mountain default.
 
 Message-bus work stays designed/harnessed but **does not block** this slice.
 
-## 2. Product cut (what “home WIMS” is)
+## 2. Product cut (what “home WS Hub” is)
 
 ### Minimum bar (ship this first in people’s heads)
 
@@ -43,12 +43,12 @@ N1MM and WSJT-X **both** want to drive the radio.
 - WSJT-X: dial, Fake It / split, often CAT PTT on Icom recipes.  
 - Dual RX: one RX “belongs” to digi, one to voice — radios differ; APIs differ; quirks abound.
 
-N1MM’s built-in FT8 path is **not** the answer. WIMS exists to avoid that.
+N1MM’s built-in FT8 path is **not** the answer. WS Hub exists to avoid that.
 
-**“WIMS spoofs N1MM’s radio interface”** is an idea, not a decision.  
+**“WS Hub spoofs N1MM’s radio interface”** is an idea, not a decision.  
 Feasibility and robustness are **unknown**. Treat radio ownership as its own design beat (ADR), not as a silent assumption inside Operate.
 
-Existing draft in `shared_trx_second_rx.md`: WIMS **Hamlib proxy** in front of wfview; WSJT-X talks to the proxy; N1MM CI-V may still talk to wfview directly with N1MM radio-set **OFF** during handoff. That is one candidate, not proven.
+Existing draft in `shared_trx_second_rx.md`: WS Hub **Hamlib proxy** in front of wfview; WSJT-X talks to the proxy; N1MM CI-V may still talk to wfview directly with N1MM radio-set **OFF** during handoff. That is one candidate, not proven.
 
 ## 4. Staged delivery (so people can test early)
 
@@ -60,7 +60,7 @@ Do **not** wait for perfect CAT spoof before home testers run Operate + Inhibit.
 | **H1** | Standalone Inhibit (KEY → type-18 to TX digi) | Unchanged | Voice priority without fleet server |
 | **H2** | Dual-RX / second-RX **decode** layout in docs + config check | Still manual / existing CAT | Two decode streams; one TX-capable marked |
 | **H3** | KEY → inhibit + **TX-audio mute** (no CAT yet) | Mode change still human or N1MM | Blocks FT8-audio-in-SSB class of fault |
-| **H4** | CAT handoff / proxy / ownership ADR implemented | WIMS coordinates voice vs digi profile | Footswitch-only shared-trx |
+| **H4** | CAT handoff / proxy / ownership ADR implemented | WS Hub coordinates voice vs digi profile | Footswitch-only shared-trx |
 
 Inhibit **actuation** stays direct UDP at every stage.
 
@@ -74,7 +74,7 @@ Cover at least:
 2. VOICE phase — who sets VFO / mode; digi must not fight.  
 3. Dual RX — MAIN vs SUB (or SDR): which app owns which.  
 4. What N1MM must turn OFF (radio PTT, CW, set, WSJT bridge).  
-5. Whether WIMS presents a **fake** radio to N1MM, or N1MM has **no CAT**, or N1MM talks to wfview with WIMS only parking WSJT.  
+5. Whether WS Hub presents a **fake** radio to N1MM, or N1MM has **no CAT**, or N1MM talks to wfview with WS Hub only parking WSJT.  
 6. Failure: FAULT leaves digi held; human front panel still works.
 
 Do not pick “spoof N1MM” until a spike shows one radio + N1MM + WSJT-X surviving handoff.
@@ -112,5 +112,5 @@ A home dual-RX op can:
 ## 9. Open questions
 
 1. Is today’s `wims.solo` enough for H0, or must Operate be a separate window/port immediately?  
-2. Home inhibit: ship **inhibit-agent** (wsjtx-inhibit) or **WIMS KEY** with a home profile?  
+2. Home inhibit: ship **inhibit-agent** (wsjtx-inhibit) or **WS Hub KEY** with a home profile?  
 3. First radio for H4 spike: IC-9700 + wfview only, or also a second brand?  
