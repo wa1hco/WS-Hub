@@ -1,6 +1,6 @@
 [project]
 name = "wims"
-version = "1.0.30"
+version = "1.0.31"
 description = "One console for several WSJT-X instances"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
