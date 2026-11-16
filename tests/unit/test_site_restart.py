@@ -309,7 +309,7 @@ class RestartTests(unittest.TestCase):
             stop_pid=lambda _pid: state.update(up=False),
             listener_pids=[4242],
             argv_of=lambda pid: _SOLO if pid == 4242 else _NGINX,
-            alive=lambda pid: pid == 4242 and not state["started"],
+            alive=lambda pid: pid == 4242 and state["up"] and not state["started"],
             port_open=lambda: state["up"],
         )
         self.assertFalse(outcome.ok)
@@ -339,7 +339,7 @@ class RestartTests(unittest.TestCase):
             stop_pid=lambda _pid: state.update(up=False),
             listener_pids=[4242],
             argv_of=lambda pid: _SOLO if pid == 4242 else _NGINX,
-            alive=lambda pid: pid == 4242 and not state["started"],
+            alive=lambda pid: pid == 4242 and state["up"] and not state["started"],
             port_open=lambda: state["up"],
         )
         self.assertTrue(outcome.ok)
@@ -366,7 +366,7 @@ class RestartTests(unittest.TestCase):
             stop_pid=lambda _pid: state.update(up=False),
             listener_pids=[4242],
             argv_of=lambda pid: _SOLO if pid == 4242 else _NGINX,
-            alive=lambda pid: pid == 4242 and not state["started"],
+            alive=lambda pid: pid == 4242 and state["up"] and not state["started"],
             port_open=lambda: state["up"],
         )
         self.assertTrue(outcome.ok)
@@ -399,7 +399,7 @@ class RestartTests(unittest.TestCase):
             stop_pid=lambda _pid: state.update(up=False),
             listener_pids=[4242],
             argv_of=lambda pid: _SOLO if pid == 4242 else _NGINX,
-            alive=lambda pid: pid == 4242 and not state["started"],
+            alive=lambda pid: pid == 4242 and state["up"] and not state["started"],
             port_open=lambda: state["up"],
         )
         self.assertFalse(outcome.ok)
