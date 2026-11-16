@@ -631,15 +631,18 @@ def http_discover_site_server(
     http_port: int = DEFAULT_HTTP_PORT,
     timeout: float = HTTP_PROBE_TIMEOUT_S,
     extra_ips: list[str] | None = None,
+    exclude_ips: list[str] | None = None,
 ) -> dict | None:
     """Scan local /24s (and extra hints) for a WS Hub site server on TCP :http_port.
 
     Two phases: likely hosts first (.1/.119/…), then full /24. Skips CGNAT
     100.x and libvirt default nets for the full scan (still try preferred only).
+    ``exclude_ips`` are never probed (used to skip this PC's own addresses
+    when looking for a server on another PC).
     """
     preferred: list[str] = []
     rest: list[str] = []
-    seen: set[str] = set()
+    seen: set[str] = set(exclude_ips or [])
 
     def add(ip: str, bucket: list[str], *, allow_loopback: bool = False):
         if ip in seen:
@@ -862,6 +865,96 @@ def discover_site_server_detailed(
     return result
 
 
+def own_ipv4s() -> set[str]:
+    """Addresses that mean "this PC": loopback plus every LAN IPv4."""
+    own = {"127.0.0.1", "0.0.0.0", "localhost"}
+    try:
+        own.update(list_lan_ipv4s())
+    except Exception:
+        pass
+    return own
+
+
+def beacon_is_this_pc(beacon: dict | None, own: set[str] | None = None) -> bool:
+    """True when an announcement or /healthz body came from this PC."""
+    if not isinstance(beacon, dict):
+        return False
+    mine = own if own is not None else own_ipv4s()
+    hosts: set[str] = set()
+    for ip in beacon.get("lan_ips") or []:
+        if isinstance(ip, str) and ip.strip():
+            hosts.add(plain_ipv4(ip.strip()) or ip.strip())
+    from urllib.parse import urlsplit
+    for base in beacon_endpoints(beacon):
+        try:
+            host = urlsplit(base).hostname or ""
+        except ValueError:
+            host = ""
+        if host:
+            hosts.add(host)
+    if not hosts:
+        return False
+    if any(h.startswith("127.") for h in hosts):
+        # A loopback console_base with LAN IPs: decide on the LAN IPs.
+        lan = {h for h in hosts if not h.startswith("127.")}
+        if not lan:
+            return True
+        hosts = lan
+    return bool(hosts & mine)
+
+
+def find_remote_site_server(
+    *,
+    iface: str = "0.0.0.0",
+    group: str = DEFAULT_GROUP,
+    port: int = DEFAULT_PORT,
+    duration_s: float = 1.5,
+    http_port: int = DEFAULT_HTTP_PORT,
+    own: set[str] | None = None,
+    listen: Callable[..., list[dict]] | None = None,
+    reachable: Callable[[dict], bool] | None = None,
+    http_scan: Callable[..., dict | None] | None = None,
+) -> dict | None:
+    """A site server on another PC that answers HTTP, or None.
+
+    Announcements from this PC are ignored, and this PC's own addresses are
+    not probed. A server that only announces (its firewall drops the site
+    console) does not count. ``listen``, ``reachable`` and ``http_scan`` are
+    injected in tests.
+    """
+    mine = own if own is not None else own_ipv4s()
+    hear = listen or listen_for_peers
+    can_reach = reachable or beacon_http_reachable
+    scan = http_scan or http_discover_site_server
+    try:
+        peers = hear(iface=iface, group=group, port=port, duration_s=duration_s)
+    except Exception:
+        peers = []
+    peers = sorted(
+        (p for p in peers or [] if isinstance(p, dict)),
+        key=lambda p: p.get("_heard_at") or 0.0,
+        reverse=True,
+    )
+    for peer in peers:
+        if beacon_is_this_pc(peer, mine):
+            continue
+        try:
+            if can_reach(peer):
+                return peer
+        except Exception:
+            continue
+    try:
+        hit = scan(
+            http_port=http_port,
+            exclude_ips=sorted(ip for ip in mine if not ip.startswith("127.")),
+        )
+    except Exception:
+        hit = None
+    if hit and not beacon_is_this_pc(hit, mine):
+        return hit
+    return None
+
+
 def server_udp_self_check(
     *,
     instance_id: str,
@@ -978,7 +1071,11 @@ class PresenceAnnouncer:
     hostname: str | None = None
     version: str = ""
     interval_s: float = ANNOUNCE_INTERVAL_S
-    on_conflict: Callable[[list[dict]], None] | None = None
+    # Return True when this server is giving way (it will exit). Any other
+    # return keeps announcing: a peer this PC cannot reach is not a reason
+    # to go quiet.
+    on_conflict: Callable[[list[dict]], bool | None] | None = None
+    on_log: Callable[[str], None] | None = None
 
     _stop: threading.Event = field(default_factory=threading.Event, repr=False)
     _thread: threading.Thread | None = field(default=None, repr=False)
@@ -990,6 +1087,23 @@ class PresenceAnnouncer:
     heard_self_at: float | None = None
     last_peer_count: int = 0
     listen_error: str | None = None
+    send_error: str | None = None
+    stopped_error: str | None = None
+    unreachable_peers: list = field(default_factory=list)
+
+    def _say(self, text: str) -> None:
+        cb = self.on_log
+        if cb is None:
+            return
+        try:
+            cb(text)
+        except Exception:
+            pass
+
+    def announcing(self) -> bool:
+        """True while the announce thread is alive and has sent at least once."""
+        alive = bool(self._thread and self._thread.is_alive())
+        return alive and self.last_send_ok > 0 and not self.demoted
 
     def status_dict(self, now: float | None = None) -> dict:
         """Snapshot for /api/presence and SSE (server-side UDP health)."""
@@ -1004,10 +1118,17 @@ class PresenceAnnouncer:
         hints: list[str] = []
         if self.demoted:
             hints.append("Demoted — another site server is primary")
-        elif self.listen_error:
-            hints.append(f"Listen error: {self.listen_error}")
+        elif self.stopped_error:
+            hints.append(f"Announcing stopped: {self.stopped_error}")
         elif self.last_send_ok == 0:
-            hints.append("No successful presence sends (check iface / permissions)")
+            hints.append(
+                "Not announcing: no presence message could be sent"
+                + (f" ({self.send_error})" if self.send_error else "")
+            )
+        elif self.listen_error:
+            hints.append(
+                f"Announcing, but not listening on UDP {self.port}: {self.listen_error}"
+            )
         elif self.heard_self_at is None:
             hints.append(
                 f"Not hearing own UDP beacons on :{self.port} — local UDP path broken"
@@ -1016,6 +1137,12 @@ class PresenceAnnouncer:
             hints.append("Own beacon gone stale — announcer may have stalled")
         return {
             "enabled": True,
+            "announcing": self.announcing(),
+            "listening": self.listen_error is None and self.stopped_error is None,
+            "listen_error": self.listen_error,
+            "send_error": self.send_error,
+            "stopped_error": self.stopped_error,
+            "unreachable_peers": list(self.unreachable_peers),
             "ok": udp_ok and not self.demoted,
             "udp_self_hear": self.heard_self_at is not None and (self_age or 99) < 5,
             "self_hear_age": self_age,
@@ -1045,67 +1172,135 @@ class PresenceAnnouncer:
             self._thread.join(timeout=2.0)
 
     def _run(self) -> None:
+        try:
+            self._run_inner()
+        except Exception as exc:  # never die silently
+            self.stopped_error = f"{type(exc).__name__}: {exc}"
+            self._say(
+                f"Site server stopped announcing itself on UDP {self.port} "
+                f"({self.stopped_error}). Other PCs can still find it by address."
+            )
+
+    def _open_listen(self):
+        """Listen socket, or None (recorded and logged) when the port is taken."""
+        try:
+            return open_listen_socket(self.iface, self.group, self.port)
+        except Exception as e:
+            self.listen_error = str(e) or type(e).__name__
+            self._say(
+                f"Site server could not listen on UDP {self.port} "
+                f"({self.listen_error}). It still announces itself, but it "
+                "cannot hear another site server."
+            )
+            return None
+
+    def _read_peers(self, listen) -> dict[str, dict]:
+        peers: dict[str, dict] = {}
+        if listen is None:
+            return peers
+        ready, _, _ = select.select([listen], [], [], 0.0)
+        while ready:
+            try:
+                data, _ = listen.recvfrom(65535)
+            except OSError:
+                break
+            b = decode_beacon(data)
+            if b:
+                if b.get("instance_id") == self.instance_id:
+                    self.heard_self_at = time.time()
+                elif b.get("instance_id"):
+                    peers[b["instance_id"]] = b
+            ready, _, _ = select.select([listen], [], [], 0.0)
+        return peers
+
+    def _handle_peers(self, peers: dict[str, dict]) -> bool:
+        """True when this server gives way and the loop should end."""
+        self.last_peer_count = len(peers)
+        if not peers or self.demoted:
+            return False
+        give_way = False
+        if self.on_conflict:
+            try:
+                give_way = self.on_conflict(list(peers.values())) is True
+            except Exception:
+                give_way = False
+        if give_way:
+            self.demoted = True
+            return True
+        # Heard another server that this PC cannot use (often its firewall
+        # drops the site console). Keep announcing; say so once per peer.
+        for iid, peer in peers.items():
+            if iid in self.unreachable_peers:
+                continue
+            self.unreachable_peers.append(iid)
+            host = (peer.get("hostname") or "another PC").strip() or "another PC"
+            ends = beacon_endpoints(peer)
+            where = ends[0].replace("http://", "") if ends else ""
+            self._say(
+                f"{host} is also announcing a site server"
+                + (f" at {where}" if where else "")
+                + ", but this PC cannot reach it. This site server keeps running."
+            )
+        return False
+
+    def _send_once(self, lan_ip: str, lan_ips: list[str]) -> None:
+        self._seq += 1
+        beacon = build_beacon(
+            instance_id=self.instance_id,
+            http_port=self.http_port,
+            iface=self.iface,
+            hostname=self.hostname,
+            started_ts=self.started_ts,
+            seq=self._seq,
+            version=self.version,
+            lan_ip=lan_ip,
+            lan_ips=lan_ips,
+        )
+        self.last_beacon = beacon
+        try:
+            sent = send_beacon_all(
+                beacon,
+                group=self.group,
+                port=self.port,
+                iface=self.iface,
+                ttl=self.ttl,
+            )
+        except Exception as exc:
+            sent = 0
+            err = str(exc) or type(exc).__name__
+        else:
+            err = "" if sent else "every send failed"
+        was_ok = self.last_send_ok > 0 or self._seq == 1
+        self.last_send_ok = sent
+        if sent:
+            if self.send_error:
+                self._say(f"Site server is announcing itself on UDP {self.port} again.")
+            self.send_error = None
+        else:
+            first = self.send_error is None
+            self.send_error = err
+            if first or was_ok:
+                self._say(
+                    f"Site server could not announce itself on UDP {self.port} "
+                    f"({err}). Other PCs can still find it by address."
+                )
+
+    def _run_inner(self) -> None:
         time.sleep(random.uniform(0.0, 0.35))
         lan_ip = _primary_lan_ip(self.iface)
         lan_ips = list_lan_ipv4s() or [lan_ip]
-        try:
-            listen = open_listen_socket(self.iface, self.group, self.port)
-        except Exception as e:
-            self.listen_error = str(e)
-            return
+        listen = self._open_listen()
         try:
             while not self._stop.is_set():
-                ready, _, _ = select.select([listen], [], [], 0.0)
-                peers: dict[str, dict] = {}
-                while ready:
-                    try:
-                        data, _ = listen.recvfrom(65535)
-                    except OSError:
-                        break
-                    b = decode_beacon(data)
-                    if not b:
-                        ready, _, _ = select.select([listen], [], [], 0.0)
-                        continue
-                    if b.get("instance_id") == self.instance_id:
-                        self.heard_self_at = time.time()
-                    elif b.get("instance_id"):
-                        peers[b["instance_id"]] = b
-                    ready, _, _ = select.select([listen], [], [], 0.0)
-                self.last_peer_count = len(peers)
-                if peers and not self.demoted:
-                    self.demoted = True
-                    if self.on_conflict:
-                        try:
-                            self.on_conflict(list(peers.values()))
-                        except Exception:
-                            pass
+                if self._handle_peers(self._read_peers(listen)):
                     break
-
-                self._seq += 1
-                beacon = build_beacon(
-                    instance_id=self.instance_id,
-                    http_port=self.http_port,
-                    iface=self.iface,
-                    hostname=self.hostname,
-                    started_ts=self.started_ts,
-                    seq=self._seq,
-                    version=self.version,
-                    lan_ip=lan_ip,
-                    lan_ips=lan_ips,
-                )
-                self.last_beacon = beacon
-                self.last_send_ok = send_beacon_all(
-                    beacon,
-                    group=self.group,
-                    port=self.port,
-                    iface=self.iface,
-                    ttl=self.ttl,
-                )
+                self._send_once(lan_ip, lan_ips)
                 end = time.time() + self.interval_s
                 while not self._stop.is_set() and time.time() < end:
                     time.sleep(0.05)
         finally:
-            try:
-                listen.close()
-            except OSError:
-                pass
+            if listen is not None:
+                try:
+                    listen.close()
+                except OSError:
+                    pass

@@ -214,6 +214,72 @@ def clear_site_server_pid(
         pass
 
 
+def clear_stale_site_server_pid(
+    path: Path | str | None = None,
+    *,
+    alive: Callable[[int], bool] | None = None,
+    argv_of: Callable[[int], list[str] | None] | None = None,
+) -> bool:
+    """Remove the pid file when its process is gone. True when removed.
+
+    A pid that is alive but now belongs to some other program (the number
+    was reused) is stale too. A live pid whose command line cannot be read
+    is left alone.
+    """
+    current = read_site_server_pid(path)
+    if current is None:
+        return False
+    pid = current[0]
+    is_alive = alive or pid_alive
+    try:
+        living = bool(is_alive(pid))
+    except Exception:
+        living = True
+    if living:
+        lookup = argv_of or read_process_argv
+        try:
+            argv = lookup(pid)
+        except Exception:
+            argv = None
+        if argv is None or is_wims_site_server_argv(argv):
+            return False
+    clear_site_server_pid(path, pid=pid)
+    return read_site_server_pid(path) is None
+
+
+def wait_for_pids_to_exit(
+    pids,
+    *,
+    timeout_s: float = 5.0,
+    interval_s: float = 0.2,
+    alive: Callable[[int], bool] | None = None,
+    sleep: Callable[[float], None] | None = None,
+    monotonic: Callable[[], float] | None = None,
+) -> bool:
+    """Wait, bounded, until none of ``pids`` is running. True when all exited."""
+    want = [int(p) for p in (pids or []) if int(p) > 0]
+    if not want:
+        return True
+    is_alive = alive or pid_alive
+
+    def gone() -> bool:
+        for pid in want:
+            try:
+                if is_alive(pid):
+                    return False
+            except Exception:
+                return False
+        return True
+
+    return _until(
+        gone,
+        timeout_s=timeout_s,
+        interval_s=interval_s,
+        sleep=sleep or time.sleep,
+        monotonic=monotonic or time.monotonic,
+    )
+
+
 def is_wims_site_server_argv(argv: list[str] | None) -> bool:
     """True for the site server process (``wims.server`` or ``wims.solo``)."""
     args = [a for a in (argv or []) if a]
@@ -833,14 +899,30 @@ def perform_site_restart(
         ask_stop()
     except Exception as exc:
         _say(on_log, f"Shutdown request failed: {exc}")
-    if not wait_until_down() or not wait_until_closed():
+    def wait_until_exited() -> bool:
+        # The port can close before the process is gone. Starting then
+        # finds the old process and refuses to run a second copy.
+        return wait_for_pids_to_exit(
+            found.pids,
+            timeout_s=stop_timeout_s,
+            interval_s=interval_s,
+            alive=alive,
+            sleep=pause,
+            monotonic=clock,
+        )
+
+    if not wait_until_down() or not wait_until_closed() or not wait_until_exited():
         for pid in found.pids:
             _say(on_log, f"Stopping site server pid={pid}.")
             try:
                 terminate(int(pid))
             except Exception as exc:
                 _say(on_log, f"Stop pid {pid} failed: {exc}")
-        if not wait_until_down() or not wait_until_closed():
+        if (
+            not wait_until_down()
+            or not wait_until_closed()
+            or not wait_until_exited()
+        ):
             _say(on_log, STILL_RUNNING_MESSAGE)
             return RestartOutcome(False, STILL_RUNNING_MESSAGE, stopped=False)
 

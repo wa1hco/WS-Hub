@@ -41,8 +41,10 @@ from wims.launcher.server_rev import (
 )
 from wims.launcher.site_restart import (
     banner_for_restart,
+    clear_stale_site_server_pid,
     other_pc_message,
     perform_site_restart,
+    wait_for_pids_to_exit,
 )
 from wims.launcher.roles import (
     BAND_PORTS,
@@ -116,6 +118,7 @@ from wims.launcher.site_status import (
     canonical_site_base,
     choose_site_urls,
     firewall_block_hint,
+    format_endpoint,
     format_site_server_status,
     is_loopback_host,
 )
@@ -393,11 +396,16 @@ def probe_resolved_site(
     preferred: str | None = None,
     *,
     timeout: float = 0.5,
+    prefer_lan: bool = False,
 ) -> dict:
     """One probe used by the status line, Open site console, and messages.
 
     Returns ok, open_url (what this PC should open), show_url (what the
     operator should see), hostname, this_pc, and the health body.
+
+    ``prefer_lan`` is set once the launcher adopted a site server on another
+    PC: when that server answers, a leftover copy on this PC's loopback does
+    not take its place.
     """
     loopback = canonical_site_base(LOCAL_SITE)
     preferred = canonical_site_base(preferred or "") or canonical_site_base(site_base_url())
@@ -415,6 +423,18 @@ def probe_resolved_site(
             lan_pref = _lan_url_from_health(lan_health, lan_used) or lan_used
     elif loopback_ok:
         lan_pref = _lan_url_from_health(loopback_health, "") or lan_pref
+    if prefer_lan and lan_ok and lan_pref and lan_pref != loopback:
+        hostname = ""
+        if isinstance(lan_health, dict):
+            hostname = str(lan_health.get("hostname") or "")
+        return {
+            "ok": True,
+            "open_url": lan_pref,
+            "show_url": lan_pref,
+            "hostname": hostname,
+            "this_pc": False,
+            "health": lan_health,
+        }
     this_pc = bool(loopback_ok)
     open_url, show_url = choose_site_urls(
         this_pc=this_pc,
@@ -1198,6 +1218,15 @@ class LauncherApp:
         self._last_wsjt_msg: str = ""
         self._site_ok = False
         self._site_external = False  # reachable but not owned by this launcher
+        # Site server on another PC that this window adopted. A leftover copy
+        # on this PC's loopback does not replace it in the status line.
+        self._remote_primary = ""
+        self._remote_search_busy = False
+        self._remote_search_at = 0.0
+        try:
+            clear_stale_site_server_pid()
+        except Exception:
+            pass
         self._server_code_stale = False
         self._server_start_blocked = False  # dual-primary / refuse restart spam
         self._restart_in_progress = False
@@ -1781,6 +1810,9 @@ class LauncherApp:
                 max(560, screen_w - 40),
             )
             desired = f"{width}x{height}"
+            # What this fit asked for. A window manager may still hold the
+            # window inside the desktop's usable area (top bar, title bar).
+            self._fit_requested_h = int(height)
             self.root.minsize(540, min_h)
             if self._current_window_size() != desired:
                 self.root.geometry(desired)
@@ -2486,7 +2518,17 @@ class LauncherApp:
         # During an update, do not restart agents that were stopped for the pull.
         # Wait for LAN discovery (or auto-host) so agents are not pointed at
         # a guessed address before we know whether a server is already up.
-        if not self._updating and (self._site_choice_ready or ok_site):
+        # A server on this PC that this window did not start is not trusted
+        # until the network was checked for the station's server elsewhere.
+        leftover_only = bool(
+            ok_site
+            and not self._site_choice_ready
+            and self._site_url_is_local(base)
+            and not self._proc_running("server")
+        )
+        if not self._updating and (
+            self._site_choice_ready or (ok_site and not leftover_only)
+        ):
             intent = self._current_intent()
             want = agents_for_intent(intent)
             # Combined N1MM seat: restart if log/key flags changed.
@@ -2606,7 +2648,18 @@ class LauncherApp:
             self._stop_agent(agent_id, explicit=True)
         self._refresh_status()
 
-    def _start_agent(self, agent_id: str, *, open_browser: bool = False) -> None:
+    def _start_agent(
+        self,
+        agent_id: str,
+        *,
+        open_browser: bool = False,
+        lan_checked: bool = False,
+    ) -> None:
+        """Start one agent. ``lan_checked`` means the network was just searched.
+
+        The site server is never started on this PC until a search for a
+        site server on another PC has come back empty.
+        """
         role_id = self._agent_role[agent_id]
         if self._proc_running(role_id) or agent_id in self._starting:
             self._append_log(f"{agent_id} agent already starting/running — not starting a second copy.")
@@ -2646,6 +2699,9 @@ class LauncherApp:
                 if open_browser:
                     self._open_url_once("server", base.rstrip("/") + "/status")
                 self._schedule_status(800)
+                return
+            if not lan_checked:
+                self._check_lan_then_start(open_browser=open_browser)
                 return
 
         base = self._site_var.get().strip() or site_base_url()
@@ -2762,13 +2818,113 @@ class LauncherApp:
         else:
             self._append_log("Local site server stopped.")
 
+    # How long an empty search for a remote site server stays good enough
+    # to start one here without searching again.
+    _REMOTE_SEARCH_FRESH_S = 30.0
+
+    def _run_background(self, fn) -> None:
+        threading.Thread(target=fn, daemon=True).start()
+
+    def _find_remote_site(self) -> dict | None:
+        """Site server on another PC that answers HTTP, or None. Blocks ~3 s."""
+        from wims.discovery import presence as P
+        return P.find_remote_site_server()
+
+    def _check_lan_then_start(self, *, open_browser: bool) -> None:
+        """Look for a site server on another PC; start one here only if none."""
+        if self._remote_search_busy:
+            return
+        recent = (
+            self._remote_search_at
+            and time.monotonic() - self._remote_search_at < self._REMOTE_SEARCH_FRESH_S
+        )
+        if recent:
+            self._start_agent(AGENT_SERVER, open_browser=open_browser, lan_checked=True)
+            return
+        self._remote_search_busy = True
+        self._append_log("Checking the network for a site server on another PC…")
+
+        def work() -> None:
+            try:
+                found = self._find_remote_site()
+            except Exception:
+                found = None
+            self.root.after(0, self._after_lan_check_for_start, found, open_browser)
+
+        self._run_background(work)
+
+    def _after_lan_check_for_start(self, found: dict | None, open_browser: bool) -> None:
+        self._remote_search_busy = False
+        if found:
+            self._remote_search_at = 0.0
+            try:
+                self._intent_vars[INTENT_SERVER].set(False)
+                self._persist_intent()
+            except Exception:
+                pass
+            self._adopt_remote_site(
+                found,
+                note="Not starting another site server on this PC.",
+            )
+            if open_browser and self._site_show_url:
+                self._open_url_once("server", self._site_show_url.rstrip("/") + "/")
+            return
+        self._remote_search_at = time.monotonic()
+        self._append_log("No site server on another PC answered. Starting one on this PC.")
+        self._start_agent(AGENT_SERVER, open_browser=open_browser, lan_checked=True)
+
+    def _adopt_remote_site(self, beacon: dict, *, note: str = "") -> None:
+        """Use the site server on another PC and say plainly which PC it is."""
+        from wims.discovery.presence import beacon_endpoints
+        ends = beacon_endpoints(beacon) if isinstance(beacon, dict) else []
+        url = canonical_site_base(ends[0]) if ends else ""
+        if not url:
+            return
+        host = str((beacon or {}).get("hostname") or "").strip()
+        self._remote_primary = url
+        self._discovering = True  # _apply_discovered_site clears it
+        self._apply_discovered_site(url, beacon, None)
+        where = format_endpoint(url)
+        name = f"{host} ({where})" if host and host != where.split(":")[0] else where
+        self._append_log(f"The site server is on {name}. This PC uses it.")
+        if self._local_server_procs():
+            self._append_log(
+                "An older site server is still running on this PC. "
+                "It was left alone and is not restarted."
+            )
+        if note:
+            self._append_log(note)
+
     def _kick_site_discover(self) -> None:
         if self._discovering:
             return
         # Quick HTTP probe first (localhost + last-known) before UDP wait.
         ok, base = probe_site_urls(self._site_var.get().strip() or None)
+        leftover_local = ""
         if ok:
-            self._apply_discovered_site(base)
+            if self._site_url_is_local(base) and not self._proc_running("server"):
+                # A server on this PC that this window did not start (for
+                # example one left from before an update). Check whether the
+                # station's site server is on another PC before trusting it.
+                leftover_local = base
+            else:
+                self._apply_discovered_site(base)
+                return
+        if leftover_local:
+            self._discovering = True
+            self._append_log("Checking the network for a site server on another PC…")
+
+            def check() -> None:
+                try:
+                    found = self._find_remote_site()
+                except Exception:
+                    found = None
+                if found:
+                    self.root.after(0, self._finish_leftover_check, found)
+                else:
+                    self.root.after(0, self._apply_discovered_site, leftover_local)
+
+            self._run_background(check)
             return
         # Env pin wins for discovery target, but still allow LAN find when unset.
         env = (os.environ.get("WIMS_SERVER") or "").strip()
@@ -2803,6 +2959,10 @@ class LauncherApp:
             self.root.after(0, self._apply_discovered_site, url, announced, hints)
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _finish_leftover_check(self, found: dict) -> None:
+        self._discovering = False
+        self._adopt_remote_site(found)
 
     def _apply_discovered_site(
         self,
@@ -2922,8 +3082,9 @@ class LauncherApp:
             self._append_log(f"Browser error: {e}")
 
     def _refresh_status(self) -> None:
-        preferred = (self._site_show_url or self._site_var.get() or "").strip()
-        resolved = probe_resolved_site(preferred, timeout=0.4)
+        remote = (getattr(self, "_remote_primary", "") or "").strip()
+        preferred = (remote or self._site_show_url or self._site_var.get() or "").strip()
+        resolved = probe_resolved_site(preferred, timeout=0.4, prefer_lan=bool(remote))
         self._remember_resolved_site(resolved)
         ok_site = bool(resolved.get("ok"))
         base = resolved.get("show_url") or preferred or site_base_url()
@@ -3159,7 +3320,12 @@ class LauncherApp:
             ends = beacon_endpoints(announced)
             show = ends[0] if ends else ""
         local_proc = bool(self._local_server_procs())
-        this_pc = bool(local_proc or (show and self._site_url_is_local(show)))
+        # The address in use decides. A leftover copy on this PC does not
+        # make a server on another PC read as "this PC".
+        if show:
+            this_pc = bool(self._site_url_is_local(show))
+        else:
+            this_pc = local_proc
         line = format_site_server_status(
             this_pc=this_pc,
             running=bool(this_pc and (local_proc or self._site_ok)),
@@ -3259,7 +3425,7 @@ class LauncherApp:
         self._intent_vars[INTENT_SERVER].set(True)
         self._persist_intent()
         self._append_log("No site server on the LAN — starting one on this PC.")
-        self._start_agent(AGENT_SERVER, open_browser=True)
+        self._start_agent(AGENT_SERVER, open_browser=True, lan_checked=True)
 
     def _repoint_agents_if_needed(self, previous: str, new: str) -> None:
         """Restart local agents when the site server moved to another host."""
@@ -3327,7 +3493,7 @@ class LauncherApp:
         self._server_start_blocked = False
         self._intent_vars[INTENT_SERVER].set(True)
         self._persist_intent()
-        self._append_log("Starting site server on this PC…")
+        # Looks on the network first; starts here only when no other PC answers.
         self._start_agent(AGENT_SERVER, open_browser=True)
 
     def _restart_local_site_server(self) -> None:
@@ -3394,6 +3560,19 @@ class LauncherApp:
 
     def _restart_site_server_worker(self) -> None:
         try:
+            clear_stale_site_server_pid()
+        except Exception:
+            pass
+        # A site server on another PC is the station's server. Do not
+        # restart a leftover copy here in its place.
+        try:
+            remote = self._find_remote_site()
+        except Exception:
+            remote = None
+        if remote:
+            self.root.after(0, self._restart_found_remote, remote)
+            return
+        try:
             disk = git_stamp_fresh(_REPO_ROOT)
         except Exception:
             disk = "?"
@@ -3403,6 +3582,15 @@ class LauncherApp:
             return fetch_site_health(f"http://127.0.0.1:{port}", timeout=0.8)
 
         def start() -> None:
+            # The old process can still be exiting after its port closed.
+            # Starting then is refused as "already running".
+            try:
+                wait_for_pids_to_exit(
+                    [p.pid for p in self._system_agent_procs(AGENT_SERVER)],
+                    timeout_s=5.0,
+                )
+            except Exception:
+                pass
             done = threading.Event()
 
             def ui() -> None:
@@ -3443,8 +3631,27 @@ class LauncherApp:
                 0,
                 lambda: self._note_restart_result(message, ok=succeeded),
             )
+            if not succeeded:
+                # Do not stay pointed at 127.0.0.1 with nothing there. Look
+                # on the network and use a server that answers.
+                self.root.after(50, self._after_failed_restart)
         except Exception:
             pass
+
+    def _after_failed_restart(self) -> None:
+        try:
+            clear_stale_site_server_pid()
+        except Exception:
+            pass
+        self._append_log("Looking for a site server on the network…")
+        self._kick_site_discover()
+
+    def _restart_found_remote(self, remote: dict) -> None:
+        self._restart_in_progress = False
+        self._restart_report = None
+        self._restart_report_ok = False
+        self._adopt_remote_site(remote)
+        self._refresh_status()
 
     def _begin_site_server_after_stop(self) -> None:
         """Start the site server the usual way, after the local one is down.
@@ -3468,7 +3675,8 @@ class LauncherApp:
         # A remote viewer's page is not this.
         if not was_open:
             self._browser_opened.discard("server")
-        self._start_agent(AGENT_SERVER, open_browser=not was_open)
+        # The restart already checked the network for a server elsewhere.
+        self._start_agent(AGENT_SERVER, open_browser=not was_open, lan_checked=True)
         if was_open:
             self._append_log(
                 "Site console is already open. It will reconnect in the same window."
@@ -3492,6 +3700,11 @@ class LauncherApp:
         offer = offer_site_server(
             intent, site_reachable=ok_site, local_server=local,
         )
+        # Restart is for the server this window uses, and only after the
+        # network was checked for a site server on another PC.
+        restart_ok = bool(
+            ok_site and local_url and getattr(self, "_site_choice_ready", True)
+        )
         if hasattr(hp, "set_server_intent_visible"):
             hp.set_server_intent_visible(offer)
         try:
@@ -3501,7 +3714,7 @@ class LauncherApp:
             pass
         if hasattr(hp, "set_restart_needed"):
             hp.set_restart_needed(False)
-        if ok_site and local:
+        if restart_ok:
             restart_btn.pack(side="left", padx=(8, 0))
             if stale and hasattr(hp, "set_restart_needed"):
                 hp.set_restart_needed(True)
@@ -3590,10 +3803,11 @@ class LauncherApp:
             if isinstance(raw_v, str):
                 server_version = raw_v.strip()
         self._show_loaded_revs(server_version, server_rev, disk)
-        local = bool(self._local_server_procs()) or (
-            ok_site and self._site_url_is_local(base)
+        restart_shown = bool(
+            ok_site
+            and self._site_url_is_local(base)
+            and getattr(self, "_site_choice_ready", True)
         )
-        restart_shown = bool(ok_site and local)
         # No server_rev (older build, or the server is down) → not stale
         # unless both sides only have a package version and those differ.
         stale = bool(restart_shown and server_restart_needed(

@@ -292,6 +292,7 @@ class LiveFleet:
         self._id_collision_warn_ts: dict[str, float] = {}
         # Experimental GridTracker merge bridge (see --gt-forward).
         self._gt_bridge: GridTrackerBridge | None = None
+        self._presence = None  # PresenceAnnouncer when announcing on UDP
         # Per-band share policy (§2.14): band label → coordinated|interlock.
         # Default (missing key) is coordinated — no automatic KEY inhibit.
         self._share_policies: dict[str, str] = {}
@@ -3216,6 +3217,9 @@ def make_handler(live: LiveFleet, refresh: float):
                     # This process. Restart uses it with the pid file or the
                     # local port owner. A launcher on another PC does not.
                     "pid": os.getpid(),
+                    # Whether this server is announcing itself on UDP, so a
+                    # launcher can tell "found by address only" apart.
+                    "presence": _presence_summary(getattr(live, "_presence", None)),
                 }
                 self._send_json(200, body)
             elif path == "/events":
@@ -3245,6 +3249,13 @@ def make_handler(live: LiveFleet, refresh: float):
                 self._send_json(200, {"qsos": live.logged_qsos_since(since)})
             elif path == "/api/agents":
                 self._send_json(200, {"agents": live.list_agents()})
+            elif path == "/api/presence":
+                ann = getattr(live, "_presence", None)
+                if ann is None:
+                    self._send_json(200, {"enabled": False,
+                                          "detail": "This site server is not announcing itself."})
+                else:
+                    self._send_json(200, ann.status_dict())
             elif path == "/api/gt-bridge":
                 b = live._gt_bridge
                 if b is None:
@@ -3557,6 +3568,23 @@ class _QuietThreadingHTTPServer(ThreadingHTTPServer):
         # Real bugs: keep default logging behavior
         super().handle_error(request, client_address)
 
+
+
+def _presence_summary(announcer) -> dict:
+    """Short UDP-announce status for /healthz. Never raises."""
+    if announcer is None:
+        return {"enabled": False, "announcing": False}
+    try:
+        st = announcer.status_dict()
+    except Exception as exc:
+        return {"enabled": True, "announcing": False, "error": str(exc)}
+    hints = st.get("hints") or []
+    return {
+        "enabled": True,
+        "announcing": bool(st.get("announcing")),
+        "listening": bool(st.get("listening")),
+        "error": hints[0] if hints else "",
+    }
 
 def main() -> None:
     try:
@@ -3913,10 +3941,11 @@ def main() -> None:
 
     if not args.no_presence:
         def _on_conflict(peers):
-            live = P.live_conflict_peers(peers)
-            if not live:
-                return
-            print("\n" + P.format_conflict_message(live), file=sys.stderr)
+            reachable = P.live_conflict_peers(peers)
+            if not reachable:
+                # Heard a server this PC cannot reach. Keep announcing.
+                return False
+            print("\n" + P.format_conflict_message(reachable), file=sys.stderr)
             print("Demoting: another site server appeared on the LAN. Exiting.",
                   file=sys.stderr)
             # Hard exit from daemon thread — dual primary is worse than a drop.
@@ -3929,7 +3958,9 @@ def main() -> None:
             group=args.presence_group,
             port=args.presence_port,
             on_conflict=_on_conflict,
+            on_log=lambda text: print(f"  {text}", file=sys.stderr, flush=True),
         )
+        live._presence = announcer
         announcer.start()
 
     def _startup_update_check() -> None:

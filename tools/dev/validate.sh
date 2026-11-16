@@ -42,6 +42,9 @@ PY="${PYTHON:-python3}"
 
 LOGDIR="$ROOT/scratch/validate"
 mkdir -p "$LOGDIR"
+# The live test server must not overwrite (and then delete) the real site
+# server's pid file in this user's WS Hub settings folder.
+export WIMS_SITE_SERVER_PID="$LOGDIR/site-server.pid"
 
 # --- live-run knobs (overridable from the environment) ---------------------
 IFACE="${WIMS_IFACE:-127.0.0.1}"
