@@ -90,11 +90,13 @@
 
   <h2>Spotted</h2>
   <p id="spot-status" class="hint" title="DX cluster spots. A click selects the station. It does not transmit and it does not retune a radio. Work still needs a live decode.">Cluster: off. Turn it on in Setup.</p>
+  <p id="spot-skim-line" class="hint" style="margin:0 0 4px 0" title="WS Skim decodes, heard here. SKIM rows are receive only: a click selects the station, and you work it from the call roster once your own WSJT-X decodes it."></p>
   <p id="spot-psk-line" class="hint" style="margin:0 0 4px 0"></p>
   <div id="spot-controls" class="controls">
     <span class="band-label">modes</span>
     <span id="spot-modes" class="band-checks" title="Show spots by inferred mode. Other is MSK144, Q65, FM, data, and unknown modes."></span>
-    <span id="spot-sources" class="band-checks" title="Show cluster spots. Leave this on. A later update will add a Skim box here.">
+    <span id="spot-sources" class="band-checks" title="Skim shows stations WS Skim heard here (green SKIM tag). Cluster shows DX cluster spots (gray CLU tag).">
+      <label><input type="checkbox" id="spot-show-skim" checked> Skim</label>
       <label><input type="checkbox" id="spot-show-cluster" checked> Cluster</label>
     </span>
   </div>

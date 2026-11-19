@@ -75,6 +75,7 @@ from wims.state.heard_grids import (  # noqa: E402
 from wims.state import last_log as last_log_pref  # noqa: E402
 from wims.integrations.logsource import N1mmLogSource  # noqa: E402
 from wims.integrations.cluster.client import ClusterService  # noqa: E402
+from wims.integrations.cluster.skim import SkimFeed  # noqa: E402
 from wims.integrations.cluster.modes import canonical_mode as _spot_mode  # noqa: E402
 from wims.integrations.cluster.parse import (  # noqa: E402
     valid_cluster_login as _cluster_login_ok,
@@ -252,6 +253,9 @@ class LiveFleet:
         self._heard = HeardGrids()
         # DX cluster spots. The thread starts from main(), not from tests.
         self._cluster = ClusterService()
+        # WS Skim: receive-only decodes. Never a WSJT-X instance.
+        self._skim = SkimFeed()
+        self.skim_pkts = 0
         self._maps: dict[str, ActivityMap] = {}    # per-instance decode-activity map
         self._decodes: deque = deque(maxlen=300)   # rolling fleet-wide decode log
         self._condition = condition
@@ -1869,6 +1873,32 @@ class LiveFleet:
                 calls.add(c)
         return calls
 
+    def observe_skim(self, msg, now, src_ip=None) -> bool:
+        """Take a datagram if it is from a skimmer. True means it was taken.
+
+        Skimmer ids come from Setup (default WS Skim's ``SKIM-*``), or WS
+        Skim's own mark. A skimmer's datagrams never reach the fleet, the
+        roster, the activity map, Reply, Configure, or the log grid fill.
+        A Skim decode that names a station becomes a SKIM spot.
+        """
+        patterns = self._cluster.skim_patterns()
+        with self._lock:
+            if not self._skim.is_skim(msg, patterns):
+                return False
+            self.skim_pkts += 1
+            mid = getattr(msg, "id", None) or ""
+            # Heard before Setup listed it (or before its mark arrived):
+            # take it out of the fleet so nobody can Reply to it.
+            if mid and mid in self._tracker.nodes:
+                self._tracker.nodes.pop(mid, None)
+                self._maps.pop(mid, None)
+            hit = self._skim.observe(
+                msg, now, src_ip=src_ip, own_calls=self._own_station_calls(),
+            )
+        if hit is not None:
+            self._cluster.add_skim(hit, now)
+        return True
+
     def observe_wsjtx(self, msg, now, src_ip, src_port=None):
         need_replay: tuple[str, list[tuple[str, int]]] | None = None
         grid_fix = None
@@ -2367,7 +2397,24 @@ class LiveFleet:
             entity_latlon=self._entity_latlon,
             live_grid=self._live_wsjtx_grid_locked() or None,
             decodes=list(self._decodes),
-        )
+            skim_decodes=self._skim.recent_decodes(now),
+            skim=self._skim.snapshot(now),
+        ) | {"skim_server": self._skim_server_address(now)}
+
+    def _skim_server_address(self, now: float) -> dict:
+        """This site server's name and LAN addresses, for the Setup hint
+        that says where to point WS Skim. Cached for a minute."""
+        cached = getattr(self, "_skim_addr_cache", None)
+        if cached and now - cached[0] < 60.0:
+            return cached[1]
+        try:
+            from wims.discovery.presence import list_lan_ipv4s
+            ips = list_lan_ipv4s()
+        except Exception:
+            ips = []
+        info = {"hostname": socket.gethostname(), "lan_ips": ips}
+        self._skim_addr_cache = (now, info)
+        return info
 
     def start_cluster(self) -> None:
         self._cluster.start(self._cluster_callsign)
@@ -2464,6 +2511,8 @@ class LiveFleet:
             "station_grid": saved.get("station_grid") or "",
             "psk_rank": bool(saved.get("psk_rank")),
             "show_cluster": bool(saved.get("show_cluster", True)),
+            "show_skim": bool(saved.get("show_skim", True)),
+            "skim_ids": saved.get("skim_ids") or "",
         }
 
     def select_spot(self, body: dict) -> dict:
@@ -2967,6 +3016,13 @@ def ingest_loop(
                     gt_bridge.handle_gt_datagram(data, addr, now=now)
                 elif s in wsjt_set:
                     msg = M.parse(data)
+                    if msg is not None and live.observe_skim(
+                        msg, now, addr[0] if addr else None,
+                    ):
+                        # WS Skim: receive-only spots. Not a WSJT-X
+                        # instance, and not forwarded to GridTracker, so
+                        # nothing can Reply to it.
+                        continue
                     if msg is not None:
                         # addr[1] is MessageClient's ephemeral control port — required for Reply.
                         # Coerce IPv4-mapped IPv6 here so Replay/Work never sendto() IPv6

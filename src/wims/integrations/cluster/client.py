@@ -45,6 +45,7 @@ from collections.abc import Callable
 from wims.engine import scoring as S
 from wims.integrations.cluster.parse import parse_spot, valid_cluster_login
 from wims.integrations.cluster.psk import PskOpenings, hearings_from_decodes
+from wims.integrations.cluster.skim import DEFAULT_SKIM_IDS, id_patterns, skim_line
 from wims.integrations.cluster.settings import (
     DEFAULT_TTL_S, MODE_FILTERS, allowed_bands, allowed_modes, known_nodes,
     load, save, sanitize,
@@ -281,7 +282,7 @@ class ClusterService:
             for key in (
                 "enabled", "node", "host", "port", "bands", "modes",
                 "qsy_cost", "station_call", "cluster_login", "station_grid",
-                "psk_rank", "show_cluster",
+                "psk_rank", "show_cluster", "show_skim", "skim_ids",
             ):
                 if key in body:
                     merged[key] = body[key]
@@ -305,7 +306,8 @@ class ClusterService:
                 self.login_sent = False
                 self.saw_lines = False
                 self.last_spot_at = None
-                self._book.clear()
+                # Skim rows are not from the cluster; keep them.
+                self._book.drop_cluster()
         if reconnect:
             self._close_socket()
             self._wake.set()
@@ -358,6 +360,21 @@ class ClusterService:
         with self._lock:
             self._selected = dict(selected) if selected else None
 
+    def skim_patterns(self) -> list[str]:
+        """Setup's skimmer UDP ids, as patterns (default WS Skim's)."""
+        with self._lock:
+            return id_patterns(self._settings.get("skim_ids"))
+
+    def add_skim(self, hit, now: float) -> None:
+        """One WS Skim decode heard here. Never touches a WSJT-X instance."""
+        with self._lock:
+            self._book.add_skim(
+                call=hit.call, band=hit.band, mode=hit.mode,
+                freq_hz=hit.freq_hz, grid=hit.grid, receiver=hit.receiver,
+                snr=hit.snr, now=now,
+            )
+            self._book.prune(now, DEFAULT_TTL_S)
+
     def ingest(self, line: str, now: float) -> bool:
         """Test helper. Parse one line into the book. No network."""
         spot = parse_spot(line)
@@ -374,7 +391,8 @@ class ClusterService:
     def public(self, *, now: float, callsign: str, our_grid: str | None,
                operations, classify, grid_for=None, rover_for=None,
                spotter_grid=None, entity_latlon=None, live_calls=None,
-               live_grid: str | None = None, decodes=None) -> dict:
+               live_grid: str | None = None, decodes=None,
+               skim_decodes=None, skim: dict | None = None) -> dict:
         with self._lock:
             settings = dict(self._settings)
             self._book.prune(now, DEFAULT_TTL_S)
@@ -417,22 +435,34 @@ class ClusterService:
             phase = "need_call" if not valid_cluster_login(wanted) else "connecting"
         local = []
         if settings.get("psk_rank") and home:
+            # Our own WSJT-X decodes and WS Skim decodes both show the
+            # band is open from here.
             local = hearings_from_decodes(
-                decodes or [], home_grid=home, now=now, grid_for=grid_for,
+                list(decodes or []) + list(skim_decodes or []),
+                home_grid=home, now=now, grid_for=grid_for,
             )
+
+        # Skim adds many local decodes. Hand each row only its own band's.
+        local_by_band: dict = {}
+        for sample in local:
+            local_by_band.setdefault(sample.band, []).append(sample)
 
         def opening_for(band, az):
             if not settings.get("psk_rank"):
                 return None
             return self._openings.opening(
-                band=band, az=az, now=now, local=local,
+                band=band, az=az, now=now, local=local_by_band.get(band, []),
             )
 
         rows, drops = ([], {"spot_count": 0})
+        cluster_on = bool(settings.get("enabled"))
+        has_skim = any(group.skimmers for group in groups)
         can_list = (
-            settings.get("enabled") and not bands_empty and not modes_empty
+            (cluster_on or has_skim) and not bands_empty and not modes_empty
         )
-        if can_list and phase == "connected":
+        if can_list and ((cluster_on and phase == "connected") or groups):
+            # Still show spots we already have while reconnecting, and
+            # Skim spots with the cluster off.
             rows, drops = build_list(
                 groups, now=now, ttl_s=DEFAULT_TTL_S, our_grid=our_grid,
                 allowed=allowed, operations=operations, classify=classify,
@@ -441,23 +471,12 @@ class ClusterService:
                 allowed_modes=modes,
                 entity_latlon=entity_latlon,
                 opening_for=opening_for if settings.get("psk_rank") else None,
-                show_cluster=bool(settings.get("show_cluster", True)),
-            )
-        elif can_list and groups:
-            # Still show spots we already have while reconnecting.
-            rows, drops = build_list(
-                groups, now=now, ttl_s=DEFAULT_TTL_S, our_grid=our_grid,
-                allowed=allowed, operations=operations, classify=classify,
-                grid_for=grid_for, rover_for=rover_for, spotter_grid=spotter_grid,
-                qsy_cost=settings.get("qsy_cost", 8),
-                allowed_modes=modes,
-                entity_latlon=entity_latlon,
-                opening_for=opening_for if settings.get("psk_rank") else None,
-                show_cluster=bool(settings.get("show_cluster", True)),
+                show_cluster=cluster_on and bool(settings.get("show_cluster", True)),
+                show_skim=bool(settings.get("show_skim", True)),
             )
         spot_count = int(drops.get("spot_count") or 0)
         have_grid = bool((our_grid or "").strip())
-        if phase == "connected" and not have_grid:
+        if not have_grid:
             rows = []
         line = status_line(
             enabled=bool(settings.get("enabled")), phase=phase,
@@ -507,6 +526,11 @@ class ClusterService:
             "station_grid": settings.get("station_grid") or "",
             "psk_rank": bool(settings.get("psk_rank")),
             "show_cluster": bool(settings.get("show_cluster", True)),
+            "show_skim": bool(settings.get("show_skim", True)),
+            "skim_ids": settings.get("skim_ids") or DEFAULT_SKIM_IDS,
+            "skim_line": (skim or {}).get("line") or skim_line([], 0),
+            "skim_receivers": (skim or {}).get("receivers") or [],
+            "skim_count": sum(1 for row in rows if row.get("heard_here")),
             "psk_line": psk_snap["status_line"],
             "callsign": login,
             "call_warning": call_mismatch_warning(

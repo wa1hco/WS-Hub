@@ -3209,13 +3209,18 @@ function spotQsy(row) {
 function spotSource(row) {
   const tag = (row && row.source_tag) || (row && row.source === "skim" ? "SKIM" : "CLU");
   const kind = tag === "SKIM" ? "skim" : "clu";
-  return `<span class="spot-tag ${kind}">${esc(tag)}</span>`;
+  let tip = tag === "SKIM"
+    ? "Heard here by WS Skim" + ((row.skim_receivers || []).length ? " (" + row.skim_receivers.join(", ") + ")" : "") +
+      (row.skim_snr != null ? ", " + (row.skim_snr > 0 ? "+" : "") + row.skim_snr + " dB" : "") +
+      (row.also_cluster ? ". Also on the DX cluster." : ".") + " Receive only."
+    : "DX cluster spot. Not heard here yet.";
+  return `<span class="spot-tag ${kind}" title="${escAttr(tip)}">${esc(tag)}</span>`;
 }
 
 const SPOT_EXTRA = {
   source: {
     key: "source", label: "", cls: "spot-src",
-    hint: "Where this spot came from. CLU is the DX cluster. SKIM is a local skimmer, later.",
+    hint: "Where this spot came from. SKIM (green) means WS Skim heard it here. CLU (gray) is the DX cluster only.",
     cell: spotSource,
   },
   spotter: {
@@ -3253,6 +3258,7 @@ function spotTitle(row) {
     factors,
     row.km != null ? ((row.bearing_source === "dxcc" ? "~" : "") + row.km + " km") : "",
     who ? ("Spotters: " + who) : "",
+    row.heard_here ? "Heard here by WS Skim. Receive only." : "",
     "Click selects this station. It does not transmit or retune. Work needs a live decode.",
   ].filter(Boolean).join("\n");
 }
@@ -3340,9 +3346,13 @@ function spotSaveModes() {
 let _spotSourcesWired = false;
 function spotSyncSourceChecks(c) {
   const box = $("spot-show-cluster");
+  const skim = $("spot-show-skim");
   if (!box) return;
   if (c && c.show_cluster != null && document.activeElement !== box) {
     box.checked = !!c.show_cluster;
+  }
+  if (skim && c && c.show_skim != null && document.activeElement !== skim) {
+    skim.checked = !!c.show_skim;
   }
   if (_spotSourcesWired) return;
   _spotSourcesWired = true;
@@ -3353,6 +3363,15 @@ function spotSyncSourceChecks(c) {
       body: JSON.stringify({show_cluster: !!box.checked}),
     }).catch(() => {});
   });
+  if (skim) {
+    skim.addEventListener("change", () => {
+      fetch("/api/cluster", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({show_skim: !!skim.checked}),
+      }).catch(() => {});
+    });
+  }
 }
 
 function spotSyncModeChecks(c) {
@@ -3390,6 +3409,8 @@ function renderSpotted(c) {
   if (c.detail) status.title = c.detail;
   const pskLine = $("spot-psk-line");
   if (pskLine) pskLine.textContent = c.psk_line || "";
+  const skimLine = $("spot-skim-line");
+  if (skimLine) skimLine.textContent = c.skim_line || "";
   spotSyncSourceChecks(c);
   const note = $("spot-note");
   if (note && c.selected_line) note.textContent = c.selected_line;
@@ -3407,8 +3428,11 @@ function renderSpotted(c) {
     return (v || "").toString().toUpperCase();
   };
   rows.sort((a, b) => {
-    // Likely-workable spots stay first, even when the operator sorts by score.
+    // Heard-here (SKIM) spots, then likely-workable spots, stay first,
+    // even when the operator sorts by score.
     if (_spotSort.key === "score") {
+      const ah = a.heard_here ? 0 : 1, bh = b.heard_here ? 0 : 1;
+      if (ah !== bh) return ah - bh;
       const ao = a.open_path === true ? 0 : a.open_path === false ? 1 : 0;
       const bo = b.open_path === true ? 0 : b.open_path === false ? 1 : 0;
       if (ao !== bo) return ao - bo;
@@ -3428,7 +3452,7 @@ function renderSpotted(c) {
     if (selCall && row.call === selCall && row.band === selBand) classes.push("spot-sel");
     if (row.is_new_mult) classes.push("mult");
     if (row.chase === "unconfirmed") classes.push("unconfirmed");
-    if (row.dim || row.open_path === false) classes.push("spot-dim");
+    if (!row.heard_here && (row.dim || row.open_path === false)) classes.push("spot-dim");
     return `<tr class="${classes.join(" ")}" data-call="${escAttr(row.call)}" ` +
       `data-grid="${escAttr(row.grid || "")}" data-band="${escAttr(row.band || "")}" ` +
       `data-mode="${escAttr(row.mode || "")}" title="${escAttr(spotTitle(row))}">` +
@@ -3587,9 +3611,63 @@ function clusterWire() {
   });
 }
 
+// -- Skim receivers (Setup) ------------------------------------------------- //
+let _skimWired = false;
+let _skimReady = false;
+function skimSave() {
+  const field = $("skim-ids");
+  const line = $("skim-setup-line");
+  if (!field) return;
+  fetch("/api/cluster", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({skim_ids: field.value.trim()}),
+  }).then(r => r.json()).then(j => {
+    if (j && j.ok) {
+      if (document.activeElement !== field && j.skim_ids != null) field.value = j.skim_ids;
+      if (line) line.textContent = "Saved. Skimmer ids: " + (j.skim_ids || "");
+    } else if (line) {
+      line.textContent = (j && j.message) || "Could not save. Try again.";
+    }
+  }).catch(() => {
+    if (line) line.textContent = "Could not save. Try again.";
+  });
+}
+
+function renderSkimSetup(c) {
+  const field = $("skim-ids");
+  if (!field) return;
+  if (!_skimWired) {
+    _skimWired = true;
+    const btn = $("skim-save");
+    if (btn) btn.addEventListener("click", skimSave);
+    field.addEventListener("change", skimSave);
+  }
+  c = c || {};
+  if (!_skimReady && c.skim_ids != null) {
+    _skimReady = true;
+    if (document.activeElement !== field) field.value = c.skim_ids || "";
+  }
+  const line = $("skim-setup-line");
+  if (line && !(line.textContent || "").startsWith("Saved")) {
+    line.textContent = c.skim_line || "";
+  }
+  const hint = $("skim-server-hint");
+  const srv = c.skim_server || {};
+  if (hint) {
+    const ips = (srv.lan_ips || []).filter(Boolean);
+    hint.textContent = srv.hostname
+      ? " This site server is " + srv.hostname +
+        (ips.length ? " (" + ips.join(", ") + ")" : "") +
+        ". Its address also works as Host."
+      : "";
+  }
+}
+
 let _clusterReady = false;
 function renderCluster(c) {
   renderSpotted(c);
+  renderSkimSetup(c);
   const host = $("cluster-host");
   const line = $("cluster-setup-line");
   if (line && c && !line.dataset.err) {
