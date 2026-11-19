@@ -2463,7 +2463,9 @@ function rosSetNeed(mode, save) {
   for (const o of opts) {
     if (o.dataset.value === m) pick = o;
   }
-  if (!pick && opts.length) pick = opts[0];
+  // Unknown value: fall back to Needed (the default), not the first row,
+  // which is All.
+  if (!pick) pick = opts.find((o) => o.dataset.value === "needed") || opts[0] || null;
   if (!pick) return;
   menu.dataset.value = pick.dataset.value;
   for (const o of opts) {
