@@ -540,7 +540,8 @@ def build_list(
         open_reason = ""
         psk_count = 0
         local_count = 0
-        if opening_for is not None:
+        if opening_for is not None and not as_skim:
+            # A SKIM row was heard here, so it needs no opening check.
             try:
                 found = opening_for(group.band, az_dx)
             except Exception:

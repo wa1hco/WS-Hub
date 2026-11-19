@@ -442,11 +442,16 @@ class ClusterService:
                 home_grid=home, now=now, grid_for=grid_for,
             )
 
+        # Skim adds many local decodes. Hand each row only its own band's.
+        local_by_band: dict = {}
+        for sample in local:
+            local_by_band.setdefault(sample.band, []).append(sample)
+
         def opening_for(band, az):
             if not settings.get("psk_rank"):
                 return None
             return self._openings.opening(
-                band=band, az=az, now=now, local=local,
+                band=band, az=az, now=now, local=local_by_band.get(band, []),
             )
 
         rows, drops = ([], {"spot_count": 0})
