@@ -566,7 +566,7 @@ def build_list(
                 f"{ago} s ago. Receive only."
             )
             open_path = True
-            open_reason = skim_reason + (f" {open_reason}" if open_reason else "")
+            open_reason = skim_reason
         cluster_calls = sorted(group.spotters)
         spotter_calls = cluster_calls + [f"Skim {name}" for name in skim_names]
         if as_skim:
