@@ -180,6 +180,32 @@
   <p id="cluster-psk-line" class="hint" style="font-size:12px;margin:0 0 4px 0"></p>
   <p id="cluster-call-warning" class="warn" style="font-size:12px;margin:0 0 12px 0" hidden></p>
 
+  <h2>Skim receivers</h2>
+  <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0">
+    WS Skim decodes the whole band and sends what it hears the same way
+    WSJT-X does. WS Hub shows those stations on the Operate Spotted list
+    with a green SKIM tag, first in the list, because they were heard here.
+    A skimmer is receive only. It is never listed as a WSJT-X program, and
+    nothing in WS Hub can reply to it or set it up. A click on a SKIM spot
+    selects the station, the same as a cluster spot. It does not transmit,
+    retune, or turn an antenna. Skim spots work with the DX cluster off.
+  </p>
+  <p class="hint" style="font-size:12px;margin:0 0 6px 0">
+    <b>Where to point WS Skim:</b> in WS Skim, open Reporting, check
+    WSJT-X UDP Enable, and set Port to 2237. For Host, use
+    <b>224.0.0.73</b>, which reaches the site server from any PC on this
+    network. <b>127.0.0.1</b> works only when WS Skim runs on the same PC
+    as the site server.
+    <span id="skim-server-hint"></span>
+  </p>
+  <div class="syncrow" style="align-items:center;gap:10px;flex-wrap:wrap">
+    <label style="font-size:13px" title="Programs whose WSJT-X UDP id matches one of these are skimmers. Separate with commas. * matches anything. Blank restores the usual list. WS Skim's ids start with SKIM-.">
+      Skimmer ids <input id="skim-ids" size="28" spellcheck="false" autocomplete="off" placeholder="SKIM-*, WS-Skim*">
+    </label>
+    <button type="button" id="skim-save">Save</button>
+  </div>
+  <p id="skim-setup-line" class="hint" style="font-size:12px;margin:6px 0 12px 0"></p>
+
   <h2>Networking checklist</h2>
   <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0">
     Flat LAN; WSJT-X multicast by band port; N1MM external broadcast to WS Hub; see

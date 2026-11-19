@@ -64,15 +64,30 @@ class SpotGroup:
     spotters: dict[str, float] = field(default_factory=dict)
     last_seen: float = 0.0
     hhmm: str = ""
+    # WS Skim receivers that decoded this station here: label -> last time.
+    skimmers: dict[str, float] = field(default_factory=dict)
+    skim_seen: float = 0.0
+    skim_snr: int | None = None
+    skim_freq_hz: int = 0
+
+
+def _hhmm(now: float) -> str:
+    import time as _time
+    return _time.strftime("%H%M", _time.gmtime(now))
 
 
 class SpotBook:
-    """One row per call and band. Later spots refresh the row."""
+    """One row per call and band. Later spots refresh the row.
+
+    A cluster spot and a WS Skim decode of the same call and band share one
+    row. While Skim has heard it within the spot life, the row is a SKIM
+    row and keeps Skim's true frequency and mode.
+    """
 
     def __init__(self) -> None:
         self._rows: dict[tuple[str, str], SpotGroup] = {}
 
-    def add(self, spot: ParsedSpot, now: float) -> None:
+    def add(self, spot: ParsedSpot, now: float, ttl: float = DEFAULT_TTL_S) -> None:
         mode = infer_mode(spot.freq_hz, spot.comment, spot.band)
         key = (spot.call, spot.band)
         row = self._rows.get(key)
@@ -83,14 +98,51 @@ class SpotBook:
             )
             self._rows[key] = row
         else:
-            row.mode = mode
-            row.freq_hz = spot.freq_hz
+            skim_fresh = bool(row.skimmers) and (now - row.skim_seen) <= ttl
+            if not skim_fresh:
+                # Skim's decoded frequency and mode beat a typed cluster line.
+                row.mode = mode
+                row.freq_hz = spot.freq_hz
             row.comment = spot.comment
-            row.last_seen = now
+            row.last_seen = max(row.last_seen, now)
             row.hhmm = spot.hhmm
             if spot.grid and (not row.grid or len(spot.grid) >= len(row.grid)):
                 row.grid = spot.grid
         row.spotters[spot.spotter] = now
+
+    def add_skim(self, *, call: str, band: str, mode: str, freq_hz: int,
+                 grid: str | None, receiver: str, snr: int | None,
+                 now: float) -> None:
+        """A WS Skim decode heard here. Upgrades a cluster row to SKIM."""
+        call = (call or "").strip().upper()
+        if not call or not band:
+            return
+        key = (call, band)
+        row = self._rows.get(key)
+        if row is None:
+            row = SpotGroup(
+                call=call, band=band, mode=mode, freq_hz=int(freq_hz),
+                comment="", grid=grid or None, last_seen=now, hhmm=_hhmm(now),
+            )
+            self._rows[key] = row
+        row.mode = mode or row.mode
+        row.freq_hz = int(freq_hz) or row.freq_hz
+        row.skim_freq_hz = int(freq_hz)
+        row.last_seen = max(row.last_seen, now)
+        row.skim_seen = now
+        row.skim_snr = None if snr is None else int(snr)
+        row.skimmers[receiver or "Skim"] = now
+        if grid and (not row.grid or len(grid) >= len(row.grid)):
+            row.grid = grid
+
+    def drop_cluster(self) -> None:
+        """Forget cluster spots (cluster turned off). Skim rows stay."""
+        for key in list(self._rows):
+            row = self._rows[key]
+            if row.skimmers:
+                row.spotters.clear()
+            else:
+                del self._rows[key]
 
     def prune(self, now: float, ttl: float = DEFAULT_TTL_S) -> None:
         dead = [key for key, row in self._rows.items() if now - row.last_seen > ttl]
@@ -337,6 +389,7 @@ def build_list(
     entity_latlon=None,
     opening_for=None,
     show_cluster: bool = True,
+    show_skim: bool = True,
 ) -> tuple[list[dict], dict]:
     """Rows for the Spotted list, and counts of why others were left off.
 
@@ -347,6 +400,11 @@ def build_list(
 
     ``spot_count`` is every fresh spot on a selected band and mode. ``needed``
     is the list the operator sees.
+
+    A row WS Skim heard within ``ttl_s`` is a SKIM row (green tag, never
+    dimmed, sorted first: it was heard here). Skim rows skip the band range
+    gate, because a decode here proves the path. Other rows are CLU rows.
+    The Skim and Cluster checkboxes hide each kind.
     """
     weights = S.cluster_weights(qsy_cost)
     rows: list[dict] = []
@@ -360,8 +418,17 @@ def build_list(
             continue
         if allowed_modes is not None and mode_bucket(group.mode) not in allowed_modes:
             continue
-        if not show_cluster:
+        heard_here = bool(group.skimmers) and (now - group.skim_seen) <= ttl_s
+        if heard_here and show_skim:
+            as_skim = True
+        elif group.spotters and show_cluster:
+            as_skim = False
+        else:
             continue
+        if as_skim:
+            age = max(0.0, now - group.skim_seen)
+        elif group.spotters:
+            age = max(0.0, now - max(group.spotters.values()))
         drops["spot_count"] += 1
         grid = (group.grid or "").strip().upper() or None
         remembered: dict = {}
@@ -387,7 +454,7 @@ def build_list(
             # Centroid distance is not a hard in-range gate.
         else:
             km = distance_km(home, grid)
-            if not in_range(km, group.band, group.mode):
+            if not as_skim and not in_range(km, group.band, group.mode):
                 drops["range"] += 1
                 continue
             verdict = classify(group.call, group.band, grid, group.mode)
@@ -421,6 +488,10 @@ def build_list(
         if best is not None:
             near_amt = spotter_near_amount(best)
             near_detail = f"{best_call} {int(best)} km away"
+        skim_names = sorted(group.skimmers) if as_skim else []
+        if as_skim:
+            near_amt = spotter_near_amount(0.0)
+            near_detail = "heard here by WS Skim " + ", ".join(skim_names)
         if bearing_source == "dxcc":
             # Do not score an untrustworthy centroid distance.
             fit = 0.0
@@ -438,7 +509,7 @@ def build_list(
             needs_qsy=needs_qsy,
             age_s=age,
             ttl_s=ttl_s,
-            spotter_count=len(group.spotters),
+            spotter_count=len(group.spotters) + len(skim_names),
             spotter_near=near_amt,
             distance_fit=fit,
             need_detail=getattr(verdict, "need_reason", "") or "",
@@ -485,6 +556,24 @@ def build_list(
                     open_reason = getattr(found, "reason", "") or ""
                     psk_count = int(getattr(found, "psk_count", 0) or 0)
                     local_count = int(getattr(found, "local_count", 0) or 0)
+        skim_reason = ""
+        if as_skim:
+            snr = group.skim_snr
+            snr_words = f", {snr:+d} dB" if snr is not None else ""
+            ago = int(max(0.0, now - group.skim_seen))
+            skim_reason = (
+                f"Heard here by WS Skim {', '.join(skim_names)}{snr_words}, "
+                f"{ago} s ago. Receive only."
+            )
+            open_path = True
+            open_reason = skim_reason + (f" {open_reason}" if open_reason else "")
+        cluster_calls = sorted(group.spotters)
+        spotter_calls = cluster_calls + [f"Skim {name}" for name in skim_names]
+        if as_skim:
+            latest_skim = max(group.skimmers.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            spotter = f"Skim {latest_skim}"
+        else:
+            spotter = _latest_spotter(group.spotters)
         rows.append({
             "call": group.call,
             "country": place["country"],
@@ -519,24 +608,31 @@ def build_list(
             "score": scored.total,
             "age": round(max(0.0, age), 1),
             "age_s": int(max(0, age)),
-            "spotter": _latest_spotter(group.spotters),
-            "spotters": len(group.spotters),
-            "spotter_calls": sorted(group.spotters),
+            "spotter": spotter,
+            "spotters": len(spotter_calls),
+            "spotter_calls": spotter_calls,
             "km": None if km is None else int(round(km)),
             "factors": [
                 {"name": f.name, "contribution": f.contribution, "detail": f.detail}
                 for f in scored.factors
             ],
-            "source": "cluster",
-            "source_tag": "CLU",
+            "source": "skim" if as_skim else "cluster",
+            "source_tag": "SKIM" if as_skim else "CLU",
+            "heard_here": as_skim,
+            "also_cluster": bool(as_skim and group.spotters),
+            "skim_receivers": skim_names,
+            "skim_snr": group.skim_snr if as_skim else None,
+            "skim_reason": skim_reason,
             "open_path": open_path,
             "open_reason": open_reason,
             "psk_count": psk_count,
             "local_count": local_count,
-            "dim": open_path is False,
+            "dim": (not as_skim) and open_path is False,
         })
-    # Likely-workable spots first, then score. Unlikely spots stay listed.
+    # Heard here first, then likely-workable, then score. Unlikely spots
+    # stay listed.
     rows.sort(key=lambda row: (
+        0 if row.get("heard_here") else 1,
         0 if row.get("open_path") is True else 1 if row.get("open_path") is False else 0,
         -row["score"],
         row["age_s"],

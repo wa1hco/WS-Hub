@@ -44,6 +44,7 @@ from pathlib import Path
 from wims.core.bands import BAND_ORDER
 from wims.integrations.cluster.parse import valid_cluster_login, valid_login_call
 from wims.integrations.cluster.psk import clean_grid
+from wims.integrations.cluster.skim import DEFAULT_SKIM_IDS, clean_skim_ids
 
 SCHEMA = 2
 DEFAULT_HOST = "k1ttt.net"
@@ -95,6 +96,9 @@ def default_settings() -> dict:
         "station_grid": "",
         "psk_rank": True,
         "show_cluster": True,
+        # WS Skim: receive-only decodes, shown as SKIM spots.
+        "show_skim": True,
+        "skim_ids": DEFAULT_SKIM_IDS,
     }
 
 
@@ -315,6 +319,10 @@ def sanitize(data: dict | None) -> dict:
         out["psk_rank"] = bool(raw.get("psk_rank"))
     if "show_cluster" in raw:
         out["show_cluster"] = bool(raw.get("show_cluster"))
+    if "show_skim" in raw:
+        out["show_skim"] = bool(raw.get("show_skim"))
+    if "skim_ids" in raw:
+        out["skim_ids"] = clean_skim_ids(raw.get("skim_ids"))
     return out
 
 
