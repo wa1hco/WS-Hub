@@ -4187,6 +4187,11 @@ def main() -> None:
             live.stop_cluster()
         except Exception:
             pass
+        try:
+            # Heard grids are written on a timer; keep the last few.
+            live._heard.flush()
+        except Exception:
+            pass
         if announcer is not None:
             announcer.stop()
         try:

@@ -178,6 +178,10 @@ def test_persistence_round_trip():
     store = HeardGrids(path)
     store.note("CX4BAN", "GF15", "20m", t0)
     store.note("CX4BAN", "GF15xx", "20m", t0 + 30)
+    # A hearing is written later by a timer, or at once by flush().
+    assert store.pending()
+    assert store.flush() is True
+    assert not store.pending()
     again = HeardGrids(path)
     assert again.current("CX4BAN", t0 + 60) == "GF15XX"
     found = again.lookup("CX4BAN", t0 + 60)

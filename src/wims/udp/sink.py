@@ -162,9 +162,24 @@ def rejoin_multicast(sock: socket.socket, group: str, host: str = "0.0.0.0") -> 
     return joined
 
 
+# Receive buffer asked for on WSJT-X listen sockets. WS Skim and a busy
+# band can send hundreds of datagrams in a burst at the end of a period;
+# the OS default (about 200 KB) holds only a few hundred. The OS may grant
+# less (Linux caps it at net.core.rmem_max); that is fine.
+RCVBUF_BYTES = 4 * 1024 * 1024
+
+
+def _ask_big_rcvbuf(sock: socket.socket, size: int = RCVBUF_BYTES) -> None:
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, int(size))
+    except (OSError, ValueError):
+        pass
+
+
 def open_socket(host: str, port: int, multicast: str | None) -> socket.socket:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    _ask_big_rcvbuf(sock)
     bind_host = multicast if multicast else host
     # On Windows a multicast member binds the group address (or "") to receive it.
     sock.bind(("" if multicast else bind_host, port))
