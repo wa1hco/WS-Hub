@@ -58,14 +58,25 @@ comment.
 
 The file is JSON next to the other WS Hub preferences. ``WIMS_HEARD_GRIDS``
 points at another file; that is for tests. Operator docs do not mention it.
+
+Speed: a busy band hears a grid every second or so, and the file holds
+tens of thousands of calls. A new hearing only marks the store changed. A
+background timer writes the file at most every ``SAVE_DELAY_S``, and the
+slow part (turning every time into text) runs outside the store lock.
+``flush()`` writes at once; the site server calls it on the way out.
+Expiry sweeps the whole store at most every ``SWEEP_EVERY_S``; a lookup
+still expires the one call it reads, so answers do not change.
 """
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import re
 import threading
+import time
+import weakref
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,6 +102,10 @@ QSO_PREAMBLE_S = 90
 HISTORY_KEEP = 4
 # A hearing a couple of minutes after the log timestamp still counts.
 CLOCK_SLACK_S = 120
+# A new hearing is written to the file at most this long after it arrives.
+SAVE_DELAY_S = 20.0
+# The full expiry sweep runs at most this often (store time, seconds).
+SWEEP_EVERY_S = 60.0
 SCHEMA = 1
 GRID_REMEMBERED = "grid remembered"
 # Roster words for a rover square that was not heard in this QSO.
@@ -167,7 +182,9 @@ def _hhmm(ts: float) -> str:
 
 
 def _dump_time(ts: float) -> str:
-    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Same text as datetime(...).strftime("%Y-%m-%dT%H:%M:%SZ"), about
+    # twice as fast; the file holds one per hearing.
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
 
 
 def _load_time(text: str) -> float | None:
@@ -298,8 +315,16 @@ class HeardGrids:
         self.path = Path(path) if path else None
         self._lock = threading.Lock()
         self._calls: dict[str, _CallMemory] = {}
+        # Store time of the last full expiry sweep (None: never).
+        self._swept_at: float | None = None
+        # Changed since the last write; a timer is pending to write it.
+        self._dirty = False
+        self._timer: threading.Timer | None = None
+        # One writer at a time, so two flushes cannot interleave.
+        self._write_lock = threading.Lock()
         if self.path is not None:
             self.load()
+            _LIVE_STORES.add(self)
 
     def note(self, call: str, grid: str, band: str, when: float) -> bool:
         call_u = (call or "").strip().upper()
@@ -307,13 +332,13 @@ class HeardGrids:
         if not call_u or not _GRID_OK.match(grid_u) or grid_u == "RR73":
             return False
         with self._lock:
-            self._expire(when)
-            entry = self._calls.get(call_u)
+            self._maybe_sweep(when)
+            entry = self._entry_locked(call_u, when)
             if entry is None:
                 entry = _CallMemory()
                 self._calls[call_u] = entry
             entry.hear(grid_u, (band or "?").strip() or "?", float(when))
-            self._save()
+            self._mark_dirty_locked()
         return True
 
     def note_message(self, message: str | None, band: str, when: float) -> bool:
@@ -379,8 +404,7 @@ class HeardGrids:
         if not call_u:
             return GridLookup()
         with self._lock:
-            self._expire(when)
-            entry = self._calls.get(call_u)
+            entry = self._entry_locked(call_u, when)
             if entry is None or not entry.history:
                 return GridLookup()
             rover = self._is_rover_locked(call_u, entry)
@@ -408,8 +432,7 @@ class HeardGrids:
         if call_u.endswith("/R"):
             return True
         with self._lock:
-            self._expire(when)
-            entry = self._calls.get(call_u)
+            entry = self._entry_locked(call_u, when)
             if entry is None:
                 return False
             return self._is_rover_locked(call_u, entry)
@@ -418,8 +441,7 @@ class HeardGrids:
         """Newest square at ``when``, ignoring the rover log window."""
         call_u = (call or "").strip().upper()
         with self._lock:
-            self._expire(when)
-            entry = self._calls.get(call_u)
+            entry = self._entry_locked(call_u, when)
             if entry is None or not entry.history:
                 return None
             usable = [h for h in entry.history if h.last_utc <= when + CLOCK_SLACK_S]
@@ -501,23 +523,46 @@ class HeardGrids:
         with self._lock:
             self._calls = loaded
 
-    def _expire(self, when: float) -> None:
-        dead: list[str] = []
-        for call, entry in self._calls.items():
+    @staticmethod
+    def _expire_entry(entry: _CallMemory, when: float) -> bool:
+        """Drop old hearings from one call. True when the call is dead."""
+        if entry.history and any(
+            when - h.last_utc > MAX_AGE_S for h in entry.history
+        ):
             entry.history = [
                 h for h in entry.history if when - h.last_utc <= MAX_AGE_S
             ]
-            if entry.history:
-                continue
-            last = entry.exchange_last
-            if (
-                last is not None
-                and abs(when - last) <= QSO_WINDOW_S
-            ):
-                continue
-            dead.append(call)
+        if entry.history:
+            return False
+        last = entry.exchange_last
+        return not (last is not None and abs(when - last) <= QSO_WINDOW_S)
+
+    def _entry_locked(self, call_u: str, when: float) -> _CallMemory | None:
+        """The call's memory, expired as of ``when`` (caller holds the lock).
+
+        Same answer as a full sweep for this call, at the cost of one entry.
+        """
+        entry = self._calls.get(call_u)
+        if entry is None:
+            return None
+        if self._expire_entry(entry, when):
+            del self._calls[call_u]
+            return None
+        return entry
+
+    def _maybe_sweep(self, when: float) -> None:
+        last = self._swept_at
+        if last is None or abs(when - last) >= SWEEP_EVERY_S:
+            self._expire(when)
+
+    def _expire(self, when: float) -> None:
+        dead = [
+            call for call, entry in self._calls.items()
+            if self._expire_entry(entry, when)
+        ]
         for call in dead:
             del self._calls[call]
+        self._swept_at = when
 
     def _in_this_qso(self, entry: _CallMemory, latest: SquareHearing,
                      when: float) -> bool:
@@ -573,34 +618,108 @@ class HeardGrids:
             f"before this contact."
         )
 
-    def _dump(self) -> dict:
+    def _rows_locked(self) -> list[tuple[str, list[tuple]]]:
+        """Plain copy of every hearing (caller holds the lock). Cheap; the
+        text formatting happens later, outside the lock."""
+        return [
+            (call, [
+                (h.grid, h.first_utc, h.last_utc, h.first_band, h.last_band)
+                for h in entry.history
+            ])
+            for call, entry in self._calls.items()
+            if entry.history
+        ]
+
+    @staticmethod
+    def _dump_rows(rows: list[tuple[str, list[tuple]]]) -> dict:
         calls = {}
-        for call, entry in sorted(self._calls.items()):
-            if not entry.history:
-                continue
+        for call, history in sorted(rows, key=lambda r: r[0]):
             calls[call] = {
                 "history": [
                     {
-                        "grid": h.grid,
-                        "first_utc": _dump_time(h.first_utc),
-                        "last_utc": _dump_time(h.last_utc),
-                        "first_band": h.first_band,
-                        "last_band": h.last_band,
+                        "grid": grid,
+                        "first_utc": _dump_time(first),
+                        "last_utc": _dump_time(last),
+                        "first_band": first_band,
+                        "last_band": last_band,
                     }
-                    for h in entry.history
+                    for grid, first, last, first_band, last_band in history
                 ],
             }
         return {"schema": SCHEMA, "calls": calls}
 
-    def _save(self) -> None:
+    def _mark_dirty_locked(self) -> None:
+        """Note a change; write it within ``SAVE_DELAY_S`` (caller holds the lock)."""
         if self.path is None:
             return
+        self._dirty = True
+        if self._timer is not None:
+            return
+        timer = threading.Timer(SAVE_DELAY_S, self._timer_fired)
+        timer.daemon = True
+        timer.name = "wims-heard-grids-save"
+        self._timer = timer
+        timer.start()
+
+    def _timer_fired(self) -> None:
+        with self._lock:
+            self._timer = None
+        self.flush()
+
+    def pending(self) -> bool:
+        """True when a hearing has not been written to the file yet."""
+        with self._lock:
+            return self._dirty
+
+    def flush(self, *, create_dir: bool = True) -> bool:
+        """Write the file now if anything changed. True when written."""
+        if self.path is None:
+            return False
+        with self._write_lock:
+            with self._lock:
+                if not self._dirty:
+                    return False
+                if self._timer is not None:
+                    self._timer.cancel()
+                    self._timer = None
+                rows = self._rows_locked()
+                self._dirty = False
+            if not self._write(rows, create_dir=create_dir):
+                with self._lock:
+                    self._dirty = True
+                return False
+            return True
+
+    def _write(self, rows, *, create_dir: bool = True) -> bool:
+        if self.path is None:
+            return False
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+            if create_dir:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+            elif not self.path.parent.is_dir():
+                return False
             tmp = self.path.with_suffix(self.path.suffix + ".tmp")
             tmp.write_text(
-                json.dumps(self._dump(), indent=1) + "\n", encoding="utf-8",
+                json.dumps(self._dump_rows(rows), indent=1) + "\n",
+                encoding="utf-8",
             )
             os.replace(tmp, self.path)
         except OSError:
-            return
+            return False
+        return True
+
+
+# Stores with a file. On a normal exit, anything not yet written is saved.
+_LIVE_STORES: "weakref.WeakSet[HeardGrids]" = weakref.WeakSet()
+
+
+def flush_all() -> None:
+    for store in list(_LIVE_STORES):
+        try:
+            # Never recreate a folder that is gone (a finished test).
+            store.flush(create_dir=False)
+        except Exception:
+            pass
+
+
+atexit.register(flush_all)
