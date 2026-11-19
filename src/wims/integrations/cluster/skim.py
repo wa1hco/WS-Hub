@@ -20,7 +20,11 @@
 
 WS Skim sends its decodes in the WSJT-X UDP format (Heartbeat, Status,
 Decode, Clear, Close), one emulated instance per section of the band. Its
-UDP ids look like ``SKIM-FLEX-40m-FT8`` or ``SKIM-FLEX-40m-FT8-7075``.
+UDP ids look like ``SKIM-FLEX-40m-FT8-74`` (the last part is the section
+dial in kHz within the band; older WS Skim builds sent ``SKIM-FLEX-40m-FT8``
+or ``SKIM-FLEX-40m-FT8-7075``). Nothing here reads band, mode or dial from
+the id: the band comes from Status dial plus the decode offset, and an id
+that sends Close is dropped.
 Each Status carries that section's dial, and each Decode's
 ``delta_frequency`` is the audio offset from that dial, so the true RF is
 dial + delta_frequency. WS Skim sends the Status right before each Decode.
@@ -136,7 +140,7 @@ def _base(call: str) -> str:
 
 
 def receiver_label(mid: str | None) -> str:
-    """``SKIM-FLEX-40m-FT8-7075`` -> ``FLEX``. Other ids stay as they are."""
+    """``SKIM-FLEX-40m-FT8-74`` -> ``FLEX``. Other ids stay as they are."""
     text = (mid or "").strip()
     parts = text.split("-")
     if len(parts) >= 2 and parts[0].upper() == "SKIM" and parts[1]:

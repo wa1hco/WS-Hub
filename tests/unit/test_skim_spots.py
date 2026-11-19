@@ -87,6 +87,29 @@ def test_receiver_label_from_id():
     assert receiver_label("SKIM-FLEX-40m-FT8-7075") == "FLEX"
     assert receiver_label("SKIM-B210-2m-FT8") == "B210"
     assert receiver_label("Other") == "Other"
+    # WS Skim 0.1.4: the id ends in the section dial in kHz within the band.
+    assert receiver_label("SKIM-FLEX-40m-FT8-74") == "FLEX"
+    assert receiver_label("SKIM-B210-6m-MSK144-260") == "B210"
+
+
+def test_khz_ids_band_comes_from_status_not_the_id():
+    feed = SkimFeed()
+    pats = id_patterns("")
+    for mid, dial, df, text, band in (
+        ("SKIM-FLEX-40m-FT8-74", 7_074_000, 1200, "CQ K0WLY DN40", "40m"),
+        ("SKIM-FLEX-6m-FT8-313", 50_313_000, 900, "CQ K1ABC FN31", "6m"),
+        ("SKIM-B210-6m-MSK144-260", 50_260_000, 1500, "CQ W9XYZ EN52", "6m"),
+    ):
+        assert id_matches(mid, pats)
+        feed.observe(_status(mid, dial), NOW)
+        hit = feed.observe(_decode(mid, df, text), NOW)
+        assert hit is not None and hit.band == band
+        assert hit.freq_hz == dial + df
+    assert len(feed.snapshot(NOW + 1)["receivers"]) == 2   # FLEX, B210
+    # An id that goes idle sends Close and is dropped; the others stay.
+    feed.observe(M.parse(E._Writer(2, 6, "SKIM-FLEX-6m-FT8-313").bytes()), NOW + 2)
+    labels = {r["label"] for r in feed.snapshot(NOW + 3)["receivers"]}
+    assert labels == {"FLEX", "B210"}
 
 
 def test_ws_skim_marker_in_config_name():
@@ -340,3 +363,20 @@ def test_ingest_loop_does_not_forward_skim_to_gridtracker():
     assert len(gt.sent) == 1  # only the real WSJT-X Status
     assert SKIM_ID not in live._tracker.nodes
     assert "WSJT-X - flex" in live._tracker.nodes
+
+
+if __name__ == "__main__":
+    import traceback
+
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    failed = 0
+    for t in tests:
+        try:
+            t()
+            print(f"PASS {t.__name__}")
+        except Exception:
+            failed += 1
+            print(f"FAIL {t.__name__}")
+            traceback.print_exc()
+    if failed:
+        raise SystemExit(1)

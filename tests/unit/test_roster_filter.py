@@ -141,13 +141,20 @@ def test_operate_page_menu_labels_and_saved_choice():
         r'role="option" data-value="([^"]+)" title="([^"]+)"[^>]*>([^<]+)</button>',
         html,
     )
-    assert [o[0] for o in opts] == list(MODES)
+    # Menu order: All first, then Needed, then the Needed variants.
+    assert [o[0] for o in opts] == ["all", "needed", "needed-cq", "needed-73"]
+    assert sorted(o[0] for o in opts) == sorted(MODES)
     assert [o[2] for o in opts] == [
+        "All",
         "Needed",
         "Needed and CQ",
         "Needed and CQ or 73",
-        "All",
     ]
+    # Needed stays the default even though All is now the first row.
+    menu = re.search(r'<span id="ros-needed"[^>]*data-value="([^"]+)"', html)
+    assert menu and menu.group(1) == "needed"
+    assert re.search(r'data-value="needed"[^>]*aria-selected="true"', html)
+    assert html.count('aria-selected="true"') == 1
     assert all(len(o[1].split()) <= 16 for o in opts)
     js = JS.read_text(encoding="utf-8")
     assert 'const ROS_NEED_KEY = "wims.ops.needed"' in js
@@ -165,6 +172,9 @@ def test_operate_page_menu_labels_and_saved_choice():
     assert "RRR" not in sign
     msg = js[js.find("function rosMessage"):js.find("function rosSourceLabel")]
     assert "rosExchangeTail(c)" in msg
+    pick = js[js.find("function rosSetNeed"):js.find("function rosCloseNeed")]
+    assert "pick = opts[0];" not in pick
+    assert 'o.dataset.value === "needed"' in pick
     assert 'needed.checked' not in js
     assert "ros-needed\").checked" not in js
 
