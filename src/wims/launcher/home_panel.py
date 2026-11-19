@@ -60,8 +60,9 @@ _INTENT_ROWS = (
      "This PC has antennas. WS Hub reads each rotator’s heading and "
      "shows it on the console. It does not turn the antenna."),
     (INTENT_SERVER, "Site server", "→ Site console",
-     "Optional: run the fleet site server on this PC (:8787). "
-     "Only one site server on the LAN — adopts existing if already up."),
+     "Run the station's site server on this PC (:8787). Only one site "
+     "server runs: if one already answers, this PC uses it. Unchecking asks "
+     "first, because stopping it affects every PC at the station."),
 )
 
 
@@ -79,6 +80,8 @@ class AgentHomePanel:
         on_open_local: Callable[[], None],
         on_restart_server: Callable[[], None] | None = None,
         on_start_server: Callable[[], None] | None = None,
+        on_take_over: Callable[[], None] | None = None,
+        on_follow_other: Callable[[], None] | None = None,
         key_device_var: Any | None = None,
         on_key_device_change: Callable[[], None] | None = None,
         on_refresh_key_ports: Callable[[], None] | None = None,
@@ -313,14 +316,32 @@ class AgentHomePanel:
         )
         ToolTip(
             self.start_server_btn,
-            "No site console reachable — start one on this PC "
-            "(only if this machine should host the fleet server).",
+            "No site server answers. Start one on this PC "
+            "(asks first).",
         )
         self.restart_server_btn = tk.Button(
             btns, text="Restart site server", font=_ui_font(11),
             command=(on_restart_server or (lambda: None)), padx=8, pady=4,
         )
         self._restart_tip = ToolTip(self.restart_server_btn, RESTART_PLAIN_TIP)
+        self.take_over_btn = tk.Button(
+            btns, text="Make this PC the site server", font=_ui_font(11),
+            command=(on_take_over or (lambda: None)), padx=8, pady=4,
+        )
+        ToolTip(
+            self.take_over_btn,
+            "Needs the site password. The site server on the other PC stops "
+            "and this PC takes over. Work claims and Enable TX are cleared.",
+        )
+        self.follow_other_btn = tk.Button(
+            btns, text="Follow the other", font=_ui_font(11),
+            command=(on_follow_other or (lambda: None)), padx=8, pady=4,
+        )
+        ToolTip(
+            self.follow_other_btn,
+            "Two site servers are running. Stop the one on this PC and use "
+            "the other one.",
+        )
         self._restart_detail = ""
         self.restart_needed_lbl = tk.Label(
             btns, text="", font=_ui_font(11, "bold"),
@@ -330,6 +351,8 @@ class AgentHomePanel:
         # Shown/hidden by app.refresh based on local vs remote server state.
         self.start_server_btn.pack_forget()
         self.restart_server_btn.pack_forget()
+        self.take_over_btn.pack_forget()
+        self.follow_other_btn.pack_forget()
         self.restart_needed_lbl.pack_forget()
         # The banner update button lives beside the launcher message,
         # not down here — see app._show_update_button.

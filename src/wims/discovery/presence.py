@@ -20,7 +20,9 @@
 
 Goals:
   * Operators never type the site server IP.
-  * Second site server refuses / demotes when another primary is live.
+  * A second site server refuses to start when another one answers.
+  * Two running servers never stop each other; both say so and the
+    station owner picks one (password-protected takeover).
   * Works when pure multicast fails (Windows VMs, multi-homed hosts).
 
 Announce paths (all ~1 Hz, same JSON body):
@@ -60,6 +62,10 @@ DEFAULT_TTL = 3
 KIND = "wims-server"
 ROLE = "wims-site-server"
 SCHEMA = 1
+
+TWO_SERVERS_MESSAGE = (
+    "Two site servers are running. The station owner should pick one."
+)
 
 LIVE_AGE_S = 3.0
 STARTUP_LISTEN_S = 2.5
@@ -1071,10 +1077,11 @@ class PresenceAnnouncer:
     hostname: str | None = None
     version: str = ""
     interval_s: float = ANNOUNCE_INTERVAL_S
-    # Return True when this server is giving way (it will exit). Any other
-    # return keeps announcing: a peer this PC cannot reach is not a reason
-    # to go quiet.
-    on_conflict: Callable[[list[dict]], bool | None] | None = None
+    # Called with the peers heard. Return the list of peers this PC can
+    # reach over HTTP: those are a second running site server, shown as
+    # "Two site servers are running" (nobody is stopped automatically).
+    # Legacy: True still means "give way" (the caller exits).
+    on_conflict: Callable[[list[dict]], "bool | list[dict] | None"] | None = None
     on_log: Callable[[str], None] | None = None
 
     _stop: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -1090,6 +1097,24 @@ class PresenceAnnouncer:
     send_error: str | None = None
     stopped_error: str | None = None
     unreachable_peers: list = field(default_factory=list)
+    # instance_id -> {"hostname", "console_base", "seen"} for reachable peers.
+    other_servers: dict = field(default_factory=dict)
+    _told_two: set = field(default_factory=set, repr=False)
+
+    TWO_SERVERS_FRESH_S = 10.0
+
+    def two_servers(self, now: float | None = None) -> list[dict]:
+        """Other site servers heard recently that answer over HTTP."""
+        now = time.time() if now is None else now
+        out = []
+        for iid, rec in list(self.other_servers.items()):
+            if now - float(rec.get("seen") or 0) <= self.TWO_SERVERS_FRESH_S:
+                out.append({
+                    "instance_id": iid,
+                    "hostname": rec.get("hostname") or "",
+                    "console_base": rec.get("console_base") or "",
+                })
+        return out
 
     def _say(self, text: str) -> None:
         cb = self.on_log
@@ -1116,6 +1141,9 @@ class PresenceAnnouncer:
             and self_age < 5.0
         )
         hints: list[str] = []
+        two = self.two_servers(now)
+        if two:
+            hints.append(TWO_SERVERS_MESSAGE)
         if self.demoted:
             hints.append("Demoted — another site server is primary")
         elif self.stopped_error:
@@ -1143,6 +1171,7 @@ class PresenceAnnouncer:
             "send_error": self.send_error,
             "stopped_error": self.stopped_error,
             "unreachable_peers": list(self.unreachable_peers),
+            "two_servers": two,
             "ok": udp_ok and not self.demoted,
             "udp_self_hear": self.heard_self_at is not None and (self_age or 99) < 5,
             "self_hear_age": self_age,
@@ -1214,24 +1243,54 @@ class PresenceAnnouncer:
         return peers
 
     def _handle_peers(self, peers: dict[str, dict]) -> bool:
-        """True when this server gives way and the loop should end."""
+        """True when this server gives way and the loop should end.
+
+        A peer this PC can reach is a second running site server. Neither
+        one stops: both report "Two site servers are running" and the
+        station owner picks one.
+        """
         self.last_peer_count = len(peers)
         if not peers or self.demoted:
             return False
-        give_way = False
+        reachable: list[dict] = []
         if self.on_conflict:
             try:
-                give_way = self.on_conflict(list(peers.values())) is True
+                result = self.on_conflict(list(peers.values()))
             except Exception:
-                give_way = False
-        if give_way:
-            self.demoted = True
-            return True
-        # Heard another server that this PC cannot use (often its firewall
-        # drops the site console). Keep announcing; say so once per peer.
-        for iid, peer in peers.items():
-            if iid in self.unreachable_peers:
+                result = None
+            if result is True:
+                self.demoted = True
+                return True
+            if isinstance(result, list):
+                reachable = [p for p in result if isinstance(p, dict)]
+        now = time.time()
+        reach_ids: set[str] = set()
+        for peer in reachable:
+            iid = str(peer.get("instance_id") or "")
+            if not iid:
                 continue
+            reach_ids.add(iid)
+            ends = beacon_endpoints(peer)
+            host = (peer.get("hostname") or "another PC").strip() or "another PC"
+            self.other_servers[iid] = {
+                "hostname": host,
+                "console_base": ends[0] if ends else (peer.get("console_base") or ""),
+                "seen": now,
+            }
+            if iid not in self._told_two:
+                self._told_two.add(iid)
+                where = ends[0].replace("http://", "") if ends else ""
+                self._say(
+                    f"Two site servers are running: this PC and {host}"
+                    + (f" at {where}" if where else "")
+                    + ". The station owner should pick one. Neither is stopped "
+                    "automatically."
+                )
+        for iid, peer in peers.items():
+            if iid in reach_ids or iid in self.unreachable_peers:
+                continue
+            # Heard another server that this PC cannot use (often its
+            # firewall drops the site console). Keep announcing; say so once.
             self.unreachable_peers.append(iid)
             host = (peer.get("hostname") or "another PC").strip() or "another PC"
             ends = beacon_endpoints(peer)

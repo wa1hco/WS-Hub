@@ -67,6 +67,25 @@ The launcher has **Running on this PC** (live) and **This seat will run** (remem
 | **WSJT-X** | WSJT monitor agent (`:8790`) |
 | **Site server** | Fleet console (`:8787`) — one per LAN |
 
+### Which PC runs the site server
+
+The station has one site server. If one already answers, every PC uses it and does not start another.
+
+**Set up once (station owner):** on each PC that may run the site server (for example the station tower and a spare laptop), open **Other tools…** → **Site server (station owner)**:
+
+1. Leave **This PC may host the site server** checked. It starts checked on a single PC or on the PC already running the site server, and unchecked on other seats.
+2. Click **Set site password…** and type the site password twice. Use the same password on every PC that may host. Only a scrambled copy is kept on the PC.
+
+On other seats leave the box unchecked. Those PCs only show a line such as **Site server: jeff-Precision-Tower-3420 at 192.168.2.165:8787**. They have no Start, no Site server checkbox, and no takeover button. When no site server answers they say **No site server found. The last one was on … Ask the station owner to start it.**
+
+**On a PC that may host:**
+
+- **Start site server** appears when no site server answers. It asks **No site server answered. Start one on this PC?** first.
+- **Restart site server** and unchecking **Site server** ask first, because they affect every PC at the station.
+- **Make this PC the site server** appears when another PC has the site server. It asks for the site password, then confirms: the other PC's site server stops, and this PC takes over. Before it stops, the old site server turns **Enable TX** off where WS Hub started a contact, and clears work claims. Nothing is ever keyed. The new site server starts with no claims and opens its own DX cluster connection from its Setup. The roster and decodes fill in again within an FT8 cycle or two. Seat agents follow the new site server by themselves.
+- If two site servers end up running (for example the two PCs could not see each other for a while), neither stops on its own. Both PCs and the site console show **Two site servers are running. The station owner should pick one.** Use **Make this PC the site server** (password) or **Follow the other**.
+- A PC that announces a site server but cannot be reached (often its firewall) does not count. A PC that may host can still start one, and is told to stop the unreachable copy.
+
 ---
 
 ## Site console

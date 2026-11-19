@@ -84,9 +84,20 @@ from wims.launcher.assets import (
 )
 from wims.launcher.site_choice import (
     LOCAL_SITE,
+    RESTART_CONFIRM,
+    START_CONFIRM,
+    STOP_CONFIRM,
+    TWO_SERVERS_MESSAGE,
+    follow_other_confirm_text,
+    last_site_is_other_pc,
+    no_server_message,
     same_site_host,
     should_host_local_site_server,
+    site_buttons,
+    site_url_host,
+    takeover_confirm_text,
 )
+from wims.launcher import site_admin
 from wims.launcher.home_panel import AgentHomePanel
 from wims.launcher.process_replace import (
     find_procs_by_kind,
@@ -1223,6 +1234,11 @@ class LauncherApp:
         self._remote_primary = ""
         self._remote_search_busy = False
         self._remote_search_at = 0.0
+        # Other site servers the one in use can reach ("Two site servers").
+        self._two_servers: list[dict] = []
+        self._takeover_busy = False
+        self._rediscover_at = 0.0
+        self._pw_limiter = site_admin.FailureLimiter()
         try:
             clear_stale_site_server_pid()
         except Exception:
@@ -1442,6 +1458,8 @@ class LauncherApp:
             on_open_local=self._open_local_status,
             on_restart_server=self._restart_local_site_server,
             on_start_server=self._start_site_server_offer,
+            on_take_over=self._take_over_site_server,
+            on_follow_other=self._follow_other_site_server,
             key_device_var=self._key_device_var,
             on_key_device_change=self._on_key_device_change,
             on_refresh_key_ports=self._refresh_key_ports,
@@ -1515,6 +1533,8 @@ class LauncherApp:
         )
         log_btn.pack(side="left", padx=(8, 0))
         ToolTip(log_btn, "Open the launcher details log file in the default editor.")
+
+        self._build_site_owner_box(tk)
 
         site_box = tk.LabelFrame(
             self._adv_frame, text="Site server URL (rare override)",
@@ -1595,6 +1615,7 @@ class LauncherApp:
         ToolTip(
             adv_toggle,
             "Screenshots, reset console window, desktop shortcut, details log, "
+            "who may host the site server and the site password, "
             "site URL, Solo lab, role cards.",
         )
         # Block typing; allow Ctrl+C / Ctrl+A / navigation.
@@ -2626,14 +2647,15 @@ class LauncherApp:
             self._refresh_status()
             return
         agent_id = INTENT_TO_AGENT[intent_id]
+        if agent_id == AGENT_SERVER:
+            self._on_server_intent_toggle()
+            return
         if agent_id == AGENT_N1MM_SEAT:
             # N1MM / SSB-CW share one process — sync flags (may restart).
             self._sync_detect_and_agents()
             self._refresh_status()
             return
         if self._intent_vars[intent_id].get():
-            if agent_id == AGENT_SERVER:
-                self._server_start_blocked = False
             self._start_agent(agent_id, open_browser=True)
         else:
             # WSJT-X off while Rotators stays on: keep the seat agent.
@@ -2654,11 +2676,14 @@ class LauncherApp:
         *,
         open_browser: bool = False,
         lan_checked: bool = False,
+        confirm: bool = False,
     ) -> None:
         """Start one agent. ``lan_checked`` means the network was just searched.
 
         The site server is never started on this PC until a search for a
-        site server on another PC has come back empty.
+        site server on another PC has come back empty. Only a PC that may
+        host the site server starts one. ``confirm`` asks the operator
+        first ("No site server answered. Start one on this PC?").
         """
         role_id = self._agent_role[agent_id]
         if self._proc_running(role_id) or agent_id in self._starting:
@@ -2686,6 +2711,13 @@ class LauncherApp:
         if agent_id == AGENT_SERVER:
             if self._server_start_blocked:
                 return
+            handover = self._handover_pending()
+            if handover:
+                self._follow_after_handover(handover)
+                return
+            if not self._may_host():
+                self._refuse_host_here()
+                return
             ok, base = probe_site_urls(self._site_var.get().strip() or None)
             if ok:
                 self._site_ok = True
@@ -2701,7 +2733,9 @@ class LauncherApp:
                 self._schedule_status(800)
                 return
             if not lan_checked:
-                self._check_lan_then_start(open_browser=open_browser)
+                self._check_lan_then_start(open_browser=open_browser, confirm=confirm)
+                return
+            if confirm and not self._confirm_start_here():
                 return
 
         base = self._site_var.get().strip() or site_base_url()
@@ -2830,7 +2864,7 @@ class LauncherApp:
         from wims.discovery import presence as P
         return P.find_remote_site_server()
 
-    def _check_lan_then_start(self, *, open_browser: bool) -> None:
+    def _check_lan_then_start(self, *, open_browser: bool, confirm: bool = False) -> None:
         """Look for a site server on another PC; start one here only if none."""
         if self._remote_search_busy:
             return
@@ -2839,7 +2873,10 @@ class LauncherApp:
             and time.monotonic() - self._remote_search_at < self._REMOTE_SEARCH_FRESH_S
         )
         if recent:
-            self._start_agent(AGENT_SERVER, open_browser=open_browser, lan_checked=True)
+            self._start_agent(
+                AGENT_SERVER, open_browser=open_browser, lan_checked=True,
+                confirm=confirm,
+            )
             return
         self._remote_search_busy = True
         self._append_log("Checking the network for a site server on another PC…")
@@ -2849,11 +2886,15 @@ class LauncherApp:
                 found = self._find_remote_site()
             except Exception:
                 found = None
-            self.root.after(0, self._after_lan_check_for_start, found, open_browser)
+            self.root.after(
+                0, self._after_lan_check_for_start, found, open_browser, confirm,
+            )
 
         self._run_background(work)
 
-    def _after_lan_check_for_start(self, found: dict | None, open_browser: bool) -> None:
+    def _after_lan_check_for_start(
+        self, found: dict | None, open_browser: bool, confirm: bool = False,
+    ) -> None:
         self._remote_search_busy = False
         if found:
             self._remote_search_at = 0.0
@@ -2870,6 +2911,8 @@ class LauncherApp:
                 self._open_url_once("server", self._site_show_url.rstrip("/") + "/")
             return
         self._remote_search_at = time.monotonic()
+        if confirm and not self._confirm_start_here():
+            return
         self._append_log("No site server on another PC answered. Starting one on this PC.")
         self._start_agent(AGENT_SERVER, open_browser=open_browser, lan_checked=True)
 
@@ -3013,12 +3056,22 @@ class LauncherApp:
                 )
             )
             self._repoint_agents_if_needed(previous, show_url)
+            if not this_pc:
+                site_admin.clear_handover_marker()
+        elif self._handover_pending():
+            # This PC handed the site server to another PC. Wait for it.
+            self._site_ok = False
+            ho = self._handover_pending() or {}
+            self._append_log(
+                f"Waiting for the site server on {ho.get('to_host') or 'the other PC'}."
+            )
+            self._update_site_status_line()
         elif should_host_local_site_server(
             discovery_done=True,
             site_reachable=False,
             last_site_url=load_last_site_url(),
             env_server=(os.environ.get("WIMS_SERVER") or "").strip() or None,
-        ):
+        ) and self._may_host():
             self._auto_host_local_site_server()
         else:
             self._site_ok = False
@@ -3093,6 +3146,16 @@ class LauncherApp:
         if ok_site:
             if not self._proc_running("server"):
                 self._site_external = True
+            self._note_two_servers(health, base)
+        else:
+            self._two_servers = []
+            # The site server went away (for example another PC took over).
+            # Look for it elsewhere now and then; never start one from here.
+            if (
+                self._site_choice_ready
+                and time.monotonic() - self._rediscover_at > 20.0
+            ):
+                self._rediscover_if_down()
 
         if self._proc_running("wsjt_agent"):
             self._fetch_wsjt_report()
@@ -3338,6 +3401,19 @@ class LauncherApp:
             hint = firewall_block_hint()
             if hint:
                 line = line + " " + hint
+        two = getattr(self, "_two_servers", None) or []
+        if self._site_ok and two:
+            names = ", ".join(
+                str(o.get("hostname") or o.get("console_base") or "another PC")
+                for o in two
+            )
+            line = f"{TWO_SERVERS_MESSAGE} Also running: {names}."
+        elif not self._site_ok:
+            ho = self._handover_pending()
+            if ho:
+                line = f"Waiting for the site server on {ho.get('to_host') or 'the other PC'}."
+            elif not local_proc and not self._may_host():
+                line = no_server_message(hostname or site_url_host(show))
         hp.set_site_server_status(line)
 
     def _open_local_status(self) -> None:
@@ -3417,7 +3493,17 @@ class LauncherApp:
         return out
 
     def _auto_host_local_site_server(self) -> None:
-        """No server on the LAN — run one on this PC and open the console."""
+        """No server on the LAN — run one on this PC and open the console.
+
+        A PC already set to run the site server starts it. Otherwise the
+        operator is asked first.
+        """
+        if not self._may_host():
+            self._refuse_host_here()
+            return
+        if not self._intent_vars[INTENT_SERVER].get():
+            if not self._confirm_start_here():
+                return
         base = LOCAL_SITE
         self._site_var.set(base)
         os.environ["WIMS_SERVER"] = base
@@ -3459,7 +3545,7 @@ class LauncherApp:
         )
         hp = getattr(self, "_home_panel", None)
         if hp is not None and hasattr(hp, "set_server_intent_visible"):
-            hp.set_server_intent_visible(offer)
+            hp.set_server_intent_visible(bool(offer and self._may_host()))
         if offer:
             return
         if not intent.get(INTENT_SERVER) and not self._proc_running("server"):
@@ -3491,10 +3577,12 @@ class LauncherApp:
             self._schedule_status(200)
             return
         self._server_start_blocked = False
+        site_admin.clear_handover_marker()
         self._intent_vars[INTENT_SERVER].set(True)
         self._persist_intent()
-        # Looks on the network first; starts here only when no other PC answers.
-        self._start_agent(AGENT_SERVER, open_browser=True)
+        # Looks on the network first; starts here only when no other PC
+        # answers, and asks before it does.
+        self._start_agent(AGENT_SERVER, open_browser=True, confirm=True)
 
     def _restart_local_site_server(self) -> None:
         """Restart the site server when it is the one on this PC.
@@ -3523,6 +3611,9 @@ class LauncherApp:
                     host = ""
             message = other_pc_message(host)
             self._note_restart_result(message, ok=False)
+            return
+        if not self._ask_yes_no("Restart site server", RESTART_CONFIRM):
+            self._append_log("Restart cancelled. The site server keeps running.")
             return
         was_open = False
         try:
@@ -3700,28 +3791,469 @@ class LauncherApp:
         offer = offer_site_server(
             intent, site_reachable=ok_site, local_server=local,
         )
-        # Restart is for the server this window uses, and only after the
-        # network was checked for a site server on another PC.
-        restart_ok = bool(
-            ok_site and local_url and getattr(self, "_site_choice_ready", True)
+        show = site_buttons(
+            may_host=self._may_host(),
+            site_reachable=bool(ok_site),
+            server_here=bool(local_url),
+            two_servers=bool(self._two_servers),
+            offer=offer,
+            # Restart is for the server this window uses, and only after the
+            # network was checked for a site server on another PC.
+            choice_ready=bool(getattr(self, "_site_choice_ready", True)),
         )
         if hasattr(hp, "set_server_intent_visible"):
-            hp.set_server_intent_visible(offer)
+            hp.set_server_intent_visible(show["checkbox"])
+        extra = [
+            getattr(hp, "take_over_btn", None),
+            getattr(hp, "follow_other_btn", None),
+        ]
         try:
             start_btn.pack_forget()
             restart_btn.pack_forget()
+            for btn in extra:
+                if btn is not None:
+                    btn.pack_forget()
         except Exception:
             pass
         if hasattr(hp, "set_restart_needed"):
             hp.set_restart_needed(False)
-        if restart_ok:
+        if show["restart"]:
             restart_btn.pack(side="left", padx=(8, 0))
             if stale and hasattr(hp, "set_restart_needed"):
                 hp.set_restart_needed(True)
-        elif not ok_site and offer:
+        elif show["start"]:
             start_btn.pack(side="left", padx=(8, 0))
+        if show["take_over"] and extra[0] is not None:
+            extra[0].pack(side="left", padx=(8, 0))
+        if show["follow_other"] and extra[1] is not None:
+            extra[1].pack(side="left", padx=(8, 0))
         if self._auto_fit_left > 0 and not self._show_advanced.get():
             self.root.after_idle(self._fit_default_geometry)
+
+    # --- protected site-server control --------------------------------- #
+
+    def _may_host(self) -> bool:
+        """Whether this PC may host the site server (Other tools… setting)."""
+        try:
+            saved = site_admin.may_host_saved()
+        except Exception:
+            saved = None
+        if saved is not None:
+            return saved
+        # First time only: decide from what this PC is doing now.
+        try:
+            hosting = bool(self._local_server_procs()) or bool(
+                self._proc_running("server"))
+        except Exception:
+            hosting = False
+        try:
+            return site_admin.may_host(
+                last_site_is_other_pc=last_site_is_other_pc(load_last_site_url()),
+                hosting_now=hosting,
+            )
+        except Exception:
+            return False
+
+    def _handover_pending(self) -> dict | None:
+        """Marker left when this PC's site server handed over to another PC."""
+        try:
+            return site_admin.recent_handover()
+        except Exception:
+            return None
+
+    def _ask_yes_no(self, title: str, text: str) -> bool:
+        try:
+            from tkinter import messagebox
+            return bool(messagebox.askyesno(title, text, parent=self.root))
+        except Exception:
+            return False
+
+    def _tell(self, title: str, text: str, *, error: bool = False) -> None:
+        self._append_log(text)
+        try:
+            from tkinter import messagebox
+            if error:
+                messagebox.showerror(title, text, parent=self.root)
+            else:
+                messagebox.showinfo(title, text, parent=self.root)
+        except Exception:
+            pass
+
+    def _ask_password(self, title: str, prompt: str) -> str | None:
+        try:
+            from tkinter import simpledialog
+            return simpledialog.askstring(title, prompt, show="*", parent=self.root)
+        except Exception:
+            return None
+
+    def _confirm_start_here(self) -> bool:
+        """Ask before starting a site server on this PC."""
+        text = START_CONFIRM
+        announced = self._announced_site if isinstance(
+            getattr(self, "_announced_site", None), dict) else None
+        if announced:
+            host = str(announced.get("hostname") or "another PC")
+            text = (
+                f"{host} is announcing a site server, but this PC cannot reach "
+                f"it. Stop that copy on {host} afterwards.\n\n" + START_CONFIRM
+            )
+        if self._ask_yes_no("Start site server", text):
+            return True
+        self._append_log("Not starting a site server on this PC.")
+        try:
+            self._intent_vars[INTENT_SERVER].set(False)
+            self._persist_intent()
+        except Exception:
+            pass
+        self._schedule_status(200)
+        return False
+
+    def _last_site_host(self) -> str:
+        host = (self._site_hostname or "").strip()
+        if host:
+            return host
+        return site_url_host(load_last_site_url())
+
+    def _refuse_host_here(self) -> None:
+        """This PC may not host: say who to ask, change nothing else."""
+        try:
+            if self._intent_vars[INTENT_SERVER].get():
+                self._intent_vars[INTENT_SERVER].set(False)
+                self._persist_intent()
+        except Exception:
+            pass
+        self._append_log(no_server_message(self._last_site_host()))
+        self._update_site_status_line()
+        self._schedule_status(500)
+
+    def _on_server_intent_toggle(self) -> None:
+        """Site server checkbox. Stopping or starting asks first."""
+        want = bool(self._intent_vars[INTENT_SERVER].get())
+        if want:
+            if not self._may_host():
+                self._refuse_host_here()
+                return
+            self._server_start_blocked = False
+            site_admin.clear_handover_marker()
+            self._start_agent(AGENT_SERVER, open_browser=True, confirm=True)
+            self._refresh_status()
+            return
+        here = bool(self._proc_running("server") or self._local_server_procs())
+        if here and not self._ask_yes_no("Stop site server", STOP_CONFIRM):
+            # Nothing changes. The checkbox goes back on.
+            self._intent_vars[INTENT_SERVER].set(True)
+            self._persist_intent()
+            self._append_log("The site server keeps running.")
+            self._refresh_status()
+            return
+        self._stop_agent(AGENT_SERVER, explicit=True)
+        self._refresh_status()
+
+    def _follow_after_handover(self, handover: dict) -> None:
+        """This PC's site server handed over. Follow the new one."""
+        to_host = str((handover or {}).get("to_host") or "the other PC")
+        try:
+            if self._intent_vars[INTENT_SERVER].get():
+                self._intent_vars[INTENT_SERVER].set(False)
+                self._persist_intent()
+        except Exception:
+            pass
+        self._append_log(
+            f"The site server moved to {to_host}. This PC uses it and does not "
+            "start its own."
+        )
+        for delay in (1500, 6000, 15000):
+            self.root.after(delay, self._rediscover_if_down)
+
+    def _rediscover_if_down(self) -> None:
+        """Site server gone: look for it on another PC. Never starts one."""
+        if self._site_ok or self._discovering or self._remote_search_busy:
+            return
+        if self._proc_running("server"):
+            return
+        self._rediscover_at = time.monotonic()
+        self._remote_search_busy = True
+
+        def work() -> None:
+            try:
+                found = self._find_remote_site()
+            except Exception:
+                found = None
+            self.root.after(0, self._after_rediscover, found)
+
+        self._run_background(work)
+
+    def _after_rediscover(self, found: dict | None) -> None:
+        self._remote_search_busy = False
+        if found and not self._site_ok:
+            self._adopt_remote_site(found)
+            self._schedule_status(500)
+
+    def _note_two_servers(self, health: dict | None, base: str) -> None:
+        """Remember other site servers the one in use reports (split brain)."""
+        raw = []
+        if isinstance(health, dict):
+            pres = health.get("presence")
+            if isinstance(pres, dict):
+                raw = [o for o in (pres.get("two_servers") or []) if isinstance(o, dict)]
+        others = [
+            o for o in raw
+            if not self._site_url_is_local(str(o.get("console_base") or ""))
+        ]
+        if raw and not others and base and not self._site_url_is_local(base):
+            # The server in use lists this PC: the other one is the one in use.
+            others = [{"hostname": self._site_hostname, "console_base": base}]
+        if others and not self._two_servers:
+            self._append_log(TWO_SERVERS_MESSAGE)
+        self._two_servers = others
+
+    def _password_ok(self, title: str) -> str | None:
+        """Ask for the site password and check it on this PC. None = no."""
+        if not site_admin.has_password():
+            self._tell(
+                title,
+                "No site password is set on this PC. Open Other tools… → "
+                "Site server (station owner) and set it first.",
+            )
+            return None
+        wait = self._pw_limiter.locked_for()
+        if wait > 0:
+            self._tell(
+                title,
+                f"Too many wrong site passwords. Try again in {int(wait) + 1} seconds.",
+                error=True,
+            )
+            return None
+        pw = self._ask_password(title, "Site password:")
+        if pw is None:
+            return None
+        if not site_admin.check_password(pw):
+            self._pw_limiter.failed()
+            self._tell(title, "That is not the site password.", error=True)
+            return None
+        self._pw_limiter.succeeded()
+        return pw
+
+    def _take_over_target(self) -> tuple[str, str]:
+        """(console URL, host name) of the other site server, or ("", "")."""
+        if self._two_servers:
+            other = self._two_servers[0]
+            return (
+                canonical_site_base(str(other.get("console_base") or "")) or "",
+                str(other.get("hostname") or ""),
+            )
+        base = self._site_show_url or self._site_var.get().strip()
+        if self._site_ok and base and not self._site_url_is_local(base):
+            return canonical_site_base(base) or base, self._site_hostname or site_url_host(base)
+        return "", ""
+
+    def _take_over_site_server(self) -> None:
+        """Make this PC the site server (site password needed)."""
+        title = "Make this PC the site server"
+        if self._takeover_busy:
+            return
+        if not self._may_host():
+            self._append_log("This PC is not set to host the site server.")
+            return
+        pw = self._password_ok(title)
+        if pw is None:
+            return
+        base, host = self._take_over_target()
+        if not base:
+            # Nothing else answers: the password alone lets this PC start.
+            if not self._ask_yes_no(title, START_CONFIRM):
+                return
+            self._finish_takeover("", "")
+            return
+        if not self._ask_yes_no(title, takeover_confirm_text(host)):
+            return
+        self._takeover_busy = True
+        self._append_log(f"Asking the site server on {host or base} to hand over…")
+        try:
+            import socket
+            me = socket.gethostname()
+        except Exception:
+            me = "this PC"
+
+        def work() -> None:
+            ok, _code, detail = site_admin.request_handover(base, pw, to_host=me)
+            down = False
+            if ok:
+                down = site_admin.wait_until_down(
+                    lambda: fetch_site_health(base, timeout=0.5) is not None,
+                    timeout_s=10.0,
+                )
+            self.root.after(0, self._after_handover_request, base, host, ok, down, detail)
+
+        self._run_background(work)
+
+    def _after_handover_request(
+        self, base: str, host: str, ok: bool, down: bool, detail: str,
+    ) -> None:
+        self._takeover_busy = False
+        name = host or base
+        if not ok:
+            self._tell(
+                "Make this PC the site server",
+                detail or f"The site server on {name} did not hand over.",
+                error=True,
+            )
+            return
+        if not down:
+            self._tell(
+                "Make this PC the site server",
+                f"The site server on {name} agreed to stop but is still answering. "
+                "Try again in a few seconds.",
+                error=True,
+            )
+            return
+        self._append_log(
+            f"The site server on {name} stopped. Enable TX was turned off where "
+            "WS Hub had started it, and work claims were cleared."
+        )
+        self._finish_takeover(base, host)
+
+    def _finish_takeover(self, previous: str, host: str) -> None:
+        """Run the site server here and point this PC's agents at it."""
+        site_admin.clear_handover_marker()
+        self._two_servers = []
+        self._remote_primary = ""
+        self._server_start_blocked = False
+        self._remote_search_at = time.monotonic()
+        try:
+            self._intent_vars[INTENT_SERVER].set(True)
+            self._persist_intent()
+        except Exception:
+            pass
+        if self._proc_running("server") or self._local_server_procs():
+            # Two were running and the other one stopped. Keep this one.
+            self._apply_discovered_site(LOCAL_SITE)
+        else:
+            self._append_log("Starting the site server on this PC.")
+            self._start_agent(AGENT_SERVER, open_browser=False, lan_checked=True)
+        if previous:
+            self._repoint_agents_if_needed(previous, LOCAL_SITE)
+        self._append_log("This PC is now the site server.")
+        self._schedule_status(1500)
+
+    def _follow_other_site_server(self) -> None:
+        """Two site servers: stop the one here and use the other."""
+        if not self._two_servers:
+            return
+        other = self._two_servers[0]
+        host = str(other.get("hostname") or "")
+        url = canonical_site_base(str(other.get("console_base") or "")) or ""
+        if not url:
+            return
+        if not self._ask_yes_no("Follow the other site server",
+                                follow_other_confirm_text(host)):
+            return
+        try:
+            self._intent_vars[INTENT_SERVER].set(False)
+            self._persist_intent()
+        except Exception:
+            pass
+        self._stop_agent(AGENT_SERVER, explicit=True)
+        self._two_servers = []
+        self.root.after(
+            1500,
+            lambda: self._adopt_remote_site(
+                {"hostname": host, "console_base": url},
+                note="The site server on this PC was stopped.",
+            ),
+        )
+
+    def _build_site_owner_box(self, tk) -> None:
+        """Other tools…: who may host the site server, and the site password."""
+        box = tk.LabelFrame(
+            self._adv_frame, text="Site server (station owner)",
+            font=_ui_font(11), bg="#f4f4f4", fg="#333333", padx=10, pady=6,
+        )
+        box.pack(fill="x", padx=14, pady=4)
+        self._may_host_var = tk.BooleanVar(value=self._may_host())
+        cb = tk.Checkbutton(
+            box, text="This PC may host the site server",
+            variable=self._may_host_var, command=self._on_may_host_toggle,
+            font=_ui_font(11), bg="#f4f4f4", activebackground="#f4f4f4",
+            highlightthickness=0, anchor="w",
+        )
+        cb.pack(fill="x")
+        ToolTip(
+            cb,
+            "On for the PC that runs the station's site server (and a spare). "
+            "Off on other seats: they only show which PC has it.",
+        )
+        row = tk.Frame(box, bg="#f4f4f4")
+        row.pack(fill="x", pady=(4, 0))
+        self._pw_btn = tk.Button(
+            row, text="Set site password…", font=_ui_font(10),
+            command=self._set_site_password, padx=8, pady=2,
+        )
+        self._pw_btn.pack(side="left")
+        ToolTip(
+            self._pw_btn,
+            "Use the same site password on each PC that may host. It is "
+            "needed to take over from another PC. Only a scrambled copy is kept.",
+        )
+        self._pw_state = tk.StringVar(value="")
+        tk.Label(
+            row, textvariable=self._pw_state, font=_ui_font(10),
+            bg="#f4f4f4", fg="#555555", anchor="w",
+        ).pack(side="left", padx=(8, 0))
+        self._refresh_site_owner_box()
+
+    def _refresh_site_owner_box(self) -> None:
+        var = getattr(self, "_pw_state", None)
+        if var is None:
+            return
+        has = site_admin.has_password()
+        var.set("Site password is set on this PC." if has
+                else "No site password on this PC yet.")
+        btn = getattr(self, "_pw_btn", None)
+        if btn is not None:
+            try:
+                btn.configure(text="Change site password…" if has
+                              else "Set site password…")
+            except Exception:
+                pass
+
+    def _on_may_host_toggle(self) -> None:
+        want = bool(self._may_host_var.get())
+        if want and site_admin.has_password():
+            if self._password_ok("This PC may host the site server") is None:
+                self._may_host_var.set(False)
+                return
+        site_admin.set_may_host(want)
+        if want:
+            self._append_log("This PC may host the site server.")
+        else:
+            self._append_log(
+                "This PC will not host the site server."
+                + (" The one running here keeps running until you stop it."
+                   if self._local_server_procs() else "")
+            )
+        self._schedule_status(200)
+
+    def _set_site_password(self) -> None:
+        title = "Site password"
+        current = None
+        if site_admin.has_password():
+            current = self._password_ok(title)
+            if current is None:
+                return
+        new = self._ask_password(title, "New site password:")
+        if new is None:
+            return
+        again = self._ask_password(title, "Type it again:")
+        if again is None:
+            return
+        problem = site_admin.password_problem(new, again)
+        if problem:
+            self._tell(title, problem, error=True)
+            return
+        ok, msg = site_admin.set_password(new, current_password=current)
+        self._tell(title, msg, error=not ok)
+        self._refresh_site_owner_box()
 
     def _show_loaded_revs(
         self,
@@ -3961,13 +4493,13 @@ class LauncherApp:
         btn_row.pack(fill="x")
         start = tk.Button(
             btn_row, text=role.button, font=_ui_font(11),
-            command=lambda r=role: self._start_role(r),
+            command=lambda r=role: self._role_card_start(r),
         )
         start.pack(side="left")
         ToolTip(start, role.tooltip)
         stop = tk.Button(
             btn_row, text="Stop", font=_ui_font(10),
-            command=lambda r=role: self._stop_role(r.id), state="disabled",
+            command=lambda r=role: self._role_card_stop(r), state="disabled",
         )
         if role.long_running:
             stop.pack(side="left", padx=(8, 0))
@@ -4027,6 +4559,23 @@ class LauncherApp:
                 subprocess.Popen(["xdg-open", str(path)])
         except Exception as e:
             self._append_log(f"Open log failed: {e}. Path: {path}")
+
+    def _role_card_start(self, role) -> None:
+        """Role card Start. The site server goes through the same checks as
+        the home Start button (who may host, look first, ask first)."""
+        if role is not None and role.id == "server":
+            if not self._may_host():
+                self._refuse_host_here()
+                return
+            self._start_site_server_offer()
+            return
+        self._start_role(role)
+
+    def _role_card_stop(self, role) -> None:
+        if role is not None and role.id == "server":
+            if not self._ask_yes_no("Stop site server", STOP_CONFIRM):
+                return
+        self._stop_role(role.id)
 
     def _start_role(self, role, *, open_browser: bool = False, **kwargs) -> None:
         if role is None:

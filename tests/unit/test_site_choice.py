@@ -16,6 +16,9 @@ if str(SRC) not in sys.path:
 
 from wims.launcher.site_choice import (  # noqa: E402
     LOCAL_SITE,
+    last_site_is_other_pc,
+    no_server_message,
+    site_buttons,
     adopt_discovered_server_url,
     same_site_host,
     should_host_local_site_server,
@@ -127,6 +130,27 @@ class AdoptServerTests(unittest.TestCase):
             "http://127.0.0.1:8787",
         )
 
+
+
+class ProtectedControlTests(unittest.TestCase):
+    def test_last_site_on_another_pc(self):
+        self.assertTrue(last_site_is_other_pc(
+            "http://192.168.2.165:8787", lan_ips=["192.168.2.113"]))
+        self.assertFalse(last_site_is_other_pc(
+            "http://192.168.2.165:8787", lan_ips=["192.168.2.165"]))
+        self.assertFalse(last_site_is_other_pc("http://127.0.0.1:8787", lan_ips=[]))
+        self.assertFalse(last_site_is_other_pc(None, lan_ips=[]))
+
+    def test_no_server_message_names_the_last_host(self):
+        self.assertIn("The last one was on jeff-Precision-Tower-3420.",
+                      no_server_message("jeff-Precision-Tower-3420"))
+        self.assertEqual(no_server_message("127.0.0.1"),
+                         "No site server found. Ask the station owner to start it.")
+
+    def test_seat_that_may_not_host_has_no_controls(self):
+        shown = site_buttons(may_host=False, site_reachable=False,
+                             server_here=False, two_servers=False, offer=True)
+        self.assertEqual(set(shown.values()), {False})
 
 if __name__ == "__main__":
     unittest.main()

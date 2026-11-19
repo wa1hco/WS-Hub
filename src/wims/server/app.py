@@ -1771,6 +1771,46 @@ class LiveFleet:
         )
         return {"ok": True, "halted": halted, "bands": bands, "detail": detail}
 
+    def release_tx_for_handover(self) -> dict:
+        """Turn Enable Tx off where this server started TX, and drop claims.
+
+        Used when this site server stops (another PC takes over, or the
+        station owner stops or restarts it). The only TX action here is
+        turning Enable Tx **off** (WSJT-X HaltTx, auto-only). Nothing is
+        keyed. Local WSJT-X CQ that this server did not start is left alone.
+        """
+        with self._lock:
+            targets = sorted(
+                set(self._tx_claims)
+                | set(self._open_work)
+                | {i for i in self._arbiter.holders().values() if i}
+                | {i for q in getattr(self._arbiter, "_queue", {}).values() for i in q}
+            )
+            dest_map = {t: self._tx_dests_for(t) for t in targets}
+        turned_off: list[str] = []
+        if self._tx is not None:
+            for t in targets:
+                dests = dest_map.get(t) or []
+                if not dests:
+                    continue
+                try:
+                    self._tx.halt(t, auto_only=True, dests=dests)
+                    turned_off.append(t)
+                    print(f"Handover: Enable Tx off {t!r}", flush=True)
+                except OSError as e:
+                    print(f"Handover: could not turn Enable Tx off for {t}: {e}",
+                          flush=True)
+        with self._lock:
+            # Fresh arbiter: nothing granted, nothing queued.
+            self._arbiter = TxArbiter(group_of=self.group_of)
+            self._tx_claims.clear()
+            self._open_work.clear()
+            self._last_tx_action = {
+                "action": "handover", "instances": turned_off, "bands": [],
+                "dashboard_id": None, "ts": time.time(),
+            }
+        return {"tx_off": turned_off, "claims_cleared": len(targets)}
+
     def call_cq(self, *, mycall: str | None = None, grid: str | None = None) -> dict:
         """Call CQ. WSJT-X's UDP API has **no native Call CQ** — only Reply to an
         existing decode. The only UDP route is a one-shot FreeText that WSJT-X will
@@ -3276,6 +3316,75 @@ def make_handler(live: LiveFleet, refresh: float):
             else:
                 self._send(404, "text/plain", b"not found")
 
+        def _site_handover(self, body: dict) -> None:
+            """Another PC takes over as site server (site password needed).
+
+            The password is checked against this PC's salted hash with a
+            constant-time compare and is never logged. Repeated failures are
+            refused for a while. On success: Enable Tx off where this server
+            started TX, claims dropped, announcing stopped, then this server
+            exits cleanly.
+            """
+            from wims.launcher import site_admin as SA
+            limiter = _handover_limiter(live)
+            wait = limiter.locked_for()
+            if wait > 0:
+                secs = int(wait) + 1
+                self._send_json(429, {
+                    "ok": False, "error": "locked", "retry_after": secs,
+                    "detail": ("Too many wrong site passwords. "
+                               f"Try again in {secs} seconds."),
+                })
+                return
+            host = socket.gethostname()
+            if not SA.has_password():
+                self._send_json(409, {
+                    "ok": False, "error": "no_password", "hostname": host,
+                    "detail": (f"No site password is set on {host}. Set one in "
+                               "the WS Hub launcher there, or stop its site "
+                               "server on that PC."),
+                })
+                return
+            password = body.get("password") if isinstance(body, dict) else None
+            if not isinstance(password, str) or not SA.check_password(password):
+                limiter.failed()
+                print("Site server takeover refused: wrong site password.",
+                      flush=True)
+                self._send_json(403, {
+                    "ok": False, "error": "wrong_password", "hostname": host,
+                    "detail": f"{host} did not accept the site password.",
+                })
+                return
+            limiter.succeeded()
+            to_host = str(body.get("to_host") or "another PC").strip()[:64]
+            result = live.release_tx_for_handover()
+            ann = getattr(live, "_presence", None)
+            if ann is not None:
+                try:
+                    ann.stop()
+                except Exception:
+                    pass
+            try:
+                SA.write_handover_marker(to_host)
+            except OSError:
+                pass
+            print(
+                f"Site server handing over to {to_host}. Enable Tx turned off "
+                f"on {len(result.get('tx_off') or [])} station(s); work claims "
+                "cleared. Stopping.",
+                flush=True,
+            )
+            self._send_json(200, {"ok": True, "hostname": host, **result})
+
+            def _stop() -> None:
+                time.sleep(0.2)
+                try:
+                    self.server.shutdown()
+                except Exception:
+                    pass
+
+            threading.Thread(target=_stop, name="wims-handover", daemon=True).start()
+
         def do_POST(self):
             path = self.path.split("?", 1)[0]
             if path == "/shutdown":
@@ -3284,6 +3393,12 @@ def make_handler(live: LiveFleet, refresh: float):
                 from wims.launcher.site_restart import handle_shutdown_request
                 if handle_shutdown_request(self):
                     def _stop() -> None:
+                        # Stop or restart on this PC: claims and Enable Tx
+                        # never carry over to the next server.
+                        try:
+                            live.release_tx_for_handover()
+                        except Exception:
+                            pass
                         time.sleep(0.05)
                         try:
                             self.server.shutdown()
@@ -3299,6 +3414,9 @@ def make_handler(live: LiveFleet, refresh: float):
                 body = json.loads(raw.decode("utf-8") or "{}")
             except json.JSONDecodeError:
                 self._send_json(400, {"ok": False, "error": "invalid JSON"})
+                return
+            if path == "/api/site/handover":
+                self._site_handover(body)
                 return
             if path == "/api/console/geometry":
                 # Placed window on this PC only. Remote reports are ignored.
@@ -3570,6 +3688,16 @@ class _QuietThreadingHTTPServer(ThreadingHTTPServer):
 
 
 
+def _handover_limiter(live):
+    """One failed-password limiter per server process."""
+    lim = getattr(live, "_handover_limiter", None)
+    if lim is None:
+        from wims.launcher.site_admin import FailureLimiter
+        lim = FailureLimiter()
+        live._handover_limiter = lim
+    return lim
+
+
 def _presence_summary(announcer) -> dict:
     """Short UDP-announce status for /healthz. Never raises."""
     if announcer is None:
@@ -3584,6 +3712,8 @@ def _presence_summary(announcer) -> dict:
         "announcing": bool(st.get("announcing")),
         "listening": bool(st.get("listening")),
         "error": hints[0] if hints else "",
+        # Other site servers this one can reach (split brain). Empty normally.
+        "two_servers": list(st.get("two_servers") or []),
     }
 
 def main() -> None:
@@ -3666,7 +3796,7 @@ def main() -> None:
     ap.add_argument("--no-presence", action="store_true",
                     help="do not announce or listen for other WS Hub site servers")
     ap.add_argument("--force-server", action="store_true",
-                    help="start even if another site server is announcing (lab only; loud)")
+                    help="tests only: start even if another site server answers")
     ap.add_argument("--sim-rotator", action="append", default=[], metavar="SPEC",
                     help="lab simulator: id[:az][:instance,...]  e.g. ROT-6M:45:WSJT-X "
                          "(repeatable). Enables Az ant / Δaz / click-to-point without K3NG.")
@@ -3941,15 +4071,10 @@ def main() -> None:
 
     if not args.no_presence:
         def _on_conflict(peers):
-            reachable = P.live_conflict_peers(peers)
-            if not reachable:
-                # Heard a server this PC cannot reach. Keep announcing.
-                return False
-            print("\n" + P.format_conflict_message(reachable), file=sys.stderr)
-            print("Demoting: another site server appeared on the LAN. Exiting.",
-                  file=sys.stderr)
-            # Hard exit from daemon thread — dual primary is worse than a drop.
-            os._exit(2)
+            # A second site server this PC can reach is reported as "Two
+            # site servers are running" on both. Neither stops on its own:
+            # the station owner picks one (password-protected takeover).
+            return P.live_conflict_peers(peers)
 
         announcer = P.PresenceAnnouncer(
             iface=args.iface,

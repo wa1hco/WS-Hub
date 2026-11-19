@@ -3882,8 +3882,36 @@ function applyConsoleCtrl(ctrl) {
   return false;
 }
 
+// Two site servers running (split brain): say so on every page. Neither
+// server stops on its own; the station owner picks one in the launcher.
+function watchTwoServers() {
+  if (typeof fetch !== "function" || typeof setInterval !== "function") return;
+  const check = () => {
+    fetch("/api/presence").then(r => r.json()).then(p => {
+      const two = (p && p.two_servers) || [];
+      let el = document.getElementById("two-servers-banner");
+      if (!two.length) { if (el) el.hidden = true; return; }
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "two-servers-banner";
+        el.className = "banner alarm";
+        el.style.display = "block";
+        el.style.margin = "6px 0";
+        document.body.insertBefore(el, document.body.firstChild);
+      }
+      const names = two.map(o => o.hostname || o.console_base || "another PC").join(", ");
+      el.textContent = "Two site servers are running. The station owner should pick one. " +
+        "Also running: " + names + ".";
+      el.hidden = false;
+    }).catch(() => {});
+  };
+  check();
+  setInterval(check, 10000);
+}
+
 function connect() {
   wireTipButtons();
+  watchTwoServers();
   wireLogPage();
   const tab = statusTabFromPath();
   if (tab) statusShowTab(tab);

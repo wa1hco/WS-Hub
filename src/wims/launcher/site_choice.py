@@ -144,3 +144,79 @@ def adopt_discovered_server_url(
     if current_reachable and (normalize_site_url(configured) or cur):
         return cur
     return disc
+
+
+# --- protected site-server control (who may host, takeover) ---------------- #
+
+AFFECTS_STATION = "This affects every PC at the station."
+START_CONFIRM = "No site server answered. Start one on this PC?"
+STOP_CONFIRM = "Stop the site server on this PC? " + AFFECTS_STATION
+RESTART_CONFIRM = "Restart the site server on this PC? " + AFFECTS_STATION
+TWO_SERVERS_MESSAGE = (
+    "Two site servers are running. The station owner should pick one."
+)
+
+
+def takeover_confirm_text(host: str | None) -> str:
+    name = (host or "").strip() or "the other PC"
+    return (
+        f"The site server on {name} will stop, and this PC will take over. "
+        "Work claims and Enable TX will be cleared. Continue?"
+    )
+
+
+def follow_other_confirm_text(host: str | None) -> str:
+    name = (host or "").strip() or "the other PC"
+    return (
+        f"Stop the site server on this PC and use the one on {name}? "
+        + AFFECTS_STATION
+    )
+
+
+def no_server_message(last_host: str | None) -> str:
+    """What a PC that may not host says when no site server answers."""
+    host = (last_host or "").strip()
+    if host and not is_loopback_host(host):
+        return (
+            f"No site server found. The last one was on {host}. "
+            "Ask the station owner to start it."
+        )
+    return "No site server found. Ask the station owner to start it."
+
+
+def last_site_is_other_pc(
+    last_site_url: str | None, lan_ips: Iterable[str] | None = None,
+) -> bool:
+    """True when the remembered site server is on another PC."""
+    last = normalize_site_url(last_site_url)
+    return bool(last) and not site_url_is_this_pc(last, lan_ips)
+
+
+def site_buttons(
+    *,
+    may_host: bool,
+    site_reachable: bool,
+    server_here: bool,
+    two_servers: bool,
+    offer: bool,
+    choice_ready: bool = True,
+) -> dict[str, bool]:
+    """Which site-server controls a launcher shows.
+
+    A PC that may not host sees only the status line. A PC that may host
+    sees Start (nothing answers), Restart (it hosts), "Make this PC the
+    site server" (another PC hosts, or two are running), and "Follow the
+    other" (two are running and one is here).
+    """
+    if not may_host:
+        return {"checkbox": False, "start": False, "restart": False,
+                "take_over": False, "follow_other": False}
+    return {
+        "checkbox": bool(offer),
+        "start": bool(not site_reachable and offer),
+        "restart": bool(site_reachable and server_here and choice_ready),
+        "take_over": bool(
+            (site_reachable and not server_here) or two_servers
+        ),
+        "follow_other": bool(two_servers and server_here),
+    }
