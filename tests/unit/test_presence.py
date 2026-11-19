@@ -294,6 +294,29 @@ def test_discover_keeps_udp_when_http_answers():
 
 
 
+
+def test_two_reachable_servers_keep_running_and_say_so():
+    """Split brain: no auto-demote. Both report it; the owner picks one."""
+    peer = {"instance_id": "peer-1", "hostname": "jeff-Precision-Tower-3420",
+            "console_base": "http://192.168.2.165:8787", "http_port": 8787}
+    ann = P.PresenceAnnouncer(iface="127.0.0.1", http_port=8787,
+                              instance_id="me", on_conflict=lambda peers: list(peers))
+    assert ann._handle_peers({"peer-1": peer}) is False
+    assert ann.demoted is False
+    st = ann.status_dict()
+    assert st["two_servers"][0]["hostname"] == "jeff-Precision-Tower-3420"
+    assert P.TWO_SERVERS_MESSAGE in st["hints"]
+
+
+def test_two_servers_entry_expires():
+    peer = {"instance_id": "peer-1", "hostname": "tower",
+            "console_base": "http://192.168.2.165:8787"}
+    ann = P.PresenceAnnouncer(iface="127.0.0.1", http_port=8787,
+                              instance_id="me", on_conflict=lambda peers: list(peers))
+    ann._handle_peers({"peer-1": peer})
+    later = time.time() + ann.TWO_SERVERS_FRESH_S + 1
+    assert ann.two_servers(later) == []
+
 if __name__ == "__main__":
     import traceback
     failed = 0

@@ -126,6 +126,15 @@ def _fake_app(**extra):
     fake._apply_discovered_site = lambda url, *a: fake.applied.append(url)
     fake._refresh_status = lambda: None
     fake._find_remote_site = lambda: None
+    # Protected site-server control (1.0.32): this PC may host, no handover
+    # marker, and the operator says yes to "Start one on this PC?".
+    fake._may_host = lambda: True
+    fake._handover_pending = lambda: None
+    fake._announced_site = None
+    fake._site_hostname = ""
+    fake.asked = []
+    fake._ask_yes_no = lambda title, text: fake.asked.append(text) or True
+    fake._update_site_status_line = lambda: None
     for key, value in extra.items():
         setattr(fake, key, value)
     for name in (
@@ -141,6 +150,10 @@ def _fake_app(**extra):
         "_restart_found_remote",
         "_restart_site_server_worker",
         "_note_server_revision",
+        "_confirm_start_here",
+        "_refuse_host_here",
+        "_last_site_host",
+        "_follow_after_handover",
     ):
         if name not in extra:
             setattr(fake, name, types.MethodType(getattr(LauncherApp, name), fake))
@@ -152,6 +165,7 @@ class _EnvGuard(unittest.TestCase):
         self._env = dict(os.environ)
         self._tmp = tempfile.TemporaryDirectory()
         os.environ["WIMS_SITE_SERVER_PID"] = str(Path(self._tmp.name) / "site-server.pid")
+        os.environ["WIMS_SITE_ADMIN"] = str(Path(self._tmp.name) / "site_admin.json")
         patcher = mock.patch.object(A, "save_last_site_url", lambda *_a: None)
         patcher.start()
         self.addCleanup(patcher.stop)
