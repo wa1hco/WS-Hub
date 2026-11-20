@@ -2087,11 +2087,15 @@ function rosAzDx(c) {
 }
 function rosKm(c) {
   if (c.distance_km == null) return "-";
+  // Whole km, rounded. The server already sends whole km; this also covers
+  // an older server that sent one decimal.
+  const km = Math.round(Number(c.distance_km));
+  if (!Number.isFinite(km)) return "-";
   if (bearingApprox(c)) {
-    const text = "~" + c.distance_km;
+    const text = "~" + km;
     return `<span class="az-approx" title="${escAttr(approxTip(c, "distance"))}">${esc(text)}</span>`;
   }
-  return String(c.distance_km);
+  return String(km);
 }
 function rosAzAnt(c) {
   if (c.az_ant == null) return "—";
@@ -3345,7 +3349,7 @@ function spotTitle(row) {
     reason,
     mult,
     factors,
-    row.km != null ? ((row.bearing_source === "dxcc" ? "~" : "") + row.km + " km") : "",
+    row.km != null ? ((row.bearing_source === "dxcc" ? "~" : "") + Math.round(Number(row.km)) + " km") : "",
     who ? ("Spotters: " + who) : "",
     row.heard_here ? "Heard here by WS Skim. Receive only." : "",
     row.source === "psk" ? (row.psk_reason || "PSK Reporter. Receive only.") : "",

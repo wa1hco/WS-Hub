@@ -883,7 +883,8 @@ def test_spot_row_uses_roster_fields_and_keeps_spot_extras():
     assert row["grid"] == "FN42"
     assert row["freq_hz"] == 50_313_000
     assert row["az"] == round(bearing(HOME, "FN42"))
-    assert row["distance_km"] == round(distance_km(HOME, "FN42"), 1)
+    assert row["distance_km"] == int(round(distance_km(HOME, "FN42")))
+    assert isinstance(row["distance_km"], int)
     assert row["age"] == 0
     assert row["spotter"] == "K1TTT"
     assert row["spotters"] == 1

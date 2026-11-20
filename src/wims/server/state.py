@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from wims.engine.dxcc import country_fields as _country_fields
 from wims.engine.geo import (
-    aim as _aim, base_call as _base_call, delta_az as _delta_az,
+    aim as _aim, base_call as _base_call, delta_az as _delta_az, display_km,
 )
 from wims.udp.messages import (
     _interpret_decode as _interpret_decode,
@@ -356,7 +356,8 @@ def roster_to_dict(scored_rows, not_needed: int, now: float,
             "delta_az": None if daz is None else round(daz),
             "rotator_moving": rotator_moving,
             "rotator_id": rotator_id,
-            "distance_km": None if dist is None else round(dist, 1),
+            # Whole km for display; scoring uses the float above.
+            "distance_km": display_km(dist),
             "bearing_source": bearing_source,  # grid | heard | dxcc | None
             "score": round(sc.total, 1),
             "is_needed": not c.is_dupe,

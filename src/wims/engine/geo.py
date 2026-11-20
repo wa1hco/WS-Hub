@@ -103,6 +103,19 @@ def bearing(from_grid: str | None, to_grid: str | None) -> float | None:
     return bearing_latlon(a[0], a[1], b[0], b[1])
 
 
+def display_km(km: float | None) -> int | None:
+    """A distance for people: whole km, rounded (16400.8 → 16401). None stays None.
+
+    Scoring and range checks keep the float; only shown values use this.
+    """
+    if km is None:
+        return None
+    try:
+        return int(round(float(km)))
+    except (TypeError, ValueError):
+        return None
+
+
 def distance_km(from_grid: str | None, to_grid: str | None) -> float | None:
     """Great-circle distance between grid centers in kilometres, or None if bad grid."""
     a = grid_to_latlon(from_grid)
