@@ -1028,8 +1028,10 @@ def test_mode_filter_other_unknown_and_status_counts():
     assert cw_drops["spot_count"] == 1
     other, other_drops = _rows(lines, allowed_modes={"Other"})
     modes = {row["mode"] for row in other}
-    for wanted in ("data", "MSK144", "Q65", "FM", "WSPR"):
+    for wanted in ("data", "MSK144", "Q65", "FM"):
         assert wanted in modes, wanted
+    # WSPR is a beacon: it cannot be worked, so it is never listed.
+    assert "WSPR" not in modes
     assert "FT8" not in modes and "CW" not in modes
     assert other_drops["spot_count"] == len(other)
     none, none_drops = _rows(lines, allowed_modes=set())

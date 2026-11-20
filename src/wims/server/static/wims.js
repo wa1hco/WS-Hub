@@ -3307,6 +3307,11 @@ function spotSpotter(row) {
   const primary = String(row.spotter || calls[0] || "").trim();
   const tip = calls.length ? calls.join(", ") : primary;
   if (!count && !primary) return "-";
+  // PSKR: just the receiver's call. The hover lists every receiver.
+  if (row.source === "psk" && primary) {
+    const title = tip ? ` title="${escAttr(tip)}"` : "";
+    return `<span${title}>${esc(primary)}</span>`;
+  }
   const label = count > 1 && primary
     ? (primary + " +" + (count - 1))
     : (primary || String(count));
