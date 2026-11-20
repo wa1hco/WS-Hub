@@ -34,6 +34,8 @@ import re
 # Longer tokens first so MSK144 wins over MSK and FST4W over FST4.
 _COMMENT = (
     ("MSK144", "MSK144"),
+    ("SUPERFOX", "FT8"),
+    ("F/H", "FT8"),
     ("FST4W", "FST4"),
     ("PSK31", "PSK"),
     ("RTTY", "RTTY"),
@@ -52,13 +54,27 @@ _COMMENT = (
     ("DATA", "data"),
     ("DIGI", "data"),
     ("MSK", "MSK144"),
+    ("FOX", "FT8"),
+    ("HOUND", "FT8"),
     ("CW", "CW"),
     ("FM", "FM"),
 )
 _COMMENT_RE = [
-    (re.compile(rf"\b{re.escape(token)}\b", re.IGNORECASE), mode)
+    (re.compile(rf"(?<![A-Z0-9]){re.escape(token)}(?![A-Z0-9])", re.IGNORECASE), mode)
     for token, mode in _COMMENT
 ]
+
+# Beacon modes. A station sending these cannot be worked, so they never
+# become Spotted rows (PSK Reporter still uses them to judge the path).
+BEACON_MODES = frozenset({"WSPR", "FST4W"})
+
+
+def is_beacon_mode(mode: str | None) -> bool:
+    """True for WSPR and FST4W (any case, ``WSPR-15`` too)."""
+    token = (mode or "").strip().upper().split(" ")[0] if mode else ""
+    if not token:
+        return False
+    return token in BEACON_MODES or token.startswith("WSPR") or token.startswith("FST4W")
 
 # (mode, center Hz, half-width Hz). The closest center wins when two overlap.
 # FT8 is ±2.5 kHz. FT4 and JT65 are narrower and sit beside it.

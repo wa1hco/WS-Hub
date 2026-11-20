@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 from wims.engine import scoring as S
 from wims.engine.dxcc import country_fields
 from wims.engine.geo import aim, display_km, distance_km
-from wims.integrations.cluster.modes import canonical_mode, infer_mode
+from wims.integrations.cluster.modes import canonical_mode, infer_mode, is_beacon_mode
 from wims.integrations.cluster.parse import ParsedSpot
 from wims.integrations.cluster.ranges import distance_fit, in_range, spotter_near_amount
 from wims.integrations.cluster.settings import (
@@ -202,6 +202,8 @@ def with_psk(groups: list[SpotGroup], reports, *, home_grid: str | None,
             continue
         if now - ts > window_s or ts - now > 60:
             continue
+        if is_beacon_mode(getattr(report, "mode", "")):
+            continue          # WSPR / FST4W: a beacon, not a station to work
         far = far_station(report, home4)
         if far is None:
             continue
@@ -570,8 +572,6 @@ def build_list(
             continue
         if allowed is not None and group.band not in allowed:
             continue
-        if allowed_modes is not None and mode_bucket(group.mode) not in allowed_modes:
-            continue
         heard_here = bool(group.skimmers) and (now - group.skim_seen) <= ttl_s
         heard_psk = bool(group.psk_near) and (now - group.psk_seen) <= ttl_s
         as_psk = False
@@ -591,6 +591,17 @@ def build_list(
         elif group.spotters:
             age = max(0.0, now - max(group.spotters.values()))
         row_mode = (group.psk_mode or group.mode) if as_psk else group.mode
+        # A cluster line with no mode in its comment, off the watering
+        # holes, is labeled "data". When PSK Reporter has the same call on
+        # the same band, its mode (FT8, FT4, ...) is the real one.
+        if not as_psk and canonical_mode(row_mode) == "data" and group.psk_mode \
+                and not is_beacon_mode(group.psk_mode):
+            row_mode = group.psk_mode
+        # The mode filter checks the mode the row shows.
+        if is_beacon_mode(row_mode):
+            continue
+        if allowed_modes is not None and mode_bucket(row_mode) not in allowed_modes:
+            continue
         row_freq = (group.psk_freq_hz or group.freq_hz) if as_psk else group.freq_hz
         drops["spot_count"] += 1
         grid = (group.grid or "").strip().upper() or None
@@ -752,7 +763,8 @@ def build_list(
             heard_by = latest_skim
         elif as_psk:
             latest_psk = max(group.psk_near.items(), key=lambda kv: (kv[1], kv[0]))[0]
-            spotter = f"PSKR {latest_psk}"
+            # Just the receiver's call: no SSID, no "+N more" count.
+            spotter = f"PSKR {latest_psk.split('-')[0]}"
             heard_by = latest_psk
         else:
             spotter = _latest_spotter(group.spotters)
