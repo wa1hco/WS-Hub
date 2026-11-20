@@ -20,12 +20,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from wims.udp import messages as M  # noqa: E402
 from wims.udp.controller import TxController  # noqa: E402
 from wims.interlock.arbiter import TxArbiter, OverlapDetector  # noqa: E402
 
-GROUP, PORT, IFACE = "224.0.0.73", 2237, "127.0.0.1"
+from testnet import TEST_GROUP, TEST_PORT  # noqa: E402
+
+# Private test group/port: never the live 224.0.0.73:2237 a site server uses.
+GROUP, PORT, IFACE = TEST_GROUP, TEST_PORT, "127.0.0.1"
 INSTANCES = ["SIM-6A", "SIM-6B"]            # both 6 m -> same resource group
 GROUP_OF = lambda i: "6m"                    # noqa: E731  (one shared group)
 
@@ -34,6 +38,7 @@ def main() -> int:
     emu = subprocess.Popen(
         [sys.executable, str(ROOT / "tools" / "testbed" / "simulators" / "emulator.py"),
          "--period", "2", "--rate", "3", "--seed", "2", "--iface", IFACE,
+         "--group", GROUP, "--port", str(PORT),
          "--instances", "SIM-6A:50313000,SIM-6B:50314000"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

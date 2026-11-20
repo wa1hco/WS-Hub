@@ -142,6 +142,29 @@ def rf_hz(freq_hz: float, *, instance: str | None = None) -> int:
     return hz
 
 
+def in_if_range(freq_hz: float) -> bool:
+    """True when a raw dial is inside one of the IFs ``rf_hz`` maps (21–24, 28–29.7 MHz)."""
+    try:
+        hz = int(freq_hz)
+    except (TypeError, ValueError):
+        return False
+    return any(lo <= hz < hi for lo, hi, _offset in _IF_RANGES)
+
+
+def if_dial_outside(freq_hz: float) -> bool:
+    """A live dial that is set but not in an IF range.
+
+    For a seat marked as reporting IF, that means it most likely reports RF
+    (a Flex in XVTR mode, an IC-9700, an HF rig on 40 m) and was marked by
+    mistake. Unknown (0) is not a warning.
+    """
+    try:
+        hz = int(freq_hz or 0)
+    except (TypeError, ValueError):
+        return False
+    return hz > 0 and not in_if_range(hz)
+
+
 def rf_band(label: str, *, instance: str | None = None) -> str:
     """Map IF band labels (10m / 15m) to RF when this seat reports IF."""
     key = (label or "").strip().lower()

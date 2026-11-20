@@ -6,14 +6,16 @@ rig-name ids, bands) on the multicast group, and reacts to inbound Reply / Halt 
 monitor / fleet view / activity map — and later the §3.2 sender and §3.4 arbiter —
 be developed and tested at multi-instance scale with no radios.
 
-Run (from the repo root), then point the fleet view at the same group:
+Run (from the repo root), then point a throwaway server at the same group:
     python tools/testbed/simulators/emulator.py
     python tools/testbed/simulators/emulator.py --period 3 --instances SIM-6M:50313000,SIM-2M:144174000
     # in another window:
-    python src/wims/discovery/fleet.py --port 2237 --multicast 224.0.0.73 --host 127.0.0.1
+    python src/wims/server/app.py --iface 127.0.0.1 --http-port 8799 --no-seed \
+        --no-presence --no-tx --group 239.255.13.37 --ports 22437
 
-Defaults send on the loopback interface so a local fleet view (--host 127.0.0.1)
-sees it without touching the real network.
+Defaults send on the loopback interface to a private test group and port
+(``tools/testbed/testnet.py``), never to the live 224.0.0.73:2237 a real
+site server listens on. Sending to a live address needs ``--allow-live``.
 """
 
 from __future__ import annotations
@@ -29,6 +31,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from testnet import TEST_GROUP, TEST_PORT, reaches_live  # noqa: E402
 
 from wims.udp import encode as E  # noqa: E402
 from wims.udp import messages as M  # noqa: E402
@@ -100,8 +105,13 @@ def make_decode_message(rng: random.Random, cycle: int) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="WSJT-X emulator (no RF).")
-    ap.add_argument("--group", default="224.0.0.73")
-    ap.add_argument("--port", type=int, default=2237)
+    ap.add_argument("--group", default=TEST_GROUP,
+                    help=f"multicast group (default private test group {TEST_GROUP})")
+    ap.add_argument("--port", type=int, default=TEST_PORT,
+                    help=f"UDP port (default private test port {TEST_PORT})")
+    ap.add_argument("--allow-live", action="store_true",
+                    help="allow sending to a live WS Hub / WSJT-X address "
+                         "(224.0.0.73, 2237, 2238, 12060). Lab use only.")
     ap.add_argument("--iface", default="127.0.0.1", help="outgoing/membership interface")
     ap.add_argument("--ttl", type=int, default=1)
     ap.add_argument("--period", type=float, default=15.0, help="TX/RX cycle seconds (lower = faster test)")
@@ -109,6 +119,10 @@ def main() -> None:
     ap.add_argument("--instances", default=None, help="comma list of ID:DIAL_HZ[:MODE]")
     ap.add_argument("--seed", type=int, default=None)
     args = ap.parse_args()
+    if reaches_live(args.group, args.port) and not args.allow_live:
+        ap.error(f"{args.group}:{args.port} is where a live site server listens. "
+                 f"Fake decodes would show in a real roster. Use the default "
+                 f"{TEST_GROUP}:{TEST_PORT}, or add --allow-live on a lab PC.")
 
     rng = random.Random(args.seed)
     instances = parse_instances(args.instances)
