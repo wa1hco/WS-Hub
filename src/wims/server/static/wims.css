@@ -279,6 +279,10 @@ body.dense h2 { margin:12px 0 4px; font-size:11px; }
 }
 .spot-tag.clu { color:#424a53; background:#eaeef2; }
 .spot-tag.skim { color:var(--alive); background:#dafbe1; }
+.spot-tag.psk { color:#0550ae; background:#ddf4ff; }
+.spot-bands .spot-band { display:inline-block; margin-right:10px; cursor:help; white-space:nowrap; }
+.spot-bands .spot-band b { color:var(--text); }
+.spot-bands .spot-band-on { font-size:10px; font-weight:700; color:var(--alive); }
 #spot tr.spot-dim td { color:var(--dim); opacity:0.7; }
 #spot tr.spot-dim:hover td { opacity:0.9; }
 #spot td.spot-src { padding-right:0; width:1%; }

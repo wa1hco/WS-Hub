@@ -23,7 +23,9 @@ minutes, on the site server only. A report counts when the sender or the
 receiver is in the station's 4-character grid — the same filter as the
 PSK Reporter map with one end in that square. The resulting per-band,
 per-direction map, plus recent local WSJT-X decodes, tells the Spotted
-list which cluster spots are likely workable from here.
+list which cluster spots are likely workable from here. The same reports
+also list needed far stations as receive-only PSKR rows (``far_station``
+and ``view.with_psk``); that adds no requests.
 
 Nothing here transmits. Callers must never pass a grid read from a
 WSJT-X ini file.
@@ -232,6 +234,34 @@ def far_grid(report: Report, home4: str) -> str:
     if _in_home(report.receiver_grid, home4):
         return report.sender_grid
     return ""
+
+
+def far_station(report: Report, home4: str) -> tuple[str, str, bool] | None:
+    """The far end of a report: ``(call, grid, heard_here)``, or None.
+
+    ``heard_here`` is True when the far station transmitted and a receiver
+    in the home square heard it. False means the far station is the
+    receiver that heard a station in the home square. A report with both
+    ends (or neither end) in the home square is None. The grid is only the
+    one PSK Reporter gave for that end; it may be blank, and it is never
+    estimated.
+    """
+    if not home4:
+        return None
+    send_home = report.sender_in_home or _in_home(report.sender_grid, home4)
+    recv_home = report.receiver_in_home or _in_home(report.receiver_grid, home4)
+    if send_home == recv_home:
+        return None
+    if recv_home:
+        call, grid, heard = report.sender_call, report.sender_grid, True
+    else:
+        call, grid, heard = report.receiver_call, report.receiver_grid, False
+    call = (call or "").strip().upper()
+    if not call:
+        return None
+    if grid and _in_home(grid, home4):
+        return None
+    return call, grid, heard
 
 
 def path_from_report(report: Report, home_grid: str, *, now: float,

@@ -41,7 +41,7 @@ That overlap is the **inhibit** path: a beta/patched WSJT-X releases PTT when an
 2. **Inhibit** — SSB/CW KEY → WSJT-X PTT release (N1MM agent **KEY** section + Keyline)  
 3. **Logging** — WSJT-X Logged QSOs → N1MM via **N1MM agent Log**  
 4. **Broadcast bridge** — N1MM Broadcast Data on localhost → site **N1MM** tab via **N1MM agent Broadcast**
-5. **Spotted** — stations WS Skim heard here (green **SKIM**) and DX cluster spots (gray **CLU**) that the Goal still needs, including other bands, filtered by mode. A click selects the station. It does not transmit and it does not retune a radio.  
+5. **Spotted** — stations WS Skim heard here (green **SKIM**), stations PSK Reporter has with your grid square (blue **PSKR**), and DX cluster spots (gray **CLU**) that the Goal still needs, including other bands, filtered by mode. A click selects the station. It does not transmit and it does not retune a radio.  
 6. **Headings** — Az DX from the grid, or an approximate heading from the station's country (marked `~`) when no grid is known. No grid square is ever guessed.  
 7. **Rotators** — headings read from hamlib `rotctld` on the seat, shown on Operate.
 
@@ -131,9 +131,15 @@ Under the heading, checkboxes for **SSB**, **CW**, **FT8**, **FT4**, and **Other
 
 The line above the list is the connection, such as `Cluster: logged in as WA1HCO, 12 spots, 3 needed`. Hover it for the node, the login, and why some spots were left off. A failure names the next step. Spots stay off until Setup turns them on (`Cluster: off. Turn it on in Setup.`).
 
-Beside the mode boxes, **Skim** and **Cluster** hide SKIM lines or CLU lines. With Skim unchecked, a station that is also on the cluster shows as its CLU line.
+**PSKR spots.** With **Use PSK Reporter to rank spots** on, the same PSK Reporter reports WS Hub already fetches (at most once every five minutes) also list the far stations the Goal still needs, on every band you chose, with a blue **PSKR** tag. A station counts when a receiver in your grid square heard it, or when it heard a station in your square, in the last 15 minutes. Either way it is on the air now and the path to your square is open, so the band range check is skipped and the line is never dimmed. The need check is the same one the call roster uses. The grid is the one on the report, or a grid heard earlier; it is never guessed from the country. Hover the tag to see who heard whom and how strong. **dB** is only filled when a receiver here heard that station. A WS Skim decode of the same station wins and shows as SKIM. Use it to decide whether to change bands.
 
-Click a Spotted line to select that station. SKIM and CLU lines work the same way. The radio is not retuned and nothing is transmitted. Work still needs a live decode on the roster. (Retuning the radio and pointing the antenna from a spot is planned. Even then, the contact starts from the roster after WSJT-X decodes the station.)
+**Needed by band** is the line above the mode boxes. It counts the needed stations on the list for each band, with **on** where a WSJT-X is already running. Hover a band for how many came from Skim, PSK Reporter, and the cluster.
+
+Beside the mode boxes, **Skim**, **PSKR**, and **Cluster** hide SKIM, PSKR, or CLU lines. With Skim or PSKR unchecked, a station that is also on the cluster shows as its CLU line.
+
+**columns** beside them offers the same columns as the call roster, plus the tag, Spotter, and QSY. A fact a spot does not have, such as Calling or Message on a cluster line, shows `-`. The choice is kept in this browser.
+
+Click a Spotted line to select that station. SKIM, PSKR, and CLU lines work the same way. The radio is not retuned and nothing is transmitted. Work still needs a live decode on the roster. (Retuning the radio and pointing the antenna from a spot is planned. Even then, the contact starts from the roster after WSJT-X decodes the station.)
 
 ### Overview · WSJT-X · Log · N1MM
 
@@ -258,6 +264,7 @@ Images: [manual/images/](manual/images/) — Markdown paths stay fixed when you 
 
 | Date | Note |
 |------|------|
+| 2026-11-20 | PSK Reporter needed stations as blue PSKR spots; PSKR checkbox; needed-by-band line; Spotted columns menu |
 | 2026-11-18 | WS Skim decodes as green SKIM spots; Skim checkbox; Setup Skim receivers |
 | 2026-11-12 | WS Hub name; install moved to INSTALL.md; Call roster tooltip; headings, rotators, and planned spot retune listed |
 | 2026-11-11 | Hide a redundant mult badge on the call roster too, when a place word is shown |

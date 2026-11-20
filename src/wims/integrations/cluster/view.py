@@ -28,6 +28,11 @@ squares). Under a DXCC or checklist Goal that can need a station without a
 grid, a no-grid spot stays, with an approximate heading from the country-file
 entity centroid. That heading is marked approximate. Centroid distance is
 never a hard in-range gate, and no grid is ever estimated from the entity.
+
+Rows come from three receive-only sources: WS Skim decodes heard here
+(SKIM), PSK Reporter reports with one end in the home square (PSKR, see
+``with_psk``), and DX cluster spots (CLU). SKIM and PSKR rows prove the
+path, so they skip the range gate and are never dimmed.
 """
 
 from __future__ import annotations
@@ -69,6 +74,16 @@ class SpotGroup:
     skim_seen: float = 0.0
     skim_snr: int | None = None
     skim_freq_hz: int = 0
+    # PSK Reporter: home-square stations on these reports -> last time.
+    # Filled per snapshot by ``with_psk``; never stored in the SpotBook.
+    psk_near: dict[str, float] = field(default_factory=dict)
+    psk_seen: float = 0.0
+    psk_snr: int | None = None
+    psk_freq_hz: int = 0
+    psk_mode: str = ""
+    psk_reports: int = 0
+    psk_heard_here: bool = False   # a home-square receiver heard this call
+    psk_hears_home: bool = False   # this call heard a home-square sender
 
 
 def _hhmm(now: float) -> str:
@@ -154,6 +169,117 @@ class SpotBook:
 
     def clear(self) -> None:
         self._rows.clear()
+
+
+def with_psk(groups: list[SpotGroup], reports, *, home_grid: str | None,
+             now: float, window_s: float) -> list[SpotGroup]:
+    """Spot rows plus PSK Reporter's far stations, for one snapshot.
+
+    Each report with exactly one end in the home square names a far
+    station that is on the air right now: it was heard here, or it heard a
+    station here. That station becomes (or joins) the row for its call and
+    band. The book's own rows are copied, not changed, so the next poll
+    replaces this data cleanly. The grid is the one on the report, or blank;
+    ``build_list`` may fill a blank from remembered heard grids. Nothing
+    here estimates a grid.
+    """
+    from dataclasses import replace
+
+    from wims.core.bands import band_label
+    from wims.integrations.cluster.psk import clean_grid, far_station, grid4
+
+    home4 = grid4(home_grid or "")
+    out: dict[tuple[str, str], SpotGroup] = {
+        (g.call, g.band): g for g in groups
+    }
+    if not home4:
+        return list(out.values())
+    copied: set[tuple[str, str]] = set()
+    for report in reports or []:
+        try:
+            ts = float(report.ts)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if now - ts > window_s or ts - now > 60:
+            continue
+        far = far_station(report, home4)
+        if far is None:
+            continue
+        call, grid, heard_here = far
+        band = band_label(report.freq_hz, apply_if=False)
+        if not band or band == "?":
+            continue
+        key = (call, band)
+        row = out.get(key)
+        if row is None:
+            row = SpotGroup(
+                call=call, band=band, mode=report.mode or "",
+                freq_hz=int(report.freq_hz), comment="", grid=None,
+                last_seen=0.0, hhmm=_hhmm(ts),
+            )
+            out[key] = row
+            copied.add(key)
+        elif key not in copied:
+            row = replace(row, spotters=dict(row.spotters),
+                          skimmers=dict(row.skimmers), psk_near={})
+            out[key] = row
+            copied.add(key)
+        near = report.receiver_call if heard_here else report.sender_call
+        near = (near or "").strip().upper() or "PSK Reporter"
+        row.psk_near[near] = max(ts, row.psk_near.get(near, 0.0))
+        row.psk_reports += 1
+        if heard_here:
+            row.psk_heard_here = True
+            if report.snr is not None and (row.psk_snr is None or report.snr > row.psk_snr):
+                row.psk_snr = int(report.snr)
+        else:
+            row.psk_hears_home = True
+        if ts >= row.psk_seen:
+            row.psk_seen = ts
+            row.psk_freq_hz = int(report.freq_hz)
+            row.psk_mode = report.mode or row.psk_mode
+        row.last_seen = max(row.last_seen, ts)
+        square = clean_grid(grid)
+        if square and (not row.grid or len(square) > len(row.grid)):
+            row.grid = square
+    return list(out.values())
+
+
+def band_summary(rows: list[dict], operations: list[OnAir] | None = None) -> list[dict]:
+    """Needed stations per band in the listed rows, low band first.
+
+    One count per call on a band, whatever source listed it, plus how many
+    of those WS Skim heard here, PSK Reporter reported, and the cluster
+    spotted. ``on_band`` is True when a live WSJT-X is on that band.
+    """
+    from wims.core.bands import band_sort_key
+
+    per: dict[str, dict] = {}
+    for row in rows or []:
+        band = row.get("band") or ""
+        if not band:
+            continue
+        item = per.setdefault(band, {
+            "band": band, "calls": set(), "skim": set(), "psk": set(),
+            "cluster": set(),
+        })
+        call = row.get("call") or ""
+        item["calls"].add(call)
+        source = row.get("source") or "cluster"
+        item.get(source, item["cluster"]).add(call)
+    live = {op.band for op in (operations or [])}
+    out = []
+    for band in sorted(per, key=band_sort_key):
+        item = per[band]
+        out.append({
+            "band": band,
+            "needed": len(item["calls"]),
+            "skim": len(item["skim"]),
+            "psk": len(item["psk"]),
+            "cluster": len(item["cluster"]),
+            "on_band": band in live,
+        })
+    return out
 
 
 def on_band(band: str, mode: str, operations: list[OnAir] | None) -> bool:
@@ -372,6 +498,27 @@ def status_detail(*, host: str, port: int, callsign: str, qsy_cost: int,
     return " ".join(parts)
 
 
+def psk_row_reason(group: SpotGroup, *, now: float) -> str:
+    """Hover for a PSKR row: who heard whom, how loud, how long ago."""
+    names = sorted(group.psk_near)
+    shown = ", ".join(names[:4]) + (f" +{len(names) - 4}" if len(names) > 4 else "")
+    ago = int(max(0.0, now - group.psk_seen))
+    when = f"{ago} s ago" if ago < 120 else f"{ago // 60} min ago"
+    bits = []
+    if group.psk_heard_here:
+        snr = group.psk_snr
+        snr_words = f" at {snr:+d} dB" if snr is not None else ""
+        bits.append(f"heard by {shown}{snr_words}")
+    if group.psk_hears_home:
+        bits.append(f"hears {shown}" if not group.psk_heard_here else "and hears the home square")
+    what = " ".join(bits) or f"reported with {shown}"
+    word = "report" if group.psk_reports == 1 else "reports"
+    return (
+        f"PSK Reporter: {what}, {group.psk_reports} {word}, last {when}. "
+        "On the air now. Receive only."
+    )
+
+
 def build_list(
     groups: list[SpotGroup],
     *,
@@ -390,6 +537,7 @@ def build_list(
     opening_for=None,
     show_cluster: bool = True,
     show_skim: bool = True,
+    show_psk: bool = True,
 ) -> tuple[list[dict], dict]:
     """Rows for the Spotted list, and counts of why others were left off.
 
@@ -405,6 +553,12 @@ def build_list(
     dimmed, sorted first: it was heard here). Skim rows skip the band range
     gate, because a decode here proves the path. Other rows are CLU rows.
     The Skim and Cluster checkboxes hide each kind.
+
+    A row PSK Reporter has from the home square (see ``with_psk``), and
+    that Skim did not hear, is a PSKR row: that station is on the air and
+    the path to the home square is proven, so it also skips the range
+    gate and is not dimmed. The PSKR checkbox hides those. Every row is
+    receive only.
     """
     weights = S.cluster_weights(qsy_cost)
     rows: list[dict] = []
@@ -419,16 +573,25 @@ def build_list(
         if allowed_modes is not None and mode_bucket(group.mode) not in allowed_modes:
             continue
         heard_here = bool(group.skimmers) and (now - group.skim_seen) <= ttl_s
+        heard_psk = bool(group.psk_near) and (now - group.psk_seen) <= ttl_s
+        as_psk = False
         if heard_here and show_skim:
             as_skim = True
+        elif heard_psk and show_psk:
+            as_skim = False
+            as_psk = True
         elif group.spotters and show_cluster:
             as_skim = False
         else:
             continue
         if as_skim:
             age = max(0.0, now - group.skim_seen)
+        elif as_psk:
+            age = max(0.0, now - group.psk_seen)
         elif group.spotters:
             age = max(0.0, now - max(group.spotters.values()))
+        row_mode = (group.psk_mode or group.mode) if as_psk else group.mode
+        row_freq = (group.psk_freq_hz or group.freq_hz) if as_psk else group.freq_hz
         drops["spot_count"] += 1
         grid = (group.grid or "").strip().upper() or None
         remembered: dict = {}
@@ -441,7 +604,7 @@ def build_list(
         latlon = None
         if not grid:
             # Still pass grid=None into classify. Never invent a square.
-            verdict = classify(group.call, group.band, None, group.mode)
+            verdict = classify(group.call, group.band, None, row_mode)
             if not _needed_without_grid(verdict):
                 drops["no_grid"] += 1
                 continue
@@ -454,10 +617,10 @@ def build_list(
             # Centroid distance is not a hard in-range gate.
         else:
             km = distance_km(home, grid)
-            if not as_skim and not in_range(km, group.band, group.mode):
+            if not (as_skim or as_psk) and not in_range(km, group.band, row_mode):
                 drops["range"] += 1
                 continue
-            verdict = classify(group.call, group.band, grid, group.mode)
+            verdict = classify(group.call, group.band, grid, row_mode)
             if getattr(verdict, "is_dupe", False):
                 drops["worked"] += 1
                 continue
@@ -466,7 +629,7 @@ def build_list(
                 home, None if from_memory else grid,
                 heard_grid=grid if from_memory else None,
             )
-        needs_qsy = not on_band(group.band, group.mode, operations)
+        needs_qsy = not on_band(group.band, row_mode, operations)
         rover = "/R" in group.call.upper()
         if not rover and rover_for is not None:
             rover = bool(rover_for(group.call))
@@ -492,6 +655,10 @@ def build_list(
         if as_skim:
             near_amt = spotter_near_amount(0.0)
             near_detail = "heard here by WS Skim " + ", ".join(skim_names)
+        psk_names = sorted(group.psk_near) if as_psk else []
+        if as_psk:
+            near_amt = spotter_near_amount(0.0)
+            near_detail = "PSK Reporter " + ", ".join(psk_names)
         if bearing_source == "dxcc":
             # Do not score an untrustworthy centroid distance.
             fit = 0.0
@@ -500,7 +667,7 @@ def build_list(
             else:
                 distance_detail = f"approx {int(round(km))} km"
         else:
-            fit = distance_fit(km, group.band, group.mode)
+            fit = distance_fit(km, group.band, row_mode)
             distance_detail = f"{int(km)} km" if km is not None else ""
         scored = S.score_spot(S.SpotFeatures(
             is_new_mult=bool(getattr(verdict, "is_new_mult", False)),
@@ -509,7 +676,7 @@ def build_list(
             needs_qsy=needs_qsy,
             age_s=age,
             ttl_s=ttl_s,
-            spotter_count=len(group.spotters) + len(skim_names),
+            spotter_count=len(group.spotters) + len(skim_names) + len(psk_names),
             spotter_near=near_amt,
             distance_fit=fit,
             need_detail=getattr(verdict, "need_reason", "") or "",
@@ -540,8 +707,8 @@ def build_list(
         open_reason = ""
         psk_count = 0
         local_count = 0
-        if opening_for is not None and not as_skim:
-            # A SKIM row was heard here, so it needs no opening check.
+        if opening_for is not None and not as_skim and not as_psk:
+            # A SKIM or PSKR row already proves the path from here.
             try:
                 found = opening_for(group.band, az_dx)
             except Exception:
@@ -568,13 +735,40 @@ def build_list(
             )
             open_path = True
             open_reason = skim_reason
+        psk_reason = ""
+        if as_psk:
+            psk_reason = psk_row_reason(group, now=now)
+            open_path = True
+            open_reason = psk_reason
         cluster_calls = sorted(group.spotters)
-        spotter_calls = cluster_calls + [f"Skim {name}" for name in skim_names]
+        spotter_calls = (
+            cluster_calls
+            + [f"Skim {name}" for name in skim_names]
+            + [f"PSKR {name}" for name in psk_names]
+        )
         if as_skim:
             latest_skim = max(group.skimmers.items(), key=lambda kv: (kv[1], kv[0]))[0]
             spotter = f"Skim {latest_skim}"
+            heard_by = latest_skim
+        elif as_psk:
+            latest_psk = max(group.psk_near.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            spotter = f"PSKR {latest_psk}"
+            heard_by = latest_psk
         else:
             spotter = _latest_spotter(group.spotters)
+            heard_by = ""
+        if as_skim:
+            source, source_tag = "skim", "SKIM"
+        elif as_psk:
+            source, source_tag = "psk", "PSKR"
+        else:
+            source, source_tag = "cluster", "CLU"
+        if as_skim:
+            row_snr = group.skim_snr
+        elif as_psk and group.psk_heard_here:
+            row_snr = group.psk_snr
+        else:
+            row_snr = None
         rows.append({
             "call": group.call,
             "country": place["country"],
@@ -586,9 +780,9 @@ def build_list(
             "grid_tip": remembered.get("grid_tip") or "",
             "grid_stale": False,
             "band": group.band,
-            "mode": group.mode,
-            "freq_hz": group.freq_hz,
-            "freq": _mhz(group.freq_hz),
+            "mode": row_mode,
+            "freq_hz": row_freq,
+            "freq": _mhz(row_freq),
             "az": None if az_dx is None else round(az_dx),
             "distance_km": None if km is None else round(km, 1),
             "bearing_source": bearing_source,
@@ -617,8 +811,14 @@ def build_list(
                 {"name": f.name, "contribution": f.contribution, "detail": f.detail}
                 for f in scored.factors
             ],
-            "source": "skim" if as_skim else "cluster",
-            "source_tag": "SKIM" if as_skim else "CLU",
+            "source": source,
+            "source_tag": source_tag,
+            # Roster-shaped facts, so every call-roster column has a value.
+            # ``instance`` is who heard it here (Skim receiver or the
+            # home-square PSK Reporter station); ``snr`` is that hearing.
+            "instance": heard_by,
+            "snr": row_snr,
+            "receive_only": True,
             "heard_here": as_skim,
             "also_cluster": bool(as_skim and group.spotters),
             "skim_receivers": skim_names,
@@ -628,7 +828,13 @@ def build_list(
             "open_reason": open_reason,
             "psk_count": psk_count,
             "local_count": local_count,
-            "dim": (not as_skim) and open_path is False,
+            "psk_receivers": psk_names,
+            "psk_reports": group.psk_reports if as_psk else 0,
+            "psk_heard_here": bool(as_psk and group.psk_heard_here),
+            "psk_hears_home": bool(as_psk and group.psk_hears_home),
+            "psk_reason": psk_reason,
+            "also_cluster_psk": bool(as_psk and group.spotters),
+            "dim": (not as_skim) and (not as_psk) and open_path is False,
         })
     # Heard here first, then likely-workable, then score. Unlikely spots
     # stay listed.

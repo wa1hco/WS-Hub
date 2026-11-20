@@ -2512,6 +2512,7 @@ class LiveFleet:
             "psk_rank": bool(saved.get("psk_rank")),
             "show_cluster": bool(saved.get("show_cluster", True)),
             "show_skim": bool(saved.get("show_skim", True)),
+            "show_psk": bool(saved.get("show_psk", True)),
             "skim_ids": saved.get("skim_ids") or "",
         }
 
