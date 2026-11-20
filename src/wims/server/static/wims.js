@@ -796,6 +796,62 @@ function wireLogPage() {
 }
 
 /** Setup: mark rig-names / N1MM stations that report IF, not RF. */
+// -- Steady hover tooltips on live lists ----------------------------------- //
+// The page redraws every list on each /events frame (once a second). A list
+// that rebuilds its rows throws away the row under the mouse, and the
+// browser drops that row's hover tooltip, so the tooltip flashes on and off.
+// While the pointer is over one of these lists, skip the rebuild and catch
+// up when the pointer leaves. Moving to another row restarts the clock, and
+// a pointer parked on one row still sees a refresh every HOVER_HOLD_MAX_MS,
+// so new decodes are never held back for long.
+const HOVER_HOLD_MAX_MS = 8000;
+
+function holdWhileHovered(el, redraw, now) {
+  if (!el) return false;
+  if (now == null) now = Date.now();
+  let over = false;
+  try { over = !!el.matches(":hover"); } catch (_) { over = false; }
+  if (!el._hoverHold) {
+    const h = {since: 0, row: null, redraw: null, pending: false};
+    el._hoverHold = h;
+    if (el.addEventListener) {
+      el.addEventListener("mouseover", (e) => {
+        const t = e && e.target;
+        const tr = t && t.closest ? t.closest("tr") : null;
+        if (tr !== h.row) { h.row = tr; h.since = Date.now(); }
+      });
+      el.addEventListener("mouseleave", () => {
+        h.row = null;
+        h.since = 0;
+        const fn = h.pending ? h.redraw : null;
+        h.pending = false;
+        h.redraw = null;
+        if (fn) fn();
+      });
+    }
+  }
+  const h = el._hoverHold;
+  if (!over) { h.pending = false; h.redraw = null; return false; }
+  if (!h.since) h.since = now;
+  if (now - h.since >= HOVER_HOLD_MAX_MS) {
+    h.since = now;          // refresh once, then hold again
+    h.pending = false;
+    h.redraw = null;
+    return false;
+  }
+  h.redraw = redraw;        // always the latest data
+  h.pending = true;
+  return true;
+}
+
+/** Run a Status-page table render unless the pointer is over that table. */
+function renderUnlessHovered(bodyId, fn, arg) {
+  const body = $(bodyId);
+  const table = body ? ((body.closest && body.closest("table")) || body) : null;
+  if (table && holdWhileHovered(table, () => fn(arg))) return;
+  fn(arg);
+}
+
 let _ifSeatsHtml = "";
 function escAttr(s) {
   return esc(s).replace(/"/g, "&quot;");
@@ -2646,11 +2702,26 @@ function applyOperateShotContext() {
   }
 }
 
+let _rosDrawnAlert = "";
+
+/** Rows that must show at once even under the mouse: calling us, armed, can-TX. */
+function rosAlertKey(r) {
+  const tx = (_txState && _txState.can_tx) ? "tx" : "-";
+  const hot = ((r && r.candidates) || [])
+    .filter(c => c.is_calling_us || c.is_armed)
+    .map(c => (c.id || c.call || "") + (c.is_calling_us ? "!" : "*"))
+    .sort();
+  return tx + "|" + hot.join(",");
+}
+
 function renderRoster(r) {
   if (!r || !$("ros-body")) return;
   _rosData = r;
   rosSyncColChecks();
   rosWire();
+  // Live update: keep the hovered row (and its tooltip) in place, unless a
+  // station starts calling us or Enable Tx changes, which always shows.
+  if (rosAlertKey(r) === _rosDrawnAlert && holdWhileHovered($("ros"), rosDraw)) return;
   rosDraw();
 }
 
@@ -2737,6 +2808,7 @@ function rosEmptyTip(r, needMode, selected, maxAge) {
 
 function rosDraw() {
   const r = _rosData; if (!r) return;
+  _rosDrawnAlert = rosAlertKey(r);
   rosSyncMaxAgeControl();
   rosSyncNeedControl();
   const bands = _rosOffered.length
@@ -3314,7 +3386,7 @@ function spotSyncColChecks() {
     .filter(Boolean);
   buildColChecks(wrap, cols, want, (keys) => {
     spotSaveColPref(keys);
-    if (_spotData) renderSpotted(_spotData);
+    if (_spotData) renderSpotted(_spotData, true);
   });
 }
 
@@ -3375,7 +3447,7 @@ function spotWire() {
         const col = spotCols().find(c => c.key === key) || {};
         _spotSort = {key, dir: col.num ? -1 : 1};
       }
-      if (_spotData) renderSpotted(_spotData);
+      if (_spotData) renderSpotted(_spotData, true);
     });
   }
   body.addEventListener("click", (e) => {
@@ -3536,7 +3608,18 @@ function spotBandLine(c) {
   el.title = "Needed stations in this list, per band. Receive only: Skim and PSK Reporter show who is on the air now.";
 }
 
-function renderSpotted(c) {
+/** Mark the selected spot on rows already drawn (used while the list is held). */
+function spotMarkSelected(body, c) {
+  const selCall = (c.selected && c.selected.call) || "";
+  const selBand = (c.selected && c.selected.band) || "";
+  for (const tr of body.querySelectorAll("tr[data-call]")) {
+    const on = !!selCall && tr.dataset.call === selCall && tr.dataset.band === selBand;
+    if (tr.classList) tr.classList.toggle("spot-sel", on);
+  }
+}
+
+// force: an operator action (sort, columns) redraws even under the mouse.
+function renderSpotted(c, force) {
   const status = $("spot-status");
   if (!status) return;
   c = c || {};
@@ -3557,6 +3640,12 @@ function renderSpotted(c) {
   const body = $("spot-body");
   if (!table || !body) return;
   spotWire();
+  // Live update under the mouse: keep the rows (and the hover tooltip)
+  // steady; only the selection mark follows. Catch up on mouseleave.
+  if (!force && holdWhileHovered(table, () => { if (_spotData) renderSpotted(_spotData, true); })) {
+    spotMarkSelected(body, c);
+    return;
+  }
   const cols = spotCols();
   const col = cols.find(item => item.key === _spotSort.key) || cols[cols.length - 1];
   const rows = (c.rows || []).slice();
@@ -3905,19 +3994,19 @@ function renderCluster(c) {
 function render(s) {
   renderHeader(s);
   renderSystem(s);
-  renderBandInventory(s);
-  renderAgents(s);
+  renderUnlessHovered("band-inv-body", renderBandInventory, s);
+  renderUnlessHovered("agents-body", renderAgents, s);
   renderTxBar(s.tx);                          // before roster: rosWork() reads can_tx
-  renderAntennas(s);
+  renderUnlessHovered("ant-body", renderAntennas, s);
   renderInterlock(s.interlock, s.tx);
   _rosOffered = operateOfferedBands(s);
   renderRoster(s.roster);
   renderCluster(s.cluster);
-  renderInstances(s);
+  renderUnlessHovered("inst-body", renderInstances, s);
   renderActivity(s.activity);
-  renderDecodes(s.decodes);                   // no-op unless #dlog-body exists
+  renderUnlessHovered("dlog-body", renderDecodes, s.decodes); // no-op unless #dlog-body exists
   renderSync(s.n1mm_sync);
-  renderLoggers(s);
+  renderUnlessHovered("log-body", renderLoggers, s);
   renderSetupExtras(s.n1mm_sync, s);
   renderContestRules(s);
   renderN1mmNav(s);
