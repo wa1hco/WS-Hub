@@ -188,10 +188,17 @@ tr.dupe .badge.unconfirmed { color:#7a4e00; }
   background: var(--panel); color: var(--text); border: 1px solid var(--line);
   border-radius: 6px; box-shadow: 0 4px 14px rgba(31,35,40,.12);
   font-size: 12px; font-weight: normal; line-height: 1.35; white-space: normal;
-  text-align: left;
+  text-align: left; text-transform: none; letter-spacing: normal;
 }
-/* Keyboard focus shows the words. Mouse hover uses the native title. */
-.tipbtn:focus-visible + .tiptxt { display: block; }
+#skim-server-hint:empty { display: none; }
+h2 .advtip { margin-left: 6px; text-transform: none; letter-spacing: normal;
+             vertical-align: middle; }
+/* Keyboard focus shows the words. Field-label hover uses the native title.
+   Long section help (? on a heading or "Where to point WS Skim") also
+   shows the wrapped tip on hover, so the text stays readable. */
+.tipbtn:focus-visible + .tiptxt,
+h2 .advtip:hover .tiptxt,
+.hover-tip:hover .tiptxt { display: block; }
 .goal-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:3px 0; }
 .goal-row select { font: inherit; font-size: 12px; }
 .goal-soon { color: var(--dim); }

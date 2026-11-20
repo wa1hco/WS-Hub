@@ -3659,9 +3659,8 @@ function renderSkimSetup(c) {
   if (hint) {
     const ips = (srv.lan_ips || []).filter(Boolean);
     hint.textContent = srv.hostname
-      ? " This site server is " + srv.hostname +
-        (ips.length ? " (" + ips.join(", ") + ")" : "") +
-        ". Its address also works as Host."
+      ? "This site server is " + srv.hostname +
+        (ips.length ? " (" + ips.join(", ") + ")" : "") + "."
       : "";
   }
 }

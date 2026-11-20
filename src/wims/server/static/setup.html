@@ -107,40 +107,23 @@
     <div id="contest-advanced-body" style="font-size:12px;margin-top:8px"></div>
   </details>
 
-  <h2>DX cluster</h2>
-  <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0">
-    Spots from a DX cluster, read only. The cluster logs in with the Cluster
-    login if you set one, otherwise the Station call. Leave Cluster login
-    blank to use the Station call. Use WA1HCO-1, -2… when two stations share
-    one cluster node. The Station call stays your station identity and is
-    not changed by the login suffix. If Station call is blank, WS Hub fills it
-    from a running WSJT-X, or from a logger if WSJT-X has no call, and then
-    only listens. It does not read the call from a WSJT-X settings file. It
-    does not post spots. A click on Operate selects the station. It does not
-    transmit and it does not retune a radio. Work still needs a live decode.
-    Spots can be on any band you check, including ones you would have to QSY
-    to. They drop off after 15 minutes. If no call is known, set the Station
-    call here. Station grid is your Maidenhead square. If it is blank, WS Hub
-    fills it from a running WSJT-X. It is never read from a WSJT-X settings
-    file. When "Use PSK Reporter to rank spots" is on, the site server looks
-    up recent reports with one end in that square and uses them, plus your
-    own recent decodes, to rank and dim cluster spots. The lookup is at most
-    once every five minutes.
-  </p>
+  <h2>DX cluster
+    <span class="advtip"><button type="button" class="tipbtn" title="Spots from a DX cluster, read only. WS Hub does not post spots. A click on Operate selects the station. It does not transmit and it does not retune a radio. Work still needs a live decode. Spots drop off after 15 minutes." aria-label="Help. Spots from a DX cluster, read only. WS Hub does not post spots. A click on Operate selects the station. It does not transmit and it does not retune a radio. Work still needs a live decode. Spots drop off after 15 minutes.">?</button><span class="tiptxt" role="tooltip">Spots from a DX cluster, read only. WS Hub does not post spots. A click on Operate selects the station. It does not transmit and it does not retune a radio. Work still needs a live decode. Spots drop off after 15 minutes.</span></span>
+  </h2>
   <div id="cluster-setup" class="syncrow" style="align-items:center;gap:10px;flex-wrap:wrap">
     <label style="font-size:13px" title="Turn spots on. Saved on this PC, the same way the Goal is.">
       <input type="checkbox" id="cluster-enabled"> Show spots
     </label>
-    <label style="font-size:13px" title="Your station identity. If it is blank, WS Hub fills it from a running WSJT-X. A call you type is kept.">
+    <label style="font-size:13px" title="Your station identity. If it is blank, WS Hub fills it from a running WSJT-X, or from a logger if WSJT-X has no call, and then only listens. A call you type is kept. It does not read the call from a WSJT-X settings file. The Station call is not changed by a Cluster login suffix.">
       Station call <input id="cluster-station-call" size="10" spellcheck="false" autocomplete="off">
     </label>
-    <label style="font-size:13px" title="Use WA1HCO-1, -2… when two stations share one cluster node. Leave blank to use the Station call.">
+    <label style="font-size:13px" title="Use WA1HCO-1, -2… when two stations share one cluster node. Leave blank to use the Station call. The Station call stays your station identity and is not changed by this suffix.">
       Cluster login <input id="cluster-login" size="10" spellcheck="false" autocomplete="off" placeholder="">
     </label>
     <label style="font-size:13px" title="Your Maidenhead square, such as FN41 or FN41VP. If it is blank, WS Hub fills it from a running WSJT-X. A grid you type is kept. It is never read from a WSJT-X settings file.">
       Station grid <input id="cluster-station-grid" size="8" spellcheck="false" autocomplete="off" maxlength="6">
     </label>
-    <label style="font-size:13px" title="When this is on, cluster spots that look workable from your grid sort first. Others stay on the list, dimmed.">
+    <label style="font-size:13px" title="When this is on, the site server looks up recent PSK Reporter reports with one end in your grid, at most once every five minutes, and uses them plus your own recent decodes to rank spots. Cluster spots that look workable from your grid sort first. Others stay on the list, dimmed.">
       <input type="checkbox" id="cluster-psk-rank" checked> Use PSK Reporter to rank spots
     </label>
     <label style="font-size:13px" title="K1TTT is the usual node. If the status says the node sent nothing, pick another.">
@@ -159,20 +142,13 @@
     <label style="font-size:13px" title="Port. K1TTT, NC7J, and W3LPL use 7373. VE7CC uses 23.">
       Port <input id="cluster-port" size="5" value="7373">
     </label>
-    <label style="font-size:13px" title="Points taken off a spot when no radio is already on that band and mode. The spot stays on the list.">
+    <label style="font-size:13px" title="Points taken off a spot when no radio is already on that band and mode. The spot stays on the list. QSY on the Operate line means you would have to move a radio there.">
       QSY cost <input id="cluster-qsy" type="number" min="0" max="80" step="1" value="8" style="width:4em">
     </label>
     <button type="button" id="cluster-save">Save</button>
   </div>
-  <p class="hint" style="font-size:12px;color:var(--dim);margin:4px 0 0 0">
-    Use WA1HCO-1, -2… when two stations share one cluster node.
-  </p>
   <p id="cluster-save-error" class="warn" style="font-size:12px;margin:4px 0 0 0" hidden></p>
-  <p class="hint" style="font-size:12px;margin:6px 0">
-    Bands to keep. All of them start on, so a spot on another band can still show.
-    QSY on the Operate line means you would have to move a radio there.
-  </p>
-  <label style="font-size:12px" title="Keep spots on every amateur band.">
+  <label style="font-size:12px" title="Keep spots on every amateur band. All bands start on, so a spot on another band can still show.">
     <input type="checkbox" id="cluster-all" checked> All bands
   </label>
   <div id="cluster-bands" class="cluster-bands"></div>
@@ -180,31 +156,20 @@
   <p id="cluster-psk-line" class="hint" style="font-size:12px;margin:0 0 4px 0"></p>
   <p id="cluster-call-warning" class="warn" style="font-size:12px;margin:0 0 12px 0" hidden></p>
 
-  <h2>Skim receivers</h2>
-  <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0">
-    WS Skim decodes the whole band and sends what it hears the same way
-    WSJT-X does. WS Hub shows those stations on the Operate Spotted list
-    with a green SKIM tag, first in the list, because they were heard here.
-    A skimmer is receive only. It is never listed as a WSJT-X program, and
-    nothing in WS Hub can reply to it or set it up. A click on a SKIM spot
-    selects the station, the same as a cluster spot. It does not transmit,
-    retune, or turn an antenna. Skim spots work with the DX cluster off.
-  </p>
-  <p class="hint" style="font-size:12px;margin:0 0 6px 0">
-    <b>Where to point WS Skim:</b> in WS Skim, open Reporting, check
-    WSJT-X UDP Enable, and set Port to 2237. For Host, use
-    <b>224.0.0.73</b>, which reaches the site server from any PC on this
-    network. <b>127.0.0.1</b> works only when WS Skim runs on the same PC
-    as the site server.
-    <span id="skim-server-hint"></span>
-  </p>
+  <h2>Skim receivers
+    <span class="advtip"><button type="button" class="tipbtn" title="WS Skim decodes the whole band and sends what it hears the same way WSJT-X does. WS Hub shows those stations on the Operate Spotted list with a green SKIM tag, first in the list, because they were heard here. A skimmer is receive only. It is never listed as a WSJT-X program, and nothing in WS Hub can reply to it or set it up. A click on a SKIM spot selects the station, the same as a cluster spot. It does not transmit, retune, or turn an antenna. Skim spots work with the DX cluster off." aria-label="Help. WS Skim decodes the whole band and sends what it hears the same way WSJT-X does. WS Hub shows those stations on the Operate Spotted list with a green SKIM tag, first in the list, because they were heard here. A skimmer is receive only. It is never listed as a WSJT-X program, and nothing in WS Hub can reply to it or set it up. A click on a SKIM spot selects the station, the same as a cluster spot. It does not transmit, retune, or turn an antenna. Skim spots work with the DX cluster off.">?</button><span class="tiptxt" role="tooltip">WS Skim decodes the whole band and sends what it hears the same way WSJT-X does. WS Hub shows those stations on the Operate Spotted list with a green SKIM tag, first in the list, because they were heard here. A skimmer is receive only. It is never listed as a WSJT-X program, and nothing in WS Hub can reply to it or set it up. A click on a SKIM spot selects the station, the same as a cluster spot. It does not transmit, retune, or turn an antenna. Skim spots work with the DX cluster off.</span></span>
+  </h2>
   <div class="syncrow" style="align-items:center;gap:10px;flex-wrap:wrap">
     <label style="font-size:13px" title="Programs whose WSJT-X UDP id matches one of these are skimmers. Separate with commas. * matches anything. Blank restores the usual list. WS Skim's ids start with SKIM-.">
       Skimmer ids <input id="skim-ids" size="28" spellcheck="false" autocomplete="off" placeholder="SKIM-*, WS-Skim*">
     </label>
     <button type="button" id="skim-save">Save</button>
+    <span style="font-size:13px">Where to point WS Skim
+      <span class="advtip hover-tip"><button type="button" class="tipbtn" title="In WS Skim, open Reporting, check WSJT-X UDP Enable, and set Port to 2237. For Host, use 224.0.0.73, which reaches the site server from any PC on this network. 127.0.0.1 works only when WS Skim runs on the same PC as the site server. This site server's own address also works as Host." aria-label="Help. In WS Skim, open Reporting, check WSJT-X UDP Enable, and set Port to 2237. For Host, use 224.0.0.73, which reaches the site server from any PC on this network. 127.0.0.1 works only when WS Skim runs on the same PC as the site server. This site server's own address also works as Host.">?</button><span class="tiptxt" role="tooltip">In WS Skim, open Reporting, check WSJT-X UDP Enable, and set Port to 2237. For Host, use 224.0.0.73, which reaches the site server from any PC on this network. 127.0.0.1 works only when WS Skim runs on the same PC as the site server. This site server's own address also works as Host.</span></span>
+    </span>
   </div>
-  <p id="skim-setup-line" class="hint" style="font-size:12px;margin:6px 0 12px 0"></p>
+  <p id="skim-setup-line" class="hint" style="font-size:12px;margin:6px 0 4px 0"></p>
+  <p id="skim-server-hint" class="hint" style="font-size:12px;margin:0 0 12px 0"></p>
 
   <h2>Networking checklist</h2>
   <p class="hint" style="font-size:12px;color:var(--dim);margin:0 0 6px 0">
