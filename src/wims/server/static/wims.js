@@ -1850,7 +1850,7 @@ const ROS_COLS = [
   {key:"instance",      label:"Source",  cls:"",          cell:rosSource},
   {key:"mode",          label:"Mode",    cls:"",          cell:c=>c.mode||"-"},
   {key:"grid",          label:"Grid",    cls:"",          cell:rosGrid},
-  {key:"snr",           label:"dB",      cls:"num", num:1, cell:c=>sgn(c.snr)},
+  {key:"snr",           label:"dB",      cls:"num", num:1, cell:c=>c.snr==null?"-":sgn(c.snr)},
   {key:"freq_hz",       label:"Freq",    cls:"num", num:1, cell:c=>c.freq_hz?(c.freq_hz/1e6).toFixed(4):"-"},
   {key:"az",            label:"Az DX",   cls:"num", num:1, cell:rosAzDx},
   {key:"az_ant",        label:"Az ant",  cls:"num", num:1, cell:rosAzAnt},
@@ -1864,14 +1864,23 @@ const ROS_COLS = [
 const ROS_COLS_DEFAULT = [
   "call", "country", "to_call", "msg", "band", "grid", "snr", "az", "age", "score",
 ];
-// Spotted columns. Same keys, in this same order, wherever a spot has that
-// fact. Calling, Message, Source, dB, Az ant, and Δaz are a decode or a
-// radio, so they are not on this list. Spotter fills the Source slot.
-// QSY sits just before Score: the retune mark. The points are already in Score.
+// Spotted (receive-only) columns shown by default. Same keys, in this same
+// order, wherever a spot has that fact. Calling, Message, Source, dB, Az ant,
+// and Δaz start hidden; Spotter fills the Source slot. QSY sits just before
+// Score: the retune mark. The points are already in Score.
 const SPOT_COL_KEYS = [
   "source", "call", "country", "band", "spotter", "mode", "grid",
   "freq_hz", "az", "distance_km", "age", "qsy", "score",
 ];
+// Every column the Spotted columns menu offers: all call-roster columns, in
+// the roster's order, plus the spot-only tag, Spotter, and QSY. A fact a
+// spot does not have (Calling, Message on a cluster line) shows "-".
+const SPOT_COL_ORDER = [
+  "source", "call", "country", "to_call", "msg", "band", "spotter",
+  "instance", "mode", "grid", "snr", "freq_hz", "az", "az_ant", "delta_az",
+  "distance_km", "age", "qsy", "score",
+];
+const SPOT_COLS_KEY = "wims.ops.spotCols";
 // Visible Message text. Longer QSY / free text is cut here so rosFitColumns
 // measures a short cell; the title attribute keeps the full decode.
 const ROS_MSG_SHOW = 14;
@@ -2135,15 +2144,12 @@ function rosVisibleCols() {
   return ROS_COLS.filter(c => on.has(c.key));
 }
 
-function rosSyncColChecks() {
-  const wrap = $("ros-cols");
-  if (!wrap || _rosColsBuilt) return;
-  _rosColsBuilt = true;
-  const pref = rosLoadColPref();
-  const want = new Set(pref && pref.length ? pref : ROS_COLS_DEFAULT);
-  want.add("call");
+/** One columns menu: a checkbox per column. Shared by the call roster and
+ *  the Spotted list so both offer the same columns the same way. DX stays on.
+ *  ``onSave(keys)`` gets the checked keys (DX first when it was missing). */
+function buildColChecks(wrap, cols, want, onSave) {
   wrap.innerHTML = "";
-  for (const col of ROS_COLS) {
+  for (const col of cols) {
     const lab = document.createElement("label");
     lab.className = "col-check";
     const cb = document.createElement("input");
@@ -2161,13 +2167,25 @@ function rosSyncColChecks() {
       const keys = [...wrap.querySelectorAll('input[data-col]')]
         .filter(b => b.checked).map(b => b.dataset.col);
       if (!keys.includes("call")) keys.unshift("call");
-      rosSaveColPref(keys);
-      rosDraw();
+      onSave(keys);
     });
     lab.appendChild(cb);
-    lab.appendChild(document.createTextNode(col.label));
+    lab.appendChild(document.createTextNode(col.label || col.menu || col.key));
     wrap.appendChild(lab);
   }
+}
+
+function rosSyncColChecks() {
+  const wrap = $("ros-cols");
+  if (!wrap || _rosColsBuilt) return;
+  _rosColsBuilt = true;
+  const pref = rosLoadColPref();
+  const want = new Set(pref && pref.length ? pref : ROS_COLS_DEFAULT);
+  want.add("call");
+  buildColChecks(wrap, ROS_COLS, want, (keys) => {
+    rosSaveColPref(keys);
+    rosDraw();
+  });
 }
 
 function rosBuildHead() {
@@ -2552,10 +2570,10 @@ function rosWire() {
   // Native <details> only toggles on the summary. Dismiss on any click
   // outside the menu (checkboxes inside stay usable).
   document.addEventListener("click", (e) => {
-    const menu = document.querySelector("details.ros-cols-menu");
-    if (!menu || !menu.open) return;
-    if (menu.contains(e.target)) return;
-    menu.open = false;
+    for (const menu of document.querySelectorAll("details.ros-cols-menu")) {
+      if (!menu.open || menu.contains(e.target)) continue;
+      menu.open = false;
+    }
   });
 }
 
@@ -3209,12 +3227,16 @@ function spotQsy(row) {
 }
 
 function spotSource(row) {
-  const tag = (row && row.source_tag) || (row && row.source === "skim" ? "SKIM" : "CLU");
-  const kind = tag === "SKIM" ? "skim" : "clu";
+  const tag = (row && row.source_tag) ||
+    (row && row.source === "skim" ? "SKIM" : row && row.source === "psk" ? "PSKR" : "CLU");
+  const kind = tag === "SKIM" ? "skim" : tag === "PSKR" ? "psk" : "clu";
   let tip = tag === "SKIM"
     ? "Heard here by WS Skim" + ((row.skim_receivers || []).length ? " (" + row.skim_receivers.join(", ") + ")" : "") +
       (row.skim_snr != null ? ", " + (row.skim_snr > 0 ? "+" : "") + row.skim_snr + " dB" : "") +
       (row.also_cluster ? ". Also on the DX cluster." : ".") + " Receive only."
+    : tag === "PSKR"
+    ? (row.psk_reason || "PSK Reporter: on the air now, with your grid square. Receive only.") +
+      (row.also_cluster_psk ? " Also on the DX cluster." : "")
     : "DX cluster spot. Not heard here yet.";
   return `<span class="spot-tag ${kind}" title="${escAttr(tip)}">${esc(tag)}</span>`;
 }
@@ -3222,7 +3244,8 @@ function spotSource(row) {
 const SPOT_EXTRA = {
   source: {
     key: "source", label: "", cls: "spot-src",
-    hint: "Where this spot came from. SKIM (green) means WS Skim heard it here. CLU (gray) is the DX cluster only.",
+    hint: "Where this spot came from. SKIM (green) means WS Skim heard it here. PSKR (blue) means PSK Reporter has it with your grid square, so it is on the air now. CLU (gray) is the DX cluster only.",
+    menu: "Tag",
     cell: spotSource,
   },
   spotter: {
@@ -3237,8 +3260,47 @@ const SPOT_EXTRA = {
   },
 };
 
+function spotLoadColPref() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SPOT_COLS_KEY) || "null");
+    return Array.isArray(arr) && arr.length ? arr : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function spotSaveColPref(keys) {
+  try { localStorage.setItem(SPOT_COLS_KEY, JSON.stringify([...keys])); }
+  catch (_) {}
+}
+
+let _spotColsBuilt = false;
+function spotSyncColChecks() {
+  const wrap = $("spot-cols");
+  if (!wrap || _spotColsBuilt) return;
+  _spotColsBuilt = true;
+  const want = new Set(spotLoadColPref() || SPOT_COL_KEYS);
+  want.add("call");
+  const cols = SPOT_COL_ORDER.map(key => SPOT_EXTRA[key] || ROS_COLS.find(c => c.key === key))
+    .filter(Boolean);
+  buildColChecks(wrap, cols, want, (keys) => {
+    spotSaveColPref(keys);
+    if (_spotData) renderSpotted(_spotData);
+  });
+}
+
 function spotCols() {
-  return SPOT_COL_KEYS.map(key => {
+  // Same choice as the call roster's columns menu. Unchecked columns hide.
+  const wrap = $("spot-cols");
+  let want;
+  const boxes = wrap ? [...wrap.querySelectorAll('input[type="checkbox"][data-col]')] : [];
+  if (boxes.length) {
+    want = new Set(boxes.filter(b => b.checked).map(b => b.dataset.col));
+  } else {
+    want = new Set(spotLoadColPref() || SPOT_COL_KEYS);
+  }
+  want.add("call");
+  return SPOT_COL_ORDER.filter(key => want.has(key)).map(key => {
     if (SPOT_EXTRA[key]) return SPOT_EXTRA[key];
     return ROS_COLS.find(c => c.key === key);
   }).filter(Boolean);
@@ -3261,6 +3323,7 @@ function spotTitle(row) {
     row.km != null ? ((row.bearing_source === "dxcc" ? "~" : "") + row.km + " km") : "",
     who ? ("Spotters: " + who) : "",
     row.heard_here ? "Heard here by WS Skim. Receive only." : "",
+    row.source === "psk" ? (row.psk_reason || "PSK Reporter. Receive only.") : "",
     "Click selects this station. It does not transmit or retune. Work needs a live decode.",
   ].filter(Boolean).join("\n");
 }
@@ -3349,7 +3412,11 @@ let _spotSourcesWired = false;
 function spotSyncSourceChecks(c) {
   const box = $("spot-show-cluster");
   const skim = $("spot-show-skim");
+  const psk = $("spot-show-psk");
   if (!box) return;
+  if (psk && c && c.show_psk != null && document.activeElement !== psk) {
+    psk.checked = !!c.show_psk;
+  }
   if (c && c.show_cluster != null && document.activeElement !== box) {
     box.checked = !!c.show_cluster;
   }
@@ -3371,6 +3438,15 @@ function spotSyncSourceChecks(c) {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({show_skim: !!skim.checked}),
+      }).catch(() => {});
+    });
+  }
+  if (psk) {
+    psk.addEventListener("change", () => {
+      fetch("/api/cluster", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({show_psk: !!psk.checked}),
       }).catch(() => {});
     });
   }
@@ -3401,6 +3477,36 @@ function spotSyncModeChecks(c) {
   });
 }
 
+/** Needed stations per band in the receive-only list, to help pick a band.
+ *  A band with a live WSJT-X is marked "on". Hover shows the sources. */
+function spotBandLine(c) {
+  const el = $("spot-band-line");
+  if (!el) return;
+  const items = (c && c.band_summary) || [];
+  if (!items.length) {
+    el.textContent = "";
+    el.title = "";
+    return;
+  }
+  const parts = items.map(b => {
+    const bits = [];
+    if (b.skim) bits.push(b.skim + " Skim");
+    if (b.psk) bits.push(b.psk + " PSKR");
+    if (b.cluster) bits.push(b.cluster + " cluster");
+    const tip = fmtBand(b.band) + ": " + b.needed + " needed (" + bits.join(", ") + ")" +
+      (b.on_band ? ". A live WSJT-X is on this band." : ".");
+    const cls = b.on_band ? "spot-band on" : "spot-band";
+    return `<span class="${cls}" title="${escAttr(tip)}">${esc(fmtBand(b.band))} ` +
+      `<b>${b.needed}</b>${b.on_band ? ' <span class="spot-band-on">on</span>' : ""}</span>`;
+  });
+  const html = `<span class="band-label">needed by band</span> ` + parts.join(" ");
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = html;
+  }
+  el.title = "Needed stations in this list, per band. Receive only: Skim and PSK Reporter show who is on the air now.";
+}
+
 function renderSpotted(c) {
   const status = $("spot-status");
   if (!status) return;
@@ -3414,6 +3520,8 @@ function renderSpotted(c) {
   const skimLine = $("spot-skim-line");
   if (skimLine) skimLine.textContent = c.skim_line || "";
   spotSyncSourceChecks(c);
+  spotSyncColChecks();
+  spotBandLine(c);
   const note = $("spot-note");
   if (note && c.selected_line) note.textContent = c.selected_line;
   const table = $("spot");

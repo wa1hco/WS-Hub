@@ -98,6 +98,10 @@ def default_settings() -> dict:
         "show_cluster": True,
         # WS Skim: receive-only decodes, shown as SKIM spots.
         "show_skim": True,
+        # PSK Reporter: needed far stations reported with the home square,
+        # shown as receive-only PSKR rows. Uses the PSK Reporter poll that
+        # psk_rank already runs; it adds no requests.
+        "show_psk": True,
         "skim_ids": DEFAULT_SKIM_IDS,
     }
 
@@ -321,6 +325,8 @@ def sanitize(data: dict | None) -> dict:
         out["show_cluster"] = bool(raw.get("show_cluster"))
     if "show_skim" in raw:
         out["show_skim"] = bool(raw.get("show_skim"))
+    if "show_psk" in raw:
+        out["show_psk"] = bool(raw.get("show_psk"))
     if "skim_ids" in raw:
         out["skim_ids"] = clean_skim_ids(raw.get("skim_ids"))
     return out

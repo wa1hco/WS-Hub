@@ -54,7 +54,8 @@ from wims.integrations.cluster.settings import (
 )
 from wims.integrations.cluster.telnet import plaintext, strip_telnet
 from wims.integrations.cluster.view import (
-    SpotBook, band_choices, build_list, mode_choices, status_detail, status_line,
+    SpotBook, band_choices, band_summary, build_list, mode_choices, status_detail,
+    status_line, with_psk,
 )
 
 # A prompt that means "send the callsign". Any case. AR-Cluster says
@@ -282,7 +283,7 @@ class ClusterService:
             for key in (
                 "enabled", "node", "host", "port", "bands", "modes",
                 "qsy_cost", "station_call", "cluster_login", "station_grid",
-                "psk_rank", "show_cluster", "show_skim", "skim_ids",
+                "psk_rank", "show_cluster", "show_skim", "show_psk", "skim_ids",
             ):
                 if key in body:
                     merged[key] = body[key]
@@ -454,11 +455,22 @@ class ClusterService:
                 band=band, az=az, now=now, local=local_by_band.get(band, []),
             )
 
+        psk_snap = self._openings.snapshot(now)
+        show_psk = bool(settings.get("show_psk", True))
+        if settings.get("psk_rank") and show_psk and home and psk_snap["known"]:
+            # The same reports the poller already fetched (at most every
+            # five minutes). Far stations become receive-only PSKR rows.
+            groups = with_psk(
+                groups, psk_snap["reports"], home_grid=home, now=now,
+                window_s=min(float(DEFAULT_TTL_S), self._openings.window_s),
+            )
         rows, drops = ([], {"spot_count": 0})
         cluster_on = bool(settings.get("enabled"))
         has_skim = any(group.skimmers for group in groups)
+        has_psk = any(group.psk_near for group in groups)
         can_list = (
-            (cluster_on or has_skim) and not bands_empty and not modes_empty
+            (cluster_on or has_skim or has_psk)
+            and not bands_empty and not modes_empty
         )
         if can_list and ((cluster_on and phase == "connected") or groups):
             # Still show spots we already have while reconnecting, and
@@ -473,6 +485,7 @@ class ClusterService:
                 opening_for=opening_for if settings.get("psk_rank") else None,
                 show_cluster=cluster_on and bool(settings.get("show_cluster", True)),
                 show_skim=bool(settings.get("show_skim", True)),
+                show_psk=show_psk,
             )
         spot_count = int(drops.get("spot_count") or 0)
         have_grid = bool((our_grid or "").strip())
@@ -502,7 +515,6 @@ class ClusterService:
         selected_line = ""
         if selected and selected.get("call"):
             selected_line = selected.get("line") or ""
-        psk_snap = self._openings.snapshot(now)
         if not settings.get("psk_rank"):
             psk_snap = dict(psk_snap)
             psk_snap["status_line"] = "PSK Reporter: off"
@@ -527,6 +539,9 @@ class ClusterService:
             "psk_rank": bool(settings.get("psk_rank")),
             "show_cluster": bool(settings.get("show_cluster", True)),
             "show_skim": bool(settings.get("show_skim", True)),
+            "show_psk": show_psk,
+            "psk_count": sum(1 for row in rows if row.get("source") == "psk"),
+            "band_summary": band_summary(rows, operations),
             "skim_ids": settings.get("skim_ids") or DEFAULT_SKIM_IDS,
             "skim_line": (skim or {}).get("line") or skim_line([], 0),
             "skim_receivers": (skim or {}).get("receivers") or [],
