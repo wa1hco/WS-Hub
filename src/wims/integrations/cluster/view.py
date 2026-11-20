@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 
 from wims.engine import scoring as S
 from wims.engine.dxcc import country_fields
-from wims.engine.geo import aim, distance_km
+from wims.engine.geo import aim, display_km, distance_km
 from wims.integrations.cluster.modes import canonical_mode, infer_mode
 from wims.integrations.cluster.parse import ParsedSpot
 from wims.integrations.cluster.ranges import distance_fit, in_range, spotter_near_amount
@@ -650,7 +650,7 @@ def build_list(
                     best_call = _spotter_key(spotter)
         if best is not None:
             near_amt = spotter_near_amount(best)
-            near_detail = f"{best_call} {int(best)} km away"
+            near_detail = f"{best_call} {display_km(best)} km away"
         skim_names = sorted(group.skimmers) if as_skim else []
         if as_skim:
             near_amt = spotter_near_amount(0.0)
@@ -665,10 +665,10 @@ def build_list(
             if km is None:
                 distance_detail = ""
             else:
-                distance_detail = f"approx {int(round(km))} km"
+                distance_detail = f"approx {display_km(km)} km"
         else:
             fit = distance_fit(km, group.band, row_mode)
-            distance_detail = f"{int(km)} km" if km is not None else ""
+            distance_detail = f"{display_km(km)} km" if km is not None else ""
         scored = S.score_spot(S.SpotFeatures(
             is_new_mult=bool(getattr(verdict, "is_new_mult", False)),
             chase=getattr(verdict, "chase", "") or "",
@@ -784,7 +784,7 @@ def build_list(
             "freq_hz": row_freq,
             "freq": _mhz(row_freq),
             "az": None if az_dx is None else round(az_dx),
-            "distance_km": None if km is None else round(km, 1),
+            "distance_km": display_km(km),
             "bearing_source": bearing_source,
             "where": where,
             "qsy": where,
@@ -806,7 +806,7 @@ def build_list(
             "spotter": spotter,
             "spotters": len(spotter_calls),
             "spotter_calls": spotter_calls,
-            "km": None if km is None else int(round(km)),
+            "km": display_km(km),
             "factors": [
                 {"name": f.name, "contribution": f.contribution, "detail": f.detail}
                 for f in scored.factors
