@@ -74,6 +74,9 @@ class NodeState:
     band: str | None = None
     mode: str | None = None
     dial_hz: int = 0
+    # Dial exactly as WSJT-X sent it, before any IF→RF mapping. Setup uses it
+    # to warn when a seat marked as IF is tuned outside the 21/28 MHz IFs.
+    dial_raw_hz: int = 0
     de_grid: str | None = None      # this instance's own grid (Status.de_grid) — az reference
     de_call: str | None = None      # our call on this instance (Status.de_call) — calling-us
     dx_call: str | None = None      # WSJT-X DX Call box (Status.dx_call)
@@ -402,6 +405,7 @@ class FleetTracker:
             # Store RF Hz so the MHz column matches the band. Unlisted seats
             # (Flex XVTR, real 10m) keep the dial they sent.
             n.dial_hz = rf_hz(msg.dial_frequency or 0, instance=mid)
+            n.dial_raw_hz = int(msg.dial_frequency or 0)
             bl = band_label(msg.dial_frequency or 0, instance=mid)
             n.band = bl
             if src_ip:

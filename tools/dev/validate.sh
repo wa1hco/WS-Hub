@@ -50,6 +50,12 @@ export WIMS_SITE_SERVER_PID="$LOGDIR/site-server.pid"
 IFACE="${WIMS_IFACE:-127.0.0.1}"
 HTTP_PORT="${WIMS_HTTP_PORT:-8799}"
 INSTANCES="${WIMS_INSTANCES:-ROY-6M:50313000,CHIP-2M:144174000,TRL-432:432174000}"
+# Private test traffic only (tools/testbed/testnet.py). The live site server
+# listens on 224.0.0.73:2237 and :12060; fake decodes sent there once showed
+# up in a real roster. The throwaway server below joins only these.
+TEST_GROUP="239.255.13.37"
+TEST_PORT="22437"
+TEST_N1MM_PORT="22460"
 
 # --- pretty output ---------------------------------------------------------
 PASS=0; FAIL=0
@@ -116,9 +122,12 @@ hdr "4. Live end-to-end (server + emulator → SSE → JSON)"
 # group interferes with the WSJT-X multicast ingest). This mirrors how `wims.solo`
 # actually runs on one PC.
 WIMS_SKIP_UPDATE_CHECK=1 "$PY" src/wims/server/app.py --iface "$IFACE" --http-port "$HTTP_PORT" \
-    --no-seed --no-presence --refresh 1 > "$LOGDIR/server.log" 2>&1 &
+    --no-seed --no-presence --no-tx --refresh 1 \
+    --group "$TEST_GROUP" --ports "$TEST_PORT" \
+    --n1mm-group "$TEST_GROUP" --n1mm-port "$TEST_N1MM_PORT" > "$LOGDIR/server.log" 2>&1 &
 SRV_PID=$!
 "$PY" tools/testbed/simulators/emulator.py --iface "$IFACE" \
+    --group "$TEST_GROUP" --port "$TEST_PORT" \
     --instances "$INSTANCES" > "$LOGDIR/emulator.log" 2>&1 &
 EMU_PID=$!
 

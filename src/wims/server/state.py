@@ -59,8 +59,10 @@ def _instance(n, now: float, *, share_policy: str | None = None) -> dict:
     band = n.band
     pol = normalize_share_policy(
         share_policy if share_policy is not None else DEFAULT_SHARE_POLICY)
-    from wims.core.bands import if_mapping_enabled
+    from wims.core.bands import if_dial_outside, if_mapping_enabled
     from wims.core.if_seats import reports_if
+    raw_dial = int(getattr(n, "dial_raw_hz", 0) or 0)
+    if_configured = reports_if(n.id)
     return {
         "id": n.id,
         "host": n.host,
@@ -70,6 +72,8 @@ def _instance(n, now: float, *, share_policy: str | None = None) -> dict:
         "band": band,
         "mode": n.mode,
         "dial_hz": n.dial_hz,
+        # As sent, before IF→RF mapping (Setup: IF-reporting seats warning).
+        "dial_raw_hz": int(getattr(n, "dial_raw_hz", 0) or 0),
         "de_call": getattr(n, "de_call", None),
         "dx_call": getattr(n, "dx_call", None),
         "tx_enabled": bool(getattr(n, "tx_enabled", False)),
@@ -86,8 +90,11 @@ def _instance(n, now: float, *, share_policy: str | None = None) -> dict:
         "share_policy": pol,
         # if_configured: listed in if_seats.json. reports_if: mapping is on
         # (file, or WIMS_TRANSVERTER forcing every seat).
-        "if_configured": reports_if(n.id),
+        "if_configured": if_configured,
         "reports_if": if_mapping_enabled(n.id),
+        # Marked as IF, but the live dial is not a 21–24 / 28–29.7 MHz IF:
+        # Setup shows a warning on that row. Display only; nothing changes.
+        "if_dial_outside": bool(if_configured and if_dial_outside(raw_dial)),
         # Inhibit status placeholder until KEY/gate report into the server (§2.13)
         "inhibit": None if pol == "coordinated" else {
             "state": "unknown",

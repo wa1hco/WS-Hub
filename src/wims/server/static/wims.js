@@ -840,18 +840,21 @@ function renderIfSeats(s) {
   const configured = new Set((info.instances || []).map(x => String(x)));
   const rows = [];
   const seen = new Set();
-  function addRow(id, where, checked) {
+  function addRow(id, where, checked, warning) {
     if (!id || seen.has(id)) return;
     seen.add(id);
+    const warn = warning
+      ? ` <span class="warn if-seat-warn" title="${escAttr(warning)}">⚠ dial is not an IF</span>`
+      : "";
     rows.push(
       `<label style="display:flex;gap:8px;align-items:baseline;margin:2px 0">` +
       `<input type="checkbox" data-if-id="${escAttr(id)}"${checked ? " checked" : ""}>` +
-      `<span><b>${esc(id)}</b> <span class="k">${esc(where)}</span></span></label>`
+      `<span><b>${esc(id)}</b> <span class="k">${esc(where)}</span>${warn}</span></label>`
     );
   }
   for (const n of (s && s.instances) || []) {
     addRow(n.id, "WSJT-X on the wire" + (n.band ? " · " + n.band : ""),
-           !!n.if_configured);
+           !!n.if_configured, ifDialWarning(n));
   }
   for (const lg of (s && s.loggers) || []) {
     addRow(lg.id, "N1MM station" + (lg.last_band ? " · " + lg.last_band : ""),
@@ -878,10 +881,32 @@ function renderIfSeats(s) {
     (configured.size
       ? `<p class="hint" style="margin-top:6px">Saved: ${[...configured].map(esc).join(", ")}</p>`
       : `<p class="hint" style="margin-top:6px">None saved — 21 MHz and 28 MHz dials stay 15m and 10m.</p>`);
-  if (html !== _ifSeatsHtml) {
+  // Rows come and go as WSJT-X and Skim ids appear. Redrawing under the
+  // mouse can shift a row so a click lands on the wrong seat, so wait until
+  // the pointer and keyboard focus have left the list.
+  if (html !== _ifSeatsHtml && !ifSeatsBusy(box)) {
     _ifSeatsHtml = html;
     box.innerHTML = html;
   }
+}
+
+function ifSeatsBusy(box) {
+  try {
+    return box.matches(":hover") || box.matches(":focus-within");
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Hover text when a seat marked as IF is tuned outside the 21/28 MHz IFs. */
+function ifDialWarning(n) {
+  if (!n || !n.if_dial_outside) return "";
+  const raw = Number(n.dial_raw_hz) || 0;
+  const mhz = raw ? (raw / 1e6).toFixed(3) + " MHz" : "a frequency";
+  return "This seat is marked as reporting IF, but WSJT-X says its dial is " + mhz +
+    ". An IF seat reads 21–24 MHz (222) or 28–29.7 MHz (432). This radio most " +
+    "likely reports RF, so untick it unless it sits behind a transverter. " +
+    "While it is ticked, 15m and 10m on this seat are labeled 1.25m and 70cm.";
 }
 
 /** Setup-only live hints (no-op on other pages). */
