@@ -20,7 +20,7 @@
 
 The site server logs in with the Station call from Setup, or the call from a
 running WSJT-X if that field is blank, and listens. It does not post spots, and
-a click on a spotted station does not transmit or retune.
+a click on a spotted station does not transmit (see wims.udp.spot_tune for the mode / RX offset it may set).
 """
 
 from wims.integrations.cluster.client import ClusterService

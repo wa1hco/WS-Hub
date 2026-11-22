@@ -3412,6 +3412,12 @@ function spotCols() {
   }).filter(Boolean);
 }
 
+const SPOT_CLICK_TIP =
+  "Click selects this station and points the WSJT-X already on this band at it: " +
+  "it switches the mode if needed (WSJT-X then moves to its own frequency for that mode) " +
+  "and sets the RX offset. It cannot change band, never sets the TX frequency or DX call, " +
+  "and never turns on Enable Tx. Work still needs a live decode.";
+
 function spotTitle(row) {
   const factors = (row.factors || []).map(f => {
     const n = Number(f.contribution);
@@ -3430,7 +3436,7 @@ function spotTitle(row) {
     who ? ("Spotters: " + who) : "",
     row.heard_here ? "Heard here by WS Skim. Receive only." : "",
     row.source === "psk" ? (row.psk_reason || "PSK Reporter. Receive only.") : "",
-    "Click selects this station. It does not transmit or retune. Work needs a live decode.",
+    SPOT_CLICK_TIP,
   ].filter(Boolean).join("\n");
 }
 
@@ -3467,6 +3473,8 @@ function spotWire() {
         grid: tr.dataset.grid || "",
         band: tr.dataset.band || "",
         mode: tr.dataset.mode || "",
+        freq_hz: Number(tr.dataset.freq) || 0,
+        source: tr.dataset.source || "",
       }),
     }).then(r => r.json()).then(j => {
       if (note) note.textContent = (j && j.line) || "";
@@ -3688,7 +3696,8 @@ function renderSpotted(c, force) {
     if (!row.heard_here && (row.dim || row.open_path === false)) classes.push("spot-dim");
     return `<tr class="${classes.join(" ")}" data-call="${escAttr(row.call)}" ` +
       `data-grid="${escAttr(row.grid || "")}" data-band="${escAttr(row.band || "")}" ` +
-      `data-mode="${escAttr(row.mode || "")}" title="${escAttr(spotTitle(row))}">` +
+      `data-mode="${escAttr(row.mode || "")}" data-freq="${escAttr(String(row.freq_hz || ""))}" ` +
+      `data-source="${escAttr(row.source || "")}" title="${escAttr(spotTitle(row))}">` +
       cols.map(item => `<td class="${item.cls}">${item.cell(row)}</td>`).join("") +
       `</tr>`;
   }).join("");
