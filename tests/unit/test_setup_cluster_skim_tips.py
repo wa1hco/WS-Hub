@@ -154,7 +154,7 @@ class ClusterSkimTooltipTests(unittest.TestCase):
             "WS Skim decodes the whole band",
             "green SKIM tag",
             "receive only",
-            "does not transmit, retune, or turn an antenna",
+            "does not transmit, change band, or turn an antenna",
             "Skim spots work with the DX cluster off",
             "Port to 2237",
             "224.0.0.73",

@@ -64,6 +64,7 @@ from wims.udp.gt_bridge import (  # noqa: E402
     is_loopback_host, parse_host_port)
 from wims.integrations.rotator import RotatorRegistry  # noqa: E402
 from wims.udp.activity import ActivityMap  # noqa: E402
+from wims.udp.spot_tune import plan_spot_tune, rx_offset as _spot_rx_offset  # noqa: E402
 from wims.engine import scoring as S  # noqa: E402
 from wims.engine.roster import RosterBuilder, is_own_tx_decode  # noqa: E402
 from wims.engine.geo import base_call as _base_call  # noqa: E402
@@ -148,6 +149,12 @@ def _normalize_dashboard_id(raw) -> str | None:
     return out[:64] or None
 
 
+def _spot_tune_timer(delay: float, fn) -> None:
+    t = threading.Timer(delay, fn)
+    t.daemon = True
+    t.start()
+
+
 class LiveFleet:
     """Thread-safe wrapper: the ingest thread writes, SSE handlers read.
 
@@ -176,6 +183,8 @@ class LiveFleet:
         self._last_tx_action: dict | None = None   # last work/halt for the UI
         # instance_id -> {dashboard_id, band, call, ts} for Halt scoping.
         self._tx_claims: dict[str, dict] = {}
+        # Spot click: run `fn` after `delay` s (tests replace this to run now).
+        self._spot_tune_later = _spot_tune_timer
         # instance_id -> the station this console is working, and the square
         # WSJT-X was last told. Cleared when that contact is no longer live.
         self._open_work: dict[str, dict] = {}
@@ -2517,7 +2526,7 @@ class LiveFleet:
         }
 
     def select_spot(self, body: dict) -> dict:
-        """Remember a spotted station. Does not transmit and does not retune."""
+        """Remember a spotted station. Sends nothing (tune_to_spot does the WSJT-X part)."""
         if not isinstance(body, dict):
             return {"ok": False, "error": "invalid_body",
                     "line": "That spot could not be read."}
@@ -2542,6 +2551,94 @@ class LiveFleet:
             if grid:
                 self._heard.note(call, grid, band or "?", time.time())
         return {"ok": True, "line": line, "transmitted": False, "retuned": False}
+
+    # -- Spot click → point the WSJT-X on that band at the spot ----------- #
+    # Receive side only. See wims.udp.spot_tune for what WSJT-X allows.
+    _SPOT_RXDF_WAIT_S = 1.5    # after a mode switch WSJT-X restores its saved
+    _SPOT_RXDF_TRIES = 8       # Rx box ~50 ms later; set ours after that
+
+    def _spot_busy(self, inst: str) -> str:
+        node = self._tracker.nodes.get(inst)
+        if node is not None and getattr(node, "transmitting", False):
+            return "transmitting"
+        if node is not None and getattr(node, "tx_enabled", False):
+            return "in a QSO (Enable Tx is on)"
+        if inst in self._tx_claims:
+            return "working a station from this console"
+        return ""
+
+    def tune_to_spot(self, body: dict) -> dict:
+        """Point the WSJT-X already on the spot's band at it: mode, RX offset.
+
+        Never: band or dial change (WSJT-X UDP cannot), TX frequency, DX
+        call, Generate messages, Reply, Enable Tx, Halt, or anything that
+        keys a radio. Sends Configure (type 15) only.
+        """
+        if not isinstance(body, dict):
+            return {"ok": False, "retuned": False, "line": ""}
+        if self._tx is None:
+            return {"ok": False, "retuned": False, "error": "tx_disabled",
+                    "line": "Read-only server: the WSJT-X was not changed."}
+        now = time.time()
+        with self._lock:
+            plan = plan_spot_tune(
+                body, dict(self._tracker.nodes), now=now,
+                tx_capable=self._seat_profile.tx_capable, busy=self._spot_busy,
+            )
+            sends = bool(plan.mode or plan.rx_df is not None)
+            dests = self._tx_dests_for(plan.instance) if sends else []
+        out = {"ok": plan.ok, "retuned": False, "line": plan.line,
+               "error": plan.error, "instance": plan.instance,
+               "transmitted": False}
+        if not (plan.mode or plan.rx_df is not None):
+            return out
+        if not dests:
+            out.update(ok=False, error="no_control_port", line=(
+                f"No UDP control address for {plan.instance} yet. Wait until it "
+                "shows Status (Accept UDP requests on in WSJT-X)."))
+            return out
+        try:
+            self._tx.configure(
+                plan.instance, dx_call="", dx_grid="", mode=plan.mode,
+                rx_df=plan.rx_df, generate_messages=False, dests=dests,
+            )
+        except Exception as e:
+            out.update(ok=False, error="send_failed",
+                       line=f"Could not reach {plan.instance}: {e}")
+            return out
+        out["retuned"] = True
+        out["sent"] = {"mode": plan.mode, "rx_df": plan.rx_df}
+        print(f"Spot tune {plan.instance!r} mode={plan.mode or '-'} "
+              f"rx_df={plan.rx_df if plan.rx_df is not None else '-'}", flush=True)
+        if plan.rx_df_after_mode and plan.spot_freq_hz:
+            self._spot_rxdf_followup(plan.instance, plan.mode, plan.spot_freq_hz, dests, 0)
+        return out
+
+    def _spot_rxdf_followup(self, inst: str, mode: str, freq: int,
+                            dests, tries: int) -> None:
+        """After a mode switch: once Status shows the new mode, set Rx DF."""
+        def run():
+            with self._lock:
+                node = self._tracker.nodes.get(inst)
+                now_mode = (getattr(node, "mode", "") or "").upper() if node else ""
+                dial = int(getattr(node, "dial_hz", 0) or 0) if node else 0
+                busy = self._spot_busy(inst)
+            if busy:
+                return
+            if now_mode != mode:
+                if tries + 1 < self._SPOT_RXDF_TRIES:
+                    self._spot_rxdf_followup(inst, mode, freq, dests, tries + 1)
+                return
+            off = _spot_rx_offset(freq, dial, mode)
+            if off is None:
+                return
+            try:
+                self._tx.configure(inst, dx_call="", dx_grid="", mode="", rx_df=off,
+                                   generate_messages=False, dests=dests)
+                print(f"Spot tune {inst!r} rx_df={off} after mode {mode}", flush=True)
+            except Exception:
+                pass
+        self._spot_tune_later(self._SPOT_RXDF_WAIT_S if tries == 0 else 0.5, run)
 
     def _n1mm_db_path(self) -> str:
         active = self._active_contest or {}
@@ -3549,9 +3646,17 @@ def make_handler(live: LiveFleet, refresh: float):
                 except Exception as e:
                     self._send_json(500, {"ok": False, "error": str(e)})
             elif path == "/api/cluster/select":
-                # Selects a spotted station. Never a transmit and never a retune.
+                # Selects a spotted station, then points the WSJT-X already on
+                # that band at it (Configure: mode and Rx DF only). Never a
+                # transmit, never a band or TX-frequency change.
                 try:
                     result = live.select_spot(body)
+                    if result.get("ok"):
+                        tune = live.tune_to_spot(body)
+                        if tune.get("line"):
+                            result["line"] = tune["line"]
+                        result["retuned"] = bool(tune.get("retuned"))
+                        result["tune"] = tune
                     code = 200 if result.get("ok") else 400
                     self._send_json(code, result)
                 except Exception as e:

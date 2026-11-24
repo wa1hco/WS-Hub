@@ -41,7 +41,7 @@ That overlap is the **inhibit** path: a beta/patched WSJT-X releases PTT when an
 2. **Inhibit** — SSB/CW KEY → WSJT-X PTT release (N1MM agent **KEY** section + Keyline)  
 3. **Logging** — WSJT-X Logged QSOs → N1MM via **N1MM agent Log**  
 4. **Broadcast bridge** — N1MM Broadcast Data on localhost → site **N1MM** tab via **N1MM agent Broadcast**
-5. **Spotted** — stations WS Skim heard here (green **SKIM**), stations PSK Reporter has with your grid square (blue **PSKR**), and DX cluster spots (gray **CLU**) that the Goal still needs, including other bands, filtered by mode. A click selects the station. It does not transmit and it does not retune a radio.  
+5. **Spotted** — stations WS Skim heard here (green **SKIM**), stations PSK Reporter has with your grid square (blue **PSKR**), and DX cluster spots (gray **CLU**) that the Goal still needs, including other bands, filtered by mode. A click selects the station and points the WSJT-X already on that band at it (mode and RX offset). It never transmits and never changes band.  
 6. **Headings** — Az DX from the grid, or an approximate heading from the station's country (marked `~`) when no grid is known. No grid square is ever guessed.  
 7. **Rotators** — headings read from hamlib `rotctld` on the seat, shown on Operate.
 
@@ -139,7 +139,7 @@ Beside the mode boxes, **Skim**, **PSKR**, and **Cluster** hide SKIM, PSKR, or C
 
 **columns** beside them offers the same columns as the call roster, plus the tag, Spotter, and QSY. A fact a spot does not have, such as Calling or Message on a cluster line, shows `-`. The choice is kept in this browser.
 
-Click a Spotted line to select that station. SKIM, PSKR, and CLU lines work the same way. The radio is not retuned and nothing is transmitted. Work still needs a live decode on the roster. (Retuning the radio and pointing the antenna from a spot is planned. Even then, the contact starts from the roster after WSJT-X decodes the station.)
+Click a Spotted line to select that station. SKIM, PSKR, and CLU lines work the same way. If a WSJT-X is already on that band, WS Hub points it at the station: when the spot's mode differs (say FT4 while WSJT-X is on FT8), WSJT-X switches mode and moves the dial to its own frequency for that mode on that band; then the RX offset is set to the station's audio frequency. WS Hub cannot change WSJT-X's band or move the dial anywhere else: WSJT-X's network messages have no way to do that. A spot on another band, or outside the current passband, shows a one-line note instead. Nothing is transmitted, the TX frequency and DX call are not changed, and Enable Tx stays off. WSJT-X must have **Accept UDP requests** on. Pick a TX frequency and work the station from a live decode on the roster.
 
 ### Overview · WSJT-X · Log · N1MM
 
